@@ -41,8 +41,12 @@ export function createGatewayController({ opencode, store }) {
     },
 
     async stop() {
-      const sessionId = await getActiveSessionId()
-      return opencode.stopSession(sessionId)
+      const settings = await store.read()
+      if (!settings.activeSessionId) {
+        return { stopped: false, reason: "no_active_session" }
+      }
+      const result = await opencode.stopSession(settings.activeSessionId)
+      return { stopped: true, result }
     },
   }
 }

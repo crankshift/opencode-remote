@@ -10,23 +10,26 @@ export function chunkText(text, maxLength = 3900) {
   }
 
   const chunks = []
-  let remaining = text.trim()
+  let offset = 0
 
-  while (remaining.length > maxLength) {
-    const slice = remaining.slice(0, maxLength + 1)
-    const splitAt = Math.max(slice.lastIndexOf("\n"), slice.lastIndexOf(" "))
-
-    if (splitAt > 0) {
-      chunks.push(remaining.slice(0, splitAt).trim())
-      remaining = remaining.slice(splitAt).trim()
-    } else {
-      chunks.push(remaining.slice(0, maxLength))
-      remaining = remaining.slice(maxLength).trim()
+  while (offset < text.length) {
+    const remainingLength = text.length - offset
+    if (remainingLength <= maxLength) {
+      chunks.push(text.slice(offset))
+      break
     }
-  }
 
-  if (remaining.length > 0) {
-    chunks.push(remaining)
+    const slice = text.slice(offset, offset + maxLength + 1)
+    const splitAt = Math.max(slice.lastIndexOf("\n"), slice.lastIndexOf(" "))
+    if (splitAt >= 0 && splitAt < maxLength) {
+      const end = offset + splitAt + 1
+      chunks.push(text.slice(offset, end))
+      offset = end
+    } else {
+      const end = offset + maxLength
+      chunks.push(text.slice(offset, end))
+      offset = end
+    }
   }
 
   return chunks

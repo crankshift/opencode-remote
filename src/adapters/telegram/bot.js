@@ -5,6 +5,7 @@ import { isAuthorizedTelegramUser } from "./auth.js"
 
 export function createTelegramBot({ token, allowedUserId, controller, logger, botFactory = Bot }) {
   const bot = new botFactory(token)
+  const sessionSelectionTokens = new Map()
 
   bot.use(async (ctx, next) => {
     if (!isAuthorizedTelegramUser(ctx, allowedUserId)) {
@@ -17,6 +18,18 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
   bot.api.setMyCommands(botCommands).catch((error) => {
     logger.warn({ error }, "Could not register Telegram commands")
   })
+
+  if (typeof bot.catch === "function") {
+    bot.catch(async (botError) => {
+      const logError = logger.error ?? logger.warn
+      logError.call(logger, { error: botError.error }, "Telegram update handling failed")
+      try {
+        await botError.ctx?.reply?.("OpenCode Gateway failed while handling that request.")
+      } catch (replyError) {
+        logger.warn({ error: replyError }, "Could not send Telegram error reply")
+      }
+    })
+  }
 
   bot.command("help", async (ctx) => ctx.reply(renderHelpText()))
 
@@ -38,22 +51,33 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
     }
 
     const keyboard = new InlineKeyboard()
-    for (const session of sessions.slice(0, 20)) {
-      keyboard.text(session.title ?? session.id, `session:${session.id}`).row()
+    sessionSelectionTokens.clear()
+    for (const [index, session] of sessions.slice(0, 20).entries()) {
+      const token = String(index)
+      sessionSelectionTokens.set(token, session.id)
+      keyboard.text(formatSessionLabel(session), `session:${token}`).row()
     }
 
     await ctx.reply("Select a session:", { reply_markup: keyboard })
   })
 
   bot.callbackQuery(/^session:(.+)$/u, async (ctx) => {
-    const sessionId = ctx.match[1]
+    const sessionId = sessionSelectionTokens.get(ctx.match[1])
+    if (!sessionId) {
+      await ctx.answerCallbackQuery({ text: "Session selection expired" })
+      return
+    }
     await controller.selectSession(sessionId)
     await ctx.answerCallbackQuery({ text: "Session selected" })
     await ctx.reply(`Selected session ${sessionId}`)
   })
 
   bot.command("stop", async (ctx) => {
-    await controller.stop()
+    const result = await controller.stop()
+    if (!result.stopped) {
+      await ctx.reply("No active OpenCode session to stop.")
+      return
+    }
     await ctx.reply("Stop requested for the active OpenCode session.")
   })
 
@@ -69,4 +93,12 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
   })
 
   return bot
+}
+
+function formatSessionLabel(session) {
+  const label = String(session.title ?? session.id ?? "OpenCode session")
+  if (label.length <= 64) {
+    return label
+  }
+  return `${label.slice(0, 61)}...`
 }

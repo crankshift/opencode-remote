@@ -47,4 +47,20 @@ describe("gatewayController", () => {
     await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
     expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello")
   })
+
+  test("does not create a session when stopping without an active session", async () => {
+    const store = createStore()
+    const opencode = {
+      createSession: vi.fn(),
+      stopSession: vi.fn(),
+    }
+    const controller = createGatewayController({ opencode, store })
+
+    await expect(controller.stop()).resolves.toEqual({
+      stopped: false,
+      reason: "no_active_session",
+    })
+    expect(opencode.createSession).not.toHaveBeenCalled()
+    expect(opencode.stopSession).not.toHaveBeenCalled()
+  })
 })
