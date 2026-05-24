@@ -1,0 +1,35 @@
+{
+  "name": "opencode-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "opencode-gateway": "src/bin/gateway.js",
+    "gateway": "src/bin/gateway.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "start": "node src/bin/gateway.js run",
+    "dev": "node --watch src/bin/gateway.js run",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "check": "pnpm run lint && pnpm test"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "latest",
+    "commander": "latest",
+    "dotenv": "latest",
+    "execa": "latest",
+    "grammy": "latest",
+    "pino": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "latest",
+    "vitest": "latest"
+  }
+}
