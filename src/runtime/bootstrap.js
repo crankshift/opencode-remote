@@ -15,7 +15,8 @@ export async function runGateway({
   const ensureOpenCodeServer = dependencies.ensureOpenCodeServer ?? defaultEnsureOpenCodeServer
   const createOpenCodeClient = dependencies.createOpenCodeClient ?? defaultCreateOpenCodeClient
   const createSettingsStore = dependencies.createSettingsStore ?? defaultCreateSettingsStore
-  const createGatewayController = dependencies.createGatewayController ?? defaultCreateGatewayController
+  const createGatewayController =
+    dependencies.createGatewayController ?? defaultCreateGatewayController
   const createTelegramBot = dependencies.createTelegramBot ?? defaultCreateTelegramBot
 
   const server = await ensureOpenCodeServer(config.opencode)
