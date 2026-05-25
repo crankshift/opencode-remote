@@ -43,3 +43,10 @@
    - When `gateway run` starts and OpenCode is not running, prompt the CLI user before starting `opencode serve`.
    - Do not silently auto-start OpenCode by default.
    - Add a non-interactive flag or env option for explicit auto-start behavior.
+
+7. [ ] Add modern Vitest coverage reporting.
+   - Add `@vitest/coverage-v8` and a `pnpm run coverage` script using `vitest run --coverage`.
+   - Configure V8 coverage for `src/**/*.js` with `text`, `html`, and `lcov` reporters.
+   - Start with realistic global thresholds: 80% lines, statements, and functions; 70% branches.
+   - Keep external Telegram, OpenCode, STT, and TTS systems mocked by default.
+   - Add optional env-gated live smoke tests later instead of requiring live services in normal coverage runs.
