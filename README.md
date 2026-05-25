@@ -62,6 +62,7 @@ OPENCODE_API_URL=http://localhost:4096
 OPENCODE_COMMAND=opencode
 OPENCODE_AUTO_START=true
 OPENCODE_WORKDIR=
+OPENCODE_PROGRESS_VERBOSITY=all
 LOG_LEVEL=info
 SETTINGS_PATH=.data/settings.json
 ```
@@ -77,6 +78,8 @@ SETTINGS_PATH=.data/settings.json
 `OPENCODE_AUTO_START` controls whether the gateway runs `opencode serve` if `OPENCODE_API_URL` is not reachable. Set it to `false` if you want to manage the OpenCode server yourself.
 
 `OPENCODE_WORKDIR` is the working directory used when auto-starting OpenCode. If empty, the gateway uses the current process directory.
+
+`OPENCODE_PROGRESS_VERBOSITY` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `all`, which shows every distinct tool or skill invocation. The Telegram `/progress` command can change this at runtime and persists the selected value in `SETTINGS_PATH`.
 
 `LOG_LEVEL` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
 
@@ -115,6 +118,7 @@ The bot currently supports:
 /new       Create and select a new OpenCode session
 /sessions  List OpenCode sessions and select one with inline buttons
 /stop      Request stop for the active OpenCode session
+/progress  Show or set tool progress visibility: off, new, all, verbose
 /help      Show available commands
 ```
 

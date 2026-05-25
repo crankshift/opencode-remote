@@ -10,11 +10,12 @@ This project follows Semantic Versioning.
 - Telegram long polling with grammY and a single-user allowlist.
 - OpenCode server connection with optional local `opencode serve` auto-start.
 - OpenCode session creation, listing, selection, prompt sending, and stop requests.
-- Telegram command registration for `/status`, `/new`, `/sessions`, `/stop`, and `/help`.
+- Telegram command registration for `/status`, `/new`, `/sessions`, `/stop`, `/progress`, and `/help`.
 - Telegram-safe response chunking for long OpenCode replies.
 - Typing indicators while OpenCode prompts are running.
 - Telegram emoji reaction support for processing indicators, user feedback, and assistant-requested reactions.
 - Telegram photo and photo-album prompts.
+- Editable Telegram activity messages for OpenCode tool and skill usage, configurable with `/progress`.
 - JSON settings persistence for selected session state.
 
 ### Known Gaps

@@ -23,7 +23,11 @@ describe("runGateway", () => {
     })
 
     expect(ensureOpenCodeServer).toHaveBeenCalledWith(testConfig().opencode)
-    expect(createBot).toHaveBeenCalled()
+    expect(createBot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progressVerbosity: "all",
+      }),
+    )
     expect(bot.start).toHaveBeenCalledWith({
       allowed_updates: ["message", "callback_query", "message_reaction"],
     })
@@ -68,6 +72,7 @@ function testConfig() {
     },
     logLevel: "silent",
     settingsPath: ".data/settings.json",
+    progressVerbosity: "all",
   }
 }
 

@@ -1,6 +1,11 @@
 import { Bot, InlineKeyboard } from "grammy"
 import { botCommands, renderHelpText } from "../../core/commands/commands.js"
 import { chunkText } from "../../core/formatting/chunkText.js"
+import {
+  createProgressTextState,
+  PROGRESS_VERBOSITIES,
+  recordProgressEvent,
+} from "../../core/formatting/progressText.js"
 import { isAuthorizedTelegramUser } from "./auth.js"
 import {
   captionFromMessages,
@@ -20,10 +25,13 @@ export function createTelegramBot({
   botFactory = Bot,
   mediaDirectory,
   mediaGroupWaitMs = 1500,
+  progressVerbosity = "all",
+  progressEditThrottleMs = 1500,
   downloadPhoto = defaultDownloadPhoto,
   cleanupMediaAttachments = defaultCleanupMediaAttachments,
 }) {
   const bot = new botFactory(token)
+  let fallbackProgressVerbosity = progressVerbosity
   const sessionSelectionTokens = new Map()
   const botMessageMemory = createBotMessageMemory(200)
   const mediaGroupBuffer = createMediaGroupBuffer({
@@ -67,9 +75,10 @@ export function createTelegramBot({
 
   bot.command("status", async (ctx) => {
     const status = await controller.status()
+    const activeProgressVerbosity = status.progressVerbosity ?? (await getActiveProgressVerbosity())
     await replyAndRemember(
       ctx,
-      `Gateway is running. Active session: ${status.activeSessionId ?? "none"}`,
+      `Gateway is running. Active session: ${status.activeSessionId ?? "none"}. Tool progress: ${activeProgressVerbosity}`,
       botMessageMemory,
     )
   })
@@ -121,6 +130,30 @@ export function createTelegramBot({
     await replyAndRemember(ctx, "Stop requested for the active OpenCode session.", botMessageMemory)
   })
 
+  bot.command("progress", async (ctx) => {
+    const requestedVerbosity = parseProgressVerbosity(ctx.message?.text)
+    if (!requestedVerbosity) {
+      const activeProgressVerbosity = await getActiveProgressVerbosity()
+      await replyAndRemember(
+        ctx,
+        `Tool progress is ${activeProgressVerbosity}. Use /progress off|new|all|verbose to change it.`,
+        botMessageMemory,
+      )
+      return
+    }
+    if (!PROGRESS_VERBOSITIES.includes(requestedVerbosity)) {
+      await replyAndRemember(ctx, "Use /progress off|new|all|verbose.", botMessageMemory)
+      return
+    }
+
+    const result = await setActiveProgressVerbosity(requestedVerbosity)
+    await replyAndRemember(
+      ctx,
+      `Tool progress set to ${result.progressVerbosity}.`,
+      botMessageMemory,
+    )
+  })
+
   bot.on("message_reaction", async (ctx) => {
     const update = ctx.messageReaction
     const botMessage = botMessageMemory.get(update.chat.id, update.message_id)
@@ -130,8 +163,15 @@ export function createTelegramBot({
 
     const addedEmojis = getAddedEmojiReactions(update.old_reaction, update.new_reaction)
     for (const emoji of addedEmojis) {
-      const response = await controller.sendPrompt(formatReactionFeedbackPrompt(emoji, botMessage))
-      const { visibleText } = parseTelegramReactionMarker(response)
+      const progress = await createPromptProgressRenderer(ctx)
+      const response = await sendPromptWithProgress(
+        formatPromptWithTelegramReactionInstruction(
+          formatReactionFeedbackPrompt(emoji, botMessage),
+        ),
+        progress,
+      )
+      await progress.flush()
+      const { visibleText } = parseTelegramReactionMarker(response, progress)
       for (const chunk of chunkText(visibleText)) {
         await replyAndRemember(ctx, chunk, botMessageMemory)
       }
@@ -147,17 +187,21 @@ export function createTelegramBot({
     const messageId = ctx.message.message_id
     const stopTyping = startTypingIndicator(ctx, logger)
     let requestedReaction = null
+    const progress = await createPromptProgressRenderer(ctx)
     try {
       await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
-      const response = await controller.sendPrompt(
+      const response = await sendPromptWithProgress(
         formatPromptWithTelegramReactionInstruction(ctx.message.text),
+        progress,
       )
-      const parsedResponse = parseTelegramReactionMarker(response)
+      await progress.flush()
+      const parsedResponse = parseTelegramReactionMarker(response, progress)
       requestedReaction = parsedResponse.requestedReaction
       for (const chunk of chunkText(parsedResponse.visibleText)) {
         await replyAndRemember(ctx, chunk, botMessageMemory)
       }
     } finally {
+      await progress.flush()
       await clearMessageReaction(ctx, chatId, messageId, logger)
       stopTyping()
     }
@@ -202,11 +246,16 @@ export function createTelegramBot({
         return
       }
 
-      const response = await controller.sendPrompt({
-        text: captionFromMessages(messages),
-        attachments,
-      })
-      const parsedResponse = parseTelegramReactionMarker(response)
+      const progress = await createPromptProgressRenderer(ctx)
+      const response = await sendPromptWithProgress(
+        formatPromptWithTelegramReactionInstruction({
+          text: captionFromMessages(messages),
+          attachments,
+        }),
+        progress,
+      )
+      await progress.flush()
+      const parsedResponse = parseTelegramReactionMarker(response, progress)
       for (const chunk of chunkText(parsedResponse.visibleText)) {
         await replyAndRemember(ctx, chunk, botMessageMemory)
       }
@@ -238,6 +287,167 @@ export function createTelegramBot({
       }
     }
   }
+
+  async function createPromptProgressRenderer(ctx) {
+    return createTelegramProgressRenderer({
+      ctx,
+      logger,
+      verbosity: await getActiveProgressVerbosity(),
+      editThrottleMs: progressEditThrottleMs,
+    })
+  }
+
+  async function sendPromptWithProgress(prompt, progress) {
+    if (progress.promptOptions === undefined) {
+      return controller.sendPrompt(prompt)
+    }
+    return controller.sendPrompt(prompt, progress.promptOptions)
+  }
+
+  async function getActiveProgressVerbosity() {
+    if (typeof controller.getProgressVerbosity === "function") {
+      return controller.getProgressVerbosity()
+    }
+    return fallbackProgressVerbosity
+  }
+
+  async function setActiveProgressVerbosity(progressVerbosity) {
+    if (typeof controller.setProgressVerbosity === "function") {
+      return controller.setProgressVerbosity(progressVerbosity)
+    }
+    fallbackProgressVerbosity = progressVerbosity
+    return { progressVerbosity }
+  }
+}
+
+function parseProgressVerbosity(text) {
+  const parts = String(text ?? "")
+    .trim()
+    .split(/\s+/u)
+  return parts[1] ?? null
+}
+
+function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs }) {
+  const state = createProgressTextState({ verbosity })
+  const enabled = state.verbosity !== "off"
+  const toolingTerms = new Set()
+  let progressMessage = null
+  let pendingText = ""
+  let lastText = ""
+  let editTimer = null
+  let editQueue = Promise.resolve()
+  let disabled = !enabled
+
+  const renderer = {
+    promptOptions: enabled ? { onProgress } : undefined,
+    toolingTerms,
+    onProgress,
+    flush,
+  }
+  return renderer
+
+  async function onProgress(event) {
+    if (disabled) {
+      return
+    }
+
+    rememberToolingTerms(toolingTerms, event)
+    const result = recordProgressEvent(state, event)
+    if (!result.changed) {
+      return
+    }
+
+    pendingText = fitTelegramActivityText(result.text)
+    if (!progressMessage) {
+      try {
+        progressMessage = await ctx.reply(pendingText)
+        lastText = pendingText
+        pendingText = ""
+      } catch (error) {
+        disabled = true
+        logger.warn({ error }, "Could not send Telegram progress message")
+      }
+      return
+    }
+
+    scheduleEdit()
+  }
+
+  function scheduleEdit() {
+    if (editThrottleMs <= 0) {
+      editQueue = editQueue.then(editNow)
+      return
+    }
+    if (editTimer) {
+      return
+    }
+    editTimer = setTimeout(() => {
+      editTimer = null
+      editQueue = editQueue.then(editNow)
+    }, editThrottleMs)
+  }
+
+  async function flush() {
+    if (editTimer) {
+      clearTimeout(editTimer)
+      editTimer = null
+    }
+    editQueue = editQueue.then(editNow)
+    await editQueue
+  }
+
+  async function editNow() {
+    if (disabled || !progressMessage || !pendingText || pendingText === lastText) {
+      return
+    }
+
+    const chatId = progressMessage.chat?.id ?? ctx.chat?.id ?? ctx.message?.chat?.id
+    if (!chatId || !progressMessage.message_id || !ctx.api?.editMessageText) {
+      return
+    }
+
+    try {
+      await ctx.api.editMessageText(chatId, progressMessage.message_id, pendingText)
+      lastText = pendingText
+      pendingText = ""
+    } catch (error) {
+      disabled = true
+      logger.warn({ error }, "Could not edit Telegram progress message")
+    }
+  }
+}
+
+function rememberToolingTerms(toolingTerms, event) {
+  if (event?.type !== "tool.updated") {
+    return
+  }
+  for (const value of [event.tool, event.title]) {
+    const term = normalizeToolingTerm(value)
+    if (term) {
+      toolingTerms.add(term)
+    }
+  }
+}
+
+const TELEGRAM_ACTIVITY_TEXT_LIMIT = 3900
+
+function fitTelegramActivityText(text) {
+  if (text.length <= TELEGRAM_ACTIVITY_TEXT_LIMIT) {
+    return text
+  }
+
+  const lines = text.split("\n").slice(1).reverse()
+  const kept = []
+  let nextText = "Activity\n..."
+  for (const line of lines) {
+    const candidate = ["Activity", "...", line, ...kept].join("\n")
+    if (candidate.length > TELEGRAM_ACTIVITY_TEXT_LIMIT) {
+      break
+    }
+    kept.unshift(line)
+    nextText = candidate
+  }
+  return nextText
 }
 
 function formatSessionLabel(session) {
@@ -285,16 +495,23 @@ const TELEGRAM_REACTION_MARKER = /\[telegram_reaction:\s*([^\]\n]+?)\s*\]/giu
 
 const TELEGRAM_REACTION_INSTRUCTION = [
   "Telegram gateway note:",
+  "The gateway shows tool and skill usage separately in an Activity message. Do not include tool or skill usage announcements in your final response.",
   "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
   "[telegram_reaction: 👍]",
   "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
 ].join("\n")
 
 function formatPromptWithTelegramReactionInstruction(prompt) {
+  if (typeof prompt !== "string") {
+    return {
+      ...prompt,
+      text: [String(prompt?.text ?? ""), "", TELEGRAM_REACTION_INSTRUCTION].join("\n"),
+    }
+  }
   return [prompt, "", TELEGRAM_REACTION_INSTRUCTION].join("\n")
 }
 
-function parseTelegramReactionMarker(text) {
+function parseTelegramReactionMarker(text, progress) {
   let requestedReaction = null
   const visibleText = String(text).replace(TELEGRAM_REACTION_MARKER, (_match, emoji) => {
     requestedReaction ??= emoji.trim()
@@ -302,10 +519,72 @@ function parseTelegramReactionMarker(text) {
   })
 
   return {
-    visibleText: visibleText.trim(),
+    visibleText: stripToolingAnnouncements(visibleText, progress?.toolingTerms),
     requestedReaction,
   }
 }
+
+function stripToolingAnnouncements(text, toolingTerms = new Set()) {
+  const lines = String(text)
+    .trim()
+    .split("\n")
+    .map((line) => line.trim())
+  while (lines.length > 0 && isToolingAnnouncementLine(lines[0], toolingTerms)) {
+    lines.shift()
+    while (lines[0] === "") {
+      lines.shift()
+    }
+  }
+  return lines.join("\n").trim()
+}
+
+function isToolingAnnouncementLine(line, toolingTerms) {
+  if (
+    lineReferencesKnownToolingTerm(line, toolingTerms) &&
+    TOOLING_ANNOUNCEMENT_INTRO_PATTERNS.some((pattern) => pattern.test(line))
+  ) {
+    return true
+  }
+
+  return TOOLING_ANNOUNCEMENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(line))
+}
+
+function lineReferencesKnownToolingTerm(line, toolingTerms) {
+  const normalizedLine = normalizeToolingTerm(line)
+  if (!normalizedLine) {
+    return false
+  }
+  for (const term of toolingTerms ?? []) {
+    if (term && normalizedLine.includes(term)) {
+      return true
+    }
+  }
+  return false
+}
+
+function normalizeToolingTerm(value) {
+  if (typeof value !== "string") {
+    return ""
+  }
+  return value
+    .toLocaleLowerCase("en-US")
+    .replace(/[^\p{Letter}\p{Number}_-]+/gu, " ")
+    .trim()
+}
+
+const TOOLING_ANNOUNCEMENT_INTRO_PATTERNS = [
+  /^using\b/iu,
+  /^i(?:'|’)?m\s+using\b/iu,
+  /^i\s+am\s+using\b/iu,
+  /^використовую(?:\s|$)/iu,
+]
+
+const TOOLING_ANNOUNCEMENT_CONTEXT_PATTERNS = [
+  /^using\s+[a-z][a-z0-9-]*(?:\s+(?:skill|tool))?\s+to\b.*$/iu,
+  /^i(?:'|’)?m\s+using\s+[a-z][a-z0-9-]*(?:\s+(?:skill|tool))?\s+to\b.*$/iu,
+  /^i\s+am\s+using\s+[a-z][a-z0-9-]*(?:\s+(?:skill|tool))?\s+to\b.*$/iu,
+  /^використовую\s+.+(?:skill|навичк|інструмент|для\b).*$/iu,
+]
 
 async function setEmojiReaction(ctx, chatId, messageId, emoji, logger) {
   if (!chatId || !messageId || !ctx.api?.setMessageReaction) {

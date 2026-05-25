@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest"
 import { loadConfigFromEnv } from "../../src/config/loadConfig.js"
 
+const REQUIRED_ENV = {
+  TELEGRAM_BOT_TOKEN: "123:token",
+  TELEGRAM_ALLOWED_USER_ID: "123",
+}
+
 describe("loadConfigFromEnv", () => {
   test("requires Telegram token and allowed user ID", () => {
     expect(() => loadConfigFromEnv({})).toThrow(/TELEGRAM_BOT_TOKEN/)
@@ -17,6 +22,7 @@ describe("loadConfigFromEnv", () => {
     expect(config.opencode.apiUrl).toBe("http://localhost:4096")
     expect(config.opencode.autoStart).toBe(true)
     expect(config.settingsPath).toBe(".data/settings.json")
+    expect(config.progressVerbosity).toBe("all")
   })
 
   test("accepts false boolean for OpenCode auto-start", () => {
@@ -27,5 +33,20 @@ describe("loadConfigFromEnv", () => {
     })
 
     expect(config.opencode.autoStart).toBe(false)
+  })
+
+  test("defaults progress verbosity to all", () => {
+    const config = loadConfigFromEnv(REQUIRED_ENV)
+
+    expect(config.progressVerbosity).toBe("all")
+  })
+
+  test("loads explicit progress verbosity", () => {
+    const config = loadConfigFromEnv({
+      ...REQUIRED_ENV,
+      OPENCODE_PROGRESS_VERBOSITY: "off",
+    })
+
+    expect(config.progressVerbosity).toBe("off")
   })
 })

@@ -25,6 +25,51 @@ describe("gatewayController", () => {
     expect(store.write).toHaveBeenCalledWith({ activeSessionId: "ses_1" })
   })
 
+  test("status includes configured progress verbosity", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    const controller = createGatewayController({
+      opencode: {},
+      store,
+      defaultProgressVerbosity: "verbose",
+    })
+
+    await expect(controller.status()).resolves.toEqual({
+      activeSessionId: "ses_1",
+      progressVerbosity: "verbose",
+    })
+  })
+
+  test("stored progress verbosity overrides the configured default", async () => {
+    const store = createStore({ activeSessionId: "ses_1", progressVerbosity: "off" })
+    const controller = createGatewayController({
+      opencode: {},
+      store,
+      defaultProgressVerbosity: "verbose",
+    })
+
+    await expect(controller.getProgressVerbosity()).resolves.toBe("off")
+  })
+
+  test("persists progress verbosity", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    const controller = createGatewayController({ opencode: {}, store })
+
+    await expect(controller.setProgressVerbosity("verbose")).resolves.toEqual({
+      progressVerbosity: "verbose",
+    })
+
+    expect(store.write).toHaveBeenCalledWith({ progressVerbosity: "verbose" })
+    await expect(controller.getProgressVerbosity()).resolves.toBe("verbose")
+  })
+
+  test("rejects invalid progress verbosity", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    const controller = createGatewayController({ opencode: {}, store })
+
+    await expect(controller.setProgressVerbosity("loud")).rejects.toThrow(/Invalid progress/)
+    expect(store.write).not.toHaveBeenCalled()
+  })
+
   test("sends prompt to active session", async () => {
     const store = createStore({ activeSessionId: "ses_1" })
     const opencode = {
@@ -34,6 +79,20 @@ describe("gatewayController", () => {
 
     await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
     expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello")
+  })
+
+  test("passes prompt progress options to OpenCode", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    const onProgress = vi.fn()
+    const options = { onProgress }
+    const opencode = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const controller = createGatewayController({ opencode, store })
+
+    await expect(controller.sendPrompt("hello", options)).resolves.toBe("answer")
+
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello", options)
   })
 
   test("creates a session before first prompt when none is active", async () => {

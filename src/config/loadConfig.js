@@ -11,6 +11,7 @@ const envSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   OPENCODE_WORKDIR: z.string().optional(),
+  OPENCODE_PROGRESS_VERBOSITY: z.enum(["off", "new", "all", "verbose"]).default("all"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   SETTINGS_PATH: z.string().min(1).default(".data/settings.json"),
 })
@@ -29,6 +30,7 @@ export function loadConfigFromEnv(env = process.env) {
       autoStart: parsed.OPENCODE_AUTO_START,
       workdir: parsed.OPENCODE_WORKDIR || process.cwd(),
     },
+    progressVerbosity: parsed.OPENCODE_PROGRESS_VERBOSITY,
     logLevel: parsed.LOG_LEVEL,
     settingsPath: parsed.SETTINGS_PATH,
   }

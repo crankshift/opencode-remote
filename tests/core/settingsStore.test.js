@@ -31,4 +31,16 @@ describe("settingsStore", () => {
 
     await expect(store.read()).resolves.toEqual({ activeSessionId: "ses_123" })
   })
+
+  test("preserves existing settings when writing one field", async () => {
+    const store = createSettingsStore(await tempSettingsPath())
+
+    await store.write({ activeSessionId: "ses_123" })
+    await store.write({ progressVerbosity: "verbose" })
+
+    await expect(store.read()).resolves.toEqual({
+      activeSessionId: "ses_123",
+      progressVerbosity: "verbose",
+    })
+  })
 })

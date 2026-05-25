@@ -1,4 +1,8 @@
-export function createGatewayController({ opencode, store }) {
+import { PROGRESS_VERBOSITIES } from "../formatting/progressText.js"
+
+export function createGatewayController({ opencode, store, defaultProgressVerbosity = "all" }) {
+  const configuredProgressVerbosity = normalizeProgressVerbosity(defaultProgressVerbosity)
+
   async function getActiveSessionId() {
     const settings = await store.read()
     if (settings.activeSessionId) {
@@ -14,12 +18,33 @@ export function createGatewayController({ opencode, store }) {
     return session
   }
 
+  async function getProgressVerbosity() {
+    const settings = await store.read()
+    return normalizeProgressVerbosity(settings.progressVerbosity, configuredProgressVerbosity)
+  }
+
   return {
     async status() {
       const settings = await store.read()
       return {
         activeSessionId: settings.activeSessionId,
+        progressVerbosity: normalizeProgressVerbosity(
+          settings.progressVerbosity,
+          configuredProgressVerbosity,
+        ),
       }
+    },
+
+    async getProgressVerbosity() {
+      return getProgressVerbosity()
+    },
+
+    async setProgressVerbosity(progressVerbosity) {
+      if (!PROGRESS_VERBOSITIES.includes(progressVerbosity)) {
+        throw new Error(`Invalid progress verbosity: ${progressVerbosity}`)
+      }
+      await store.write({ progressVerbosity })
+      return { progressVerbosity }
     },
 
     async createSession() {
@@ -35,9 +60,12 @@ export function createGatewayController({ opencode, store }) {
       return { activeSessionId: sessionId }
     },
 
-    async sendPrompt(prompt) {
+    async sendPrompt(prompt, options) {
       const sessionId = await getActiveSessionId()
-      return opencode.sendPrompt(sessionId, prompt)
+      if (options === undefined) {
+        return opencode.sendPrompt(sessionId, prompt)
+      }
+      return opencode.sendPrompt(sessionId, prompt, options)
     },
 
     async stop() {
@@ -49,4 +77,14 @@ export function createGatewayController({ opencode, store }) {
       return { stopped: true, result }
     },
   }
+}
+
+function normalizeProgressVerbosity(value, fallback = "all") {
+  if (PROGRESS_VERBOSITIES.includes(value)) {
+    return value
+  }
+  if (PROGRESS_VERBOSITIES.includes(fallback)) {
+    return fallback
+  }
+  return "all"
 }

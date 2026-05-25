@@ -22,12 +22,17 @@ export async function runGateway({
   const server = await ensureOpenCodeServer(config.opencode)
   const opencode = createOpenCodeClient({ apiUrl: config.opencode.apiUrl })
   const store = createSettingsStore(config.settingsPath)
-  const controller = createGatewayController({ opencode, store })
+  const controller = createGatewayController({
+    opencode,
+    store,
+    defaultProgressVerbosity: config.progressVerbosity,
+  })
   const bot = createTelegramBot({
     token: config.telegram.botToken,
     allowedUserId: config.telegram.allowedUserId,
     controller,
     logger,
+    progressVerbosity: config.progressVerbosity,
   })
 
   let stopping = false

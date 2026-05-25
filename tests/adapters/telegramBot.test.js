@@ -48,7 +48,14 @@ describe("createTelegramBot", () => {
     })
 
     expect(bot.token).toBe("token")
-    expect([...bot.commands.keys()]).toEqual(["help", "status", "new", "sessions", "stop"])
+    expect([...bot.commands.keys()]).toEqual([
+      "help",
+      "status",
+      "new",
+      "sessions",
+      "stop",
+      "progress",
+    ])
     expect(bot.messageHandlers.has("message:text")).toBe(true)
     expect(bot.messageHandlers.has("message:photo")).toBe(true)
     expect(bot.messageHandlers.has("message_reaction")).toBe(true)
@@ -58,8 +65,85 @@ describe("createTelegramBot", () => {
       { command: "new", description: "Create and select a new OpenCode session" },
       { command: "sessions", description: "List and switch OpenCode sessions" },
       { command: "stop", description: "Abort current OpenCode task" },
+      { command: "progress", description: "Set tool progress visibility" },
       { command: "help", description: "Show available commands" },
     ])
+  })
+
+  test("status command reports progress verbosity", async () => {
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {
+        status: vi.fn(async () => ({ activeSessionId: "ses_1", progressVerbosity: "verbose" })),
+      },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("status")({ reply })
+
+    expect(reply).toHaveBeenCalledWith(
+      "Gateway is running. Active session: ses_1. Tool progress: verbose",
+    )
+  })
+
+  test("progress command reports current verbosity", async () => {
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {
+        getProgressVerbosity: vi.fn(async () => "all"),
+      },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("progress")({ message: { text: "/progress" }, reply })
+
+    expect(reply).toHaveBeenCalledWith(
+      "Tool progress is all. Use /progress off|new|all|verbose to change it.",
+    )
+  })
+
+  test("progress command persists verbose verbosity", async () => {
+    const controller = {
+      setProgressVerbosity: vi.fn(async () => ({ progressVerbosity: "verbose" })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("progress")({ message: { text: "/progress verbose" }, reply })
+
+    expect(controller.setProgressVerbosity).toHaveBeenCalledWith("verbose")
+    expect(reply).toHaveBeenCalledWith("Tool progress set to verbose.")
+  })
+
+  test("progress command rejects unknown verbosity", async () => {
+    const controller = {
+      setProgressVerbosity: vi.fn(),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("progress")({ message: { text: "/progress loud" }, reply })
+
+    expect(controller.setProgressVerbosity).not.toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith("Use /progress off|new|all|verbose.")
   })
 
   test("authorization middleware stops unauthorized updates", async () => {
@@ -218,9 +302,270 @@ describe("createTelegramBot", () => {
     })
 
     expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
-    expect(controller.sendPrompt).toHaveBeenCalledWith(expect.stringContaining("hello"))
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.stringContaining("hello"),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
     expect(reply).toHaveBeenCalledWith("answer")
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+  })
+
+  test("text prompts render tool progress in an editable activity message", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_1",
+          tool: "skill_view",
+          title: "brainstorming",
+        })
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_2",
+          tool: "bash",
+        })
+        return "answer"
+      }),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      progressVerbosity: "all",
+      progressEditThrottleMs: 0,
+    })
+    const reply = vi.fn(async (text) => ({
+      message_id: text.startsWith("Activity") ? 20 : 21,
+      chat: { id: 456 },
+      text,
+    }))
+    const editMessageText = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+        editMessageText,
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Activity\n📚 skill_view: brainstorming")
+    expect(editMessageText).toHaveBeenCalledWith(
+      456,
+      20,
+      "Activity\n📚 skill_view: brainstorming\n💻 bash",
+    )
+    expect(reply).toHaveBeenCalledWith("answer")
+  })
+
+  test("text prompts strip tool usage announcements from the final answer", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_1",
+          tool: "skill_view",
+          title: "brainstorming",
+        })
+        return 'Використовую "brainstorming".\nОсь відповідь користувачу.'
+      }),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      progressVerbosity: "all",
+      progressEditThrottleMs: 0,
+    })
+    const reply = vi.fn(async (text) => ({
+      message_id: text.startsWith("Activity") ? 20 : 21,
+      chat: { id: 456 },
+      text,
+    }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+        editMessageText: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Activity\n📚 skill_view: brainstorming")
+    expect(reply).toHaveBeenCalledWith("Ось відповідь користувачу.")
+    expect(reply).not.toHaveBeenCalledWith(expect.stringContaining("Використовую"))
+  })
+
+  test("text prompts keep regular answers that start with using", async () => {
+    const controller = {
+      sendPrompt: vi.fn(
+        async () => "Using `Array.map` is fine here.\nKeep the transformation local.",
+      ),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith(
+      "Using `Array.map` is fine here.\nKeep the transformation local.",
+    )
+  })
+
+  test("text prompts use persisted verbose progress setting", async () => {
+    const controller = {
+      getProgressVerbosity: vi.fn(async () => "verbose"),
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_1",
+          tool: "bash",
+          input: { command: "pnpm test" },
+        })
+        return "answer"
+      }),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      progressVerbosity: "off",
+      progressEditThrottleMs: 0,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+        editMessageText: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(controller.getProgressVerbosity).toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith('Activity\n💻 bash - {"command":"pnpm test"}')
+    expect(reply).toHaveBeenCalledWith("answer")
+  })
+
+  test("progress message send failures do not block the final answer", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_1",
+          tool: "bash",
+        })
+        return "answer"
+      }),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger,
+      botFactory: FakeBot,
+      progressVerbosity: "all",
+      progressEditThrottleMs: 0,
+    })
+    const reply = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("progress failed"))
+      .mockResolvedValueOnce({ message_id: 21, chat: { id: 456 }, text: "answer" })
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+        editMessageText: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("answer")
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.any(Error) }),
+      "Could not send Telegram progress message",
+    )
+  })
+
+  test("progress message edit failures do not block the final answer", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_1",
+          tool: "skill_view",
+          title: "brainstorming",
+        })
+        await options.onProgress({
+          type: "tool.updated",
+          partId: "part_2",
+          tool: "bash",
+        })
+        return "answer"
+      }),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger,
+      botFactory: FakeBot,
+      progressVerbosity: "all",
+      progressEditThrottleMs: 0,
+    })
+    const reply = vi.fn(async (text) => ({
+      message_id: text.startsWith("Activity") ? 20 : 21,
+      chat: { id: 456 },
+      text,
+    }))
+    const editMessageText = vi.fn(async () => {
+      throw new Error("edit failed")
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+        editMessageText,
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("answer")
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.any(Error) }),
+      "Could not edit Telegram progress message",
+    )
   })
 
   test("text prompts tell OpenCode how to request Telegram reactions", async () => {
@@ -249,10 +594,12 @@ describe("createTelegramBot", () => {
         "hello",
         "",
         "Telegram gateway note:",
+        "The gateway shows tool and skill usage separately in an Activity message. Do not include tool or skill usage announcements in your final response.",
         "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
         "[telegram_reaction: 👍]",
         "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
       ].join("\n"),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     )
   })
 
@@ -325,10 +672,15 @@ describe("createTelegramBot", () => {
       photo: large,
       directory: undefined,
     })
-    expect(controller.sendPrompt).toHaveBeenCalledWith({
-      text: "What changed?",
-      attachments: [attachment],
-    })
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      {
+        text: expect.stringContaining(
+          "The gateway shows tool and skill usage separately in an Activity message.",
+        ),
+        attachments: [attachment],
+      },
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
     expect(reply).toHaveBeenCalledTimes(1)
     expect(reply).toHaveBeenCalledWith("image answer")
     expect(cleanupMediaAttachments).toHaveBeenCalledWith([attachment], logger)
@@ -375,14 +727,19 @@ describe("createTelegramBot", () => {
     await vi.advanceTimersByTimeAsync(10)
 
     expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
-    expect(controller.sendPrompt).toHaveBeenCalledWith({
-      text: "Compare these screenshots",
-      attachments: [
-        { mime: "image/jpeg", url: "file:///tmp/photo-10.jpg", filePath: "/tmp/photo-10.jpg" },
-        { mime: "image/jpeg", url: "file:///tmp/photo-11.jpg", filePath: "/tmp/photo-11.jpg" },
-        { mime: "image/jpeg", url: "file:///tmp/photo-12.jpg", filePath: "/tmp/photo-12.jpg" },
-      ],
-    })
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      {
+        text: expect.stringContaining(
+          "The gateway shows tool and skill usage separately in an Activity message.",
+        ),
+        attachments: [
+          { mime: "image/jpeg", url: "file:///tmp/photo-10.jpg", filePath: "/tmp/photo-10.jpg" },
+          { mime: "image/jpeg", url: "file:///tmp/photo-11.jpg", filePath: "/tmp/photo-11.jpg" },
+          { mime: "image/jpeg", url: "file:///tmp/photo-12.jpg", filePath: "/tmp/photo-12.jpg" },
+        ],
+      },
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
     expect(reply).toHaveBeenCalledTimes(1)
     expect(reply).toHaveBeenCalledWith("album answer")
     expect(cleanupMediaAttachments).toHaveBeenCalledTimes(1)
@@ -473,7 +830,14 @@ describe("createTelegramBot", () => {
         "",
         "Bot message:",
         "answer",
+        "",
+        "Telegram gateway note:",
+        "The gateway shows tool and skill usage separately in an Activity message. Do not include tool or skill usage announcements in your final response.",
+        "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
+        "[telegram_reaction: 👍]",
+        "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
       ].join("\n"),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(feedbackReply).toHaveBeenCalledWith("feedback response")
   })

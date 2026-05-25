@@ -9,6 +9,7 @@ OpenCode Remote is currently a text-first Telegram gateway for OpenCode.
 - Local or remote OpenCode server connection through `OPENCODE_API_URL`.
 - Optional local OpenCode startup with `OPENCODE_AUTO_START=true`.
 - OpenCode session creation, listing, switching, prompt sending, and stop requests.
+- Editable Telegram activity messages showing OpenCode tool and skill usage during prompts.
 - Telegram-safe response chunking for long assistant replies.
 - JSON settings persistence for the selected OpenCode session.
 
@@ -18,9 +19,11 @@ OpenCode Remote is currently a text-first Telegram gateway for OpenCode.
 - `/new` creates and selects a new OpenCode session.
 - `/sessions` lists recent OpenCode sessions and lets the user switch with inline buttons.
 - `/stop` requests abort for the active OpenCode session.
+- `/progress` shows or sets prompt activity visibility: `off`, `new`, `all`, or `verbose`.
 - `/help` shows the available bot commands.
 - Non-command text from the authorized user is sent to OpenCode as a prompt.
 - The bot shows Telegram typing activity while a prompt is running.
+- The bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt.
 - Incoming text prompts get a temporary eye reaction while processing.
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
