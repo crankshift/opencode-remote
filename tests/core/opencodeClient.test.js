@@ -19,6 +19,36 @@ describe("createOpenCodeClient", () => {
     })
   })
 
+  test("sends prompt attachments as file parts before the text part", async () => {
+    const sdkClient = {
+      session: {
+        prompt: vi.fn(async () => ({ parts: [{ type: "text", text: "answer" }] })),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_1", {
+        text: "What is in these images?",
+        attachments: [
+          { mime: "image/jpeg", url: "file:///tmp/photo-1.jpg" },
+          { mime: "image/png", url: "file:///tmp/photo-2.png" },
+        ],
+      }),
+    ).resolves.toBe("answer")
+
+    expect(sdkClient.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: {
+        parts: [
+          { type: "file", mime: "image/jpeg", url: "file:///tmp/photo-1.jpg" },
+          { type: "file", mime: "image/png", url: "file:///tmp/photo-2.png" },
+          { type: "text", text: "What is in these images?" },
+        ],
+      },
+    })
+  })
+
   test("unwraps field-style SDK responses", async () => {
     const sdkClient = {
       session: {

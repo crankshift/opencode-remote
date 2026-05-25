@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { createTelegramBot } from "../../src/adapters/telegram/bot.js"
 
 class FakeBot {
@@ -34,6 +34,10 @@ class FakeBot {
 }
 
 describe("createTelegramBot", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   test("registers v1 commands and message handlers", () => {
     const bot = createTelegramBot({
       token: "token",
@@ -46,6 +50,7 @@ describe("createTelegramBot", () => {
     expect(bot.token).toBe("token")
     expect([...bot.commands.keys()]).toEqual(["help", "status", "new", "sessions", "stop"])
     expect(bot.messageHandlers.has("message:text")).toBe(true)
+    expect(bot.messageHandlers.has("message:photo")).toBe(true)
     expect(bot.messageHandlers.has("message_reaction")).toBe(true)
     expect(bot.errorHandler).toEqual(expect.any(Function))
     expect(bot.api.setMyCommands).toHaveBeenCalledWith([
@@ -278,6 +283,152 @@ describe("createTelegramBot", () => {
     expect(setMessageReaction).toHaveBeenNthCalledWith(3, 456, 10, [{ type: "emoji", emoji: "👍" }])
   })
 
+  test("single photo messages send one image prompt and one response", async () => {
+    const attachment = {
+      mime: "image/jpeg",
+      url: "file:///tmp/photo-large.jpg",
+      filePath: "/tmp/photo-large.jpg",
+    }
+    const controller = {
+      sendPrompt: vi.fn(async () => "image answer"),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const downloadPhoto = vi.fn(async () => attachment)
+    const cleanupMediaAttachments = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger,
+      botFactory: FakeBot,
+      downloadPhoto,
+      cleanupMediaAttachments,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+    const small = { file_id: "small", width: 320, height: 180, file_size: 1000 }
+    const large = { file_id: "large", width: 1280, height: 720, file_size: 3000 }
+
+    await bot.messageHandlers.get("message:photo")({
+      message: {
+        message_id: 10,
+        chat: { id: 456 },
+        caption: "What changed?",
+        photo: [small, large],
+      },
+      api: { sendChatAction: vi.fn(async () => undefined) },
+      reply,
+    })
+
+    expect(downloadPhoto).toHaveBeenCalledWith({
+      api: { sendChatAction: expect.any(Function) },
+      token: "token",
+      photo: large,
+      directory: undefined,
+    })
+    expect(controller.sendPrompt).toHaveBeenCalledWith({
+      text: "What changed?",
+      attachments: [attachment],
+    })
+    expect(reply).toHaveBeenCalledTimes(1)
+    expect(reply).toHaveBeenCalledWith("image answer")
+    expect(cleanupMediaAttachments).toHaveBeenCalledWith([attachment], logger)
+  })
+
+  test("photo albums send one prompt with all photos and one response", async () => {
+    vi.useFakeTimers()
+    const controller = {
+      sendPrompt: vi.fn(async () => "album answer"),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const downloadPhoto = vi.fn(async ({ photo }) => ({
+      mime: "image/jpeg",
+      url: `file:///tmp/${photo.file_id}.jpg`,
+      filePath: `/tmp/${photo.file_id}.jpg`,
+    }))
+    const cleanupMediaAttachments = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger,
+      botFactory: FakeBot,
+      mediaGroupWaitMs: 10,
+      downloadPhoto,
+      cleanupMediaAttachments,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+    const handler = bot.messageHandlers.get("message:photo")
+
+    await handler(photoContext({ messageId: 12, fileId: "photo-12", reply }))
+    await handler(
+      photoContext({
+        messageId: 10,
+        fileId: "photo-10",
+        caption: "Compare these screenshots",
+        reply,
+      }),
+    )
+    await handler(photoContext({ messageId: 11, fileId: "photo-11", reply }))
+
+    expect(controller.sendPrompt).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt).toHaveBeenCalledWith({
+      text: "Compare these screenshots",
+      attachments: [
+        { mime: "image/jpeg", url: "file:///tmp/photo-10.jpg", filePath: "/tmp/photo-10.jpg" },
+        { mime: "image/jpeg", url: "file:///tmp/photo-11.jpg", filePath: "/tmp/photo-11.jpg" },
+        { mime: "image/jpeg", url: "file:///tmp/photo-12.jpg", filePath: "/tmp/photo-12.jpg" },
+      ],
+    })
+    expect(reply).toHaveBeenCalledTimes(1)
+    expect(reply).toHaveBeenCalledWith("album answer")
+    expect(cleanupMediaAttachments).toHaveBeenCalledTimes(1)
+  })
+
+  test("photo album failures send a safe reply and clean up media", async () => {
+    vi.useFakeTimers()
+    const attachment = {
+      mime: "image/jpeg",
+      url: "file:///tmp/photo-10.jpg",
+      filePath: "/tmp/photo-10.jpg",
+    }
+    const controller = {
+      sendPrompt: vi.fn(async () => {
+        throw new Error("provider secret")
+      }),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const cleanupMediaAttachments = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger,
+      botFactory: FakeBot,
+      mediaGroupWaitMs: 10,
+      downloadPhoto: vi.fn(async () => attachment),
+      cleanupMediaAttachments,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:photo")(
+      photoContext({
+        messageId: 10,
+        fileId: "photo-10",
+        caption: "What is wrong here?",
+        reply,
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(reply).toHaveBeenCalledWith("OpenCode Remote failed while handling that request.")
+    expect(logger.error).toHaveBeenCalled()
+    expect(cleanupMediaAttachments).toHaveBeenCalledWith([attachment], logger)
+  })
+
   test("user reaction to a known bot message sends a feedback prompt and reply", async () => {
     const controller = {
       sendPrompt: vi.fn(async (prompt) => {
@@ -390,3 +541,17 @@ describe("createTelegramBot", () => {
     expect(controller.sendPrompt).toHaveBeenCalledTimes(201)
   })
 })
+
+function photoContext({ messageId, fileId, caption = "", reply }) {
+  return {
+    message: {
+      message_id: messageId,
+      chat: { id: 456 },
+      media_group_id: "album-1",
+      caption,
+      photo: [{ file_id: fileId, width: 1280, height: 720, file_size: 3000 }],
+    },
+    api: { sendChatAction: vi.fn(async () => undefined) },
+    reply,
+  }
+}

@@ -11,6 +11,7 @@ This project is currently a text-first MVP. Telegram is the first adapter, and t
 - Local OpenCode server connection with optional auto-start.
 - OpenCode session creation, listing, selection, prompt sending, and stop requests.
 - Telegram-safe response chunking for long replies.
+- Telegram photo and photo-album prompts.
 - JSON settings persistence for the active session.
 
 Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are planned but not implemented in this MVP.
@@ -114,6 +115,8 @@ The bot currently supports:
 ```
 
 Any non-command text message from the authorized Telegram user is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
+
+Telegram photo albums are handled as one OpenCode prompt when Telegram provides a shared `media_group_id`. The album caption becomes the prompt text. Separate text messages sent after an album are treated as separate prompts.
 
 ## Troubleshooting
 

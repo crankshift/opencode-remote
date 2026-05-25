@@ -2,11 +2,40 @@ import { Bot, InlineKeyboard } from "grammy"
 import { botCommands, renderHelpText } from "../../core/commands/commands.js"
 import { chunkText } from "../../core/formatting/chunkText.js"
 import { isAuthorizedTelegramUser } from "./auth.js"
+import {
+  captionFromMessages,
+  cleanupAttachments as defaultCleanupMediaAttachments,
+  downloadTelegramPhoto as defaultDownloadPhoto,
+  selectLargestPhoto,
+} from "./media.js"
+import { createMediaGroupBuffer } from "./mediaGroupBuffer.js"
 
-export function createTelegramBot({ token, allowedUserId, controller, logger, botFactory = Bot }) {
+const SAFE_ERROR_REPLY = "OpenCode Remote failed while handling that request."
+
+export function createTelegramBot({
+  token,
+  allowedUserId,
+  controller,
+  logger,
+  botFactory = Bot,
+  mediaDirectory,
+  mediaGroupWaitMs = 1500,
+  downloadPhoto = defaultDownloadPhoto,
+  cleanupMediaAttachments = defaultCleanupMediaAttachments,
+}) {
   const bot = new botFactory(token)
   const sessionSelectionTokens = new Map()
   const botMessageMemory = createBotMessageMemory(200)
+  const mediaGroupBuffer = createMediaGroupBuffer({
+    waitMs: mediaGroupWaitMs,
+    logger,
+    onFlush: async (messages) => {
+      const ctx = messages[0]?.gatewayContext
+      if (ctx) {
+        await handleMediaGroupFlush(ctx, messages)
+      }
+    },
+  })
 
   bot.use(async (ctx, next) => {
     if (!isAuthorizedTelegramUser(ctx, allowedUserId)) {
@@ -26,11 +55,7 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
       logError.call(logger, { error: botError.error }, "Telegram update handling failed")
       try {
         if (botError.ctx?.reply) {
-          await replyAndRemember(
-            botError.ctx,
-            "OpenCode Remote failed while handling that request.",
-            botMessageMemory,
-          )
+          await replyAndRemember(botError.ctx, SAFE_ERROR_REPLY, botMessageMemory)
         }
       } catch (replyError) {
         logger.warn({ error: replyError }, "Could not send Telegram error reply")
@@ -141,7 +166,78 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
     }
   })
 
+  bot.on("message:photo", async (ctx) => {
+    if (ctx.message.media_group_id) {
+      mediaGroupBuffer.add({ ...ctx.message, gatewayContext: ctx })
+      return
+    }
+
+    await handlePhotoMessages(ctx, [ctx.message])
+  })
+
   return bot
+
+  async function handlePhotoMessages(ctx, messages) {
+    const attachments = []
+    const stopTyping = startTypingIndicator(ctx, logger)
+
+    try {
+      for (const message of messages) {
+        const photo = selectLargestPhoto(message.photo)
+        if (!photo) {
+          continue
+        }
+        attachments.push(
+          await downloadPhoto({
+            api: ctx.api,
+            token,
+            photo,
+            directory: mediaDirectory,
+          }),
+        )
+      }
+
+      if (attachments.length === 0) {
+        await replyAndRemember(ctx, "No usable photo was found in that message.", botMessageMemory)
+        return
+      }
+
+      const response = await controller.sendPrompt({
+        text: captionFromMessages(messages),
+        attachments,
+      })
+      const parsedResponse = parseTelegramReactionMarker(response)
+      for (const chunk of chunkText(parsedResponse.visibleText)) {
+        await replyAndRemember(ctx, chunk, botMessageMemory)
+      }
+      if (parsedResponse.requestedReaction) {
+        await setEmojiReaction(
+          ctx,
+          messages[0]?.chat?.id,
+          messages[0]?.message_id,
+          parsedResponse.requestedReaction,
+          logger,
+        )
+      }
+    } finally {
+      stopTyping()
+      await cleanupMediaAttachments(attachments, logger)
+    }
+  }
+
+  async function handleMediaGroupFlush(ctx, messages) {
+    try {
+      await handlePhotoMessages(ctx, messages)
+    } catch (error) {
+      const logError = logger.error ?? logger.warn
+      logError.call(logger, { error }, "Telegram media group handling failed")
+      try {
+        await replyAndRemember(ctx, SAFE_ERROR_REPLY, botMessageMemory)
+      } catch (replyError) {
+        logger.warn({ error: replyError }, "Could not send Telegram error reply")
+      }
+    }
+  }
 }
 
 function formatSessionLabel(session) {

@@ -40,7 +40,7 @@ export function createOpenCodeClient({ apiUrl, sdkClient = null } = {}) {
           await client.session.prompt({
             path: { id: sessionId },
             body: {
-              parts: [{ type: "text", text: prompt }],
+              parts: toPromptParts(prompt),
             },
           }),
         )
@@ -62,6 +62,22 @@ export function createOpenCodeClient({ apiUrl, sdkClient = null } = {}) {
       }
     },
   }
+}
+
+function toPromptParts(prompt) {
+  if (typeof prompt === "string") {
+    return [{ type: "text", text: prompt }]
+  }
+
+  const attachments = Array.isArray(prompt?.attachments) ? prompt.attachments : []
+  return [
+    ...attachments.map((attachment) => ({
+      type: "file",
+      mime: attachment.mime,
+      url: attachment.url,
+    })),
+    { type: "text", text: String(prompt?.text ?? "") },
+  ]
 }
 
 function toData(result) {
