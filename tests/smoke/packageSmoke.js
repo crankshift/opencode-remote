@@ -7,6 +7,7 @@ import { promisify } from "node:util"
 const execFile = promisify(execFileCallback)
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"))
+const readme = await readFile("README.md", "utf8")
 
 assertEqual(packageJson.bin?.gateway, "dist/bin/gateway.mjs", "gateway bin points at dist")
 assertEqual(
@@ -31,6 +32,14 @@ assert(
   "package entry exports createGatewayProgram",
 )
 assert(typeof packageEntry.runGateway === "function", "package entry exports runGateway")
+
+const relativeReadmeLinks = [...readme.matchAll(/(?<!!\[)\[[^\]\n]+\]\(([^)]+)\)/g)]
+  .map((match) => match[1])
+  .filter((href) => !/^(https?:|mailto:|#)/.test(href))
+assert(
+  relativeReadmeLinks.length === 0,
+  `README links should work from npm package pages: ${relativeReadmeLinks.join(", ")}`,
+)
 
 const gatewayBin = await readFile("dist/bin/gateway.mjs", "utf8")
 assert(

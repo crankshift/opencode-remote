@@ -19,7 +19,7 @@ This project is currently a text-first MVP. Telegram is the first adapter, and t
 
 Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are planned but not implemented in this MVP.
 
-See [Features](FEATURES.md) for the full current capability list, [Changelog](CHANGELOG.md) for public release notes, and [TODO](TODO.md) for planned work.
+See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for public release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
 
 ## Prerequisites
 
@@ -151,6 +151,23 @@ Run the package smoke check:
 ```bash
 pnpm run smoke:package
 ```
+
+## Release
+
+Releases publish to npm from GitHub Actions using npm trusted publishing. The repository does not need an `NPM_TOKEN` secret.
+
+Before using tag-triggered releases, configure a trusted publisher for `@crankshift/opencode-remote` on npmjs.com. It must match the GitHub repository and workflow filename `publish.yml`.
+
+To publish a release:
+
+1. Update `package.json` version and `CHANGELOG.md`.
+2. Run `pnpm run check`.
+3. Commit the release changes.
+4. Tag the commit with `vX.Y.Z`, matching the package version.
+5. Push the commit and tag.
+6. Verify the `Publish to npm` GitHub Actions workflow completes and the package appears on npm.
+
+The workflow runs `pnpm run check` before `npm publish --access public`.
 
 ## Telegram Commands
 
