@@ -1,10 +1,11 @@
 {
-  "name": "opencode-gateway",
+  "name": "opencode-remote",
+  "description": "A messenger-based chat interface for OpenCode, starting with Telegram.",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "opencode-gateway": "src/bin/gateway.js",
+    "opencode-remote": "src/bin/gateway.js",
     "gateway": "src/bin/gateway.js"
   },
   "engines": {

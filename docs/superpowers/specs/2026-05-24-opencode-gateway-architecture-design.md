@@ -1,4 +1,4 @@
-# OpenCode Gateway Architecture Design
+# OpenCode Remote Architecture Design
 
 ## Goal
 

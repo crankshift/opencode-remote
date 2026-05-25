@@ -28,7 +28,7 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
         if (botError.ctx?.reply) {
           await replyAndRemember(
             botError.ctx,
-            "OpenCode Gateway failed while handling that request.",
+            "OpenCode Remote failed while handling that request.",
             botMessageMemory,
           )
         }

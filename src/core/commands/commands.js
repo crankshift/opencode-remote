@@ -8,7 +8,7 @@ export const botCommands = [
 
 export function renderHelpText() {
   return [
-    "OpenCode Gateway commands:",
+    "OpenCode Remote commands:",
     "",
     ...botCommands.map((command) => `/${command.command} - ${command.description}`),
   ].join("\n")

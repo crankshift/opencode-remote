@@ -52,12 +52,12 @@ Create `package.json` with this content:
 
 ```json
 {
-  "name": "opencode-gateway",
+  "name": "opencode-remote",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "opencode-gateway": "src/bin/gateway.js",
+    "opencode-remote": "src/bin/gateway.js",
     "gateway": "src/bin/gateway.js"
   },
   "engines": {
@@ -364,7 +364,7 @@ export const botCommands = [
 
 export function renderHelpText() {
   return [
-    "OpenCode Gateway commands:",
+    "OpenCode Remote commands:",
     "",
     ...botCommands.map((command) => `/${command.command} - ${command.description}`),
   ].join("\n")
@@ -444,7 +444,7 @@ afterEach(async () => {
 })
 
 async function tempSettingsPath() {
-  const dir = await mkdtemp(join(tmpdir(), "opencode-gateway-"))
+  const dir = await mkdtemp(join(tmpdir(), "opencode-remote-"))
   tempDirs.push(dir)
   return join(dir, "settings.json")
 }

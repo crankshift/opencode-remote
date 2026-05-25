@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Instructions for AI agents and developers working on `opencode-gateway`.
+Instructions for AI agents and developers working on `opencode-remote`.
 
 ## About The Project
 
-`opencode-gateway` is a JavaScript gateway for using OpenCode from messaging apps.
+`opencode-remote` is a messenger-based chat interface for OpenCode, starting with Telegram.
 
 The long-term goal is multi-messenger support: Telegram, Signal, and other chat platforms should all connect to the same OpenCode core. Telegram is the first reference adapter and should drive the first production implementation, but Telegram-specific code must not become the core architecture.
 

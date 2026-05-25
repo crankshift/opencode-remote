@@ -12,7 +12,7 @@ afterEach(async () => {
 })
 
 async function tempSettingsPath() {
-  const dir = await mkdtemp(join(tmpdir(), "opencode-gateway-"))
+  const dir = await mkdtemp(join(tmpdir(), "opencode-remote-"))
   tempDirs.push(dir)
   return join(dir, "settings.json")
 }

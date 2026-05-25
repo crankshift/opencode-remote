@@ -2,7 +2,7 @@
 
 - [ ] Make the project a buildable/publishable CLI package for npm.
   - Add package metadata, `files`, `exports`, `prepack`, and package smoke checks.
-  - Add README install/run docs for `pnpm add -g opencode-gateway` and `gateway run`.
+  - Add README install/run docs for `pnpm add -g opencode-remote` and `gateway run`.
   - Decide whether plain JS source publishing is enough or whether to add `dist/` via `tsup`/`esbuild`.
 
 - [ ] Prefer absolute imports such as `@/core/...` instead of deep relative imports like `../../...`.

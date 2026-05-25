@@ -88,7 +88,7 @@ describe("createTelegramBot", () => {
     await bot.errorHandler({ ctx: { reply }, error: new Error("secret stack") })
 
     expect(logger.error).toHaveBeenCalled()
-    expect(reply).toHaveBeenCalledWith("OpenCode Gateway failed while handling that request.")
+    expect(reply).toHaveBeenCalledWith("OpenCode Remote failed while handling that request.")
   })
 
   test("sessions command truncates labels and uses bounded callback data", async () => {

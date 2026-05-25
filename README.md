@@ -1,6 +1,6 @@
-# OpenCode Gateway
+# OpenCode Remote
 
-OpenCode Gateway lets a single authorized Telegram user control OpenCode from chat. It runs locally, connects to an OpenCode server, accepts Telegram messages as prompts, and sends OpenCode responses back to Telegram.
+OpenCode Remote is a messenger-based chat interface for OpenCode, starting with Telegram.
 
 This project is currently a text-first MVP. Telegram is the first adapter, and the core OpenCode/session logic is kept separate so other messengers can be added later.
 
