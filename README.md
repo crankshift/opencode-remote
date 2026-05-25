@@ -11,10 +11,14 @@ This project is currently a text-first MVP. Telegram is the first adapter, and t
 - Local OpenCode server connection with optional auto-start.
 - OpenCode session creation, listing, selection, prompt sending, and stop requests.
 - Telegram-safe response chunking for long replies.
+- Telegram typing indicators while prompts are running.
+- Telegram emoji reactions for processing state, user feedback, and assistant-requested reactions.
 - Telegram photo and photo-album prompts.
 - JSON settings persistence for the active session.
 
 Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are planned but not implemented in this MVP.
+
+See [Features](FEATURES.md) for the full current capability list, [Changelog](CHANGELOG.md) for public release notes, and [TODO](TODO.md) for planned work.
 
 ## Prerequisites
 
