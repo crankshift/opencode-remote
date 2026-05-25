@@ -124,7 +124,9 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
     let requestedReaction = null
     try {
       await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
-      const response = await controller.sendPrompt(ctx.message.text)
+      const response = await controller.sendPrompt(
+        formatPromptWithTelegramReactionInstruction(ctx.message.text),
+      )
       const parsedResponse = parseTelegramReactionMarker(response)
       requestedReaction = parsedResponse.requestedReaction
       for (const chunk of chunkText(parsedResponse.visibleText)) {
@@ -184,6 +186,17 @@ async function replyAndRemember(ctx, text, botMessageMemory, options) {
 }
 
 const TELEGRAM_REACTION_MARKER = /\[telegram_reaction:\s*([^\]\n]+?)\s*\]/giu
+
+const TELEGRAM_REACTION_INSTRUCTION = [
+  "Telegram gateway note:",
+  "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
+  "[telegram_reaction: 👍]",
+  "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
+].join("\n")
+
+function formatPromptWithTelegramReactionInstruction(prompt) {
+  return [prompt, "", TELEGRAM_REACTION_INSTRUCTION].join("\n")
+}
 
 function parseTelegramReactionMarker(text) {
   let requestedReaction = null

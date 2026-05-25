@@ -213,9 +213,42 @@ describe("createTelegramBot", () => {
     })
 
     expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
-    expect(controller.sendPrompt).toHaveBeenCalledWith("hello")
+    expect(controller.sendPrompt).toHaveBeenCalledWith(expect.stringContaining("hello"))
     expect(reply).toHaveBeenCalledWith("answer")
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+  })
+
+  test("text prompts tell OpenCode how to request Telegram reactions", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      [
+        "hello",
+        "",
+        "Telegram gateway note:",
+        "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
+        "[telegram_reaction: 👍]",
+        "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
+      ].join("\n"),
+    )
   })
 
   test("hidden telegram reaction markers are stripped and applied to the user message", async () => {
@@ -248,7 +281,7 @@ describe("createTelegramBot", () => {
   test("user reaction to a known bot message sends a feedback prompt and reply", async () => {
     const controller = {
       sendPrompt: vi.fn(async (prompt) => {
-        if (prompt === "hello") {
+        if (prompt.startsWith("hello")) {
           return "answer"
         }
         return "feedback response"

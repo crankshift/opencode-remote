@@ -34,7 +34,7 @@ Reaction API failures are best-effort warnings. They must not block prompt sendi
 When the authorized user sends a non-command text message:
 
 1. The Telegram adapter applies `👀` to the user's message.
-2. The adapter sends the text to OpenCode through the existing controller prompt path.
+2. The adapter sends the text to OpenCode through the existing controller prompt path, with a short Telegram gateway note explaining that OpenCode may request a bot reaction by including `[telegram_reaction: 👍]` in its response.
 3. The adapter parses the OpenCode response for a hidden Telegram reaction marker.
 4. The adapter sends the visible response chunks to Telegram.
 5. The adapter stores sent bot message IDs and visible text in a bounded in-memory map.
