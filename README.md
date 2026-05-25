@@ -1,25 +1,10 @@
 # OpenCode Remote
 
-OpenCode Remote is a messenger-based chat interface for OpenCode, starting with Telegram.
+OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, connects to your local or remote OpenCode server, and forwards messages from one authorized Telegram user to OpenCode sessions.
 
-This project is currently a text-first MVP. Telegram is the first adapter, and the core OpenCode/session logic is kept separate so other messengers can be added later.
+This is a text-first Telegram MVP. Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are not implemented yet.
 
-## Current Features
-
-- Telegram long polling with grammY.
-- Single-user Telegram allowlist.
-- Local OpenCode server connection with optional auto-start.
-- OpenCode session creation, listing, selection, prompt sending, and stop requests.
-- Telegram-safe response chunking for long replies.
-- Telegram typing indicators while prompts are running.
-- Telegram emoji reactions for processing state, user feedback, and assistant-requested reactions.
-- Telegram photo and photo-album prompts.
-- Interactive JSON config setup for the published CLI.
-- JSON settings persistence for the active session.
-
-Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are planned but not implemented in this MVP.
-
-See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for public release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
+See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
 
 ## Prerequisites
 
@@ -42,17 +27,17 @@ Or with pnpm:
 pnpm add -g @crankshift/opencode-remote
 ```
 
-The package installs two equivalent CLI bins: `gateway` and `opencode-remote`.
+The package installs the `opencode-remote` command.
 
-## First Run
+## Setup
 
-Start the gateway:
+Create the config interactively:
 
 ```bash
-gateway run
+opencode-remote setup
 ```
 
-If no config exists, the CLI prompts to create one. It asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, OpenCode connection settings, progress verbosity, log level, and settings path.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, OpenCode connection settings, progress verbosity, log level, and settings path.
 
 Config discovery order:
 
@@ -60,6 +45,45 @@ Config discovery order:
 2. Global `~/.opencode-remote/config.json`.
 
 Local project config is useful when different projects need different OpenCode workdirs or Telegram bots. Global config is useful for one machine-wide gateway setup.
+
+If no config exists, `opencode-remote run` and `opencode-remote start` run setup automatically before starting the gateway.
+
+## Running
+
+Run in the foreground:
+
+```bash
+opencode-remote run
+```
+
+Stop the foreground gateway with `Ctrl+C`.
+
+Run in the background:
+
+```bash
+opencode-remote start
+```
+
+Check background status:
+
+```bash
+opencode-remote status
+```
+
+Stop the background gateway:
+
+```bash
+opencode-remote stop
+```
+
+Background mode writes runtime files beside the selected config:
+
+- `.opencode-remote/gateway.pid` stores the background process ID.
+- `.opencode-remote/gateway.log` stores background stdout and stderr.
+
+On startup, the gateway checks `opencode.apiUrl`. If it is reachable, the gateway uses that server. If it is not reachable and `opencode.autoStart=true`, the gateway starts `opencode.command serve` and waits for it to become reachable before starting Telegram polling. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
+
+If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.
 
 ## Configuration
 
@@ -90,7 +114,7 @@ The config file is JSON:
 
 `opencode.command` is the executable used when the gateway starts OpenCode itself. The default is `opencode`.
 
-`opencode.autoStart` controls whether the gateway runs `opencode serve` if `opencode.apiUrl` is not reachable. Set it to `false` if you want to manage the OpenCode server yourself.
+`opencode.autoStart` controls whether the gateway starts `opencode serve` if `opencode.apiUrl` is not reachable. Set it to `false` if you want to manage the OpenCode server yourself.
 
 `opencode.workdir` is the working directory used when auto-starting OpenCode. If omitted or `null`, the gateway uses the current process directory.
 
@@ -101,73 +125,6 @@ The config file is JSON:
 `settingsPath` is optional. If omitted, gateway state is stored beside the selected config as `.opencode-remote/settings.json`. Do not store secrets in the settings file.
 
 Keep `config.json` private because it contains your Telegram bot token. Project-local `.opencode-remote/` is ignored by git.
-
-## Running
-
-Run the installed CLI:
-
-```bash
-gateway run
-```
-
-You can also run the equivalent bin:
-
-```bash
-opencode-remote run
-```
-
-On startup, the gateway checks `opencode.apiUrl`. If it is reachable, the gateway uses that server. If it is not reachable and `opencode.autoStart=true`, the gateway starts `opencode.command serve` and waits for it to become reachable before starting Telegram polling. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
-
-Stop the gateway with `Ctrl+C`. If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.
-
-## Development
-
-Install dependencies:
-
-```bash
-pnpm install
-```
-
-Start from source:
-
-```bash
-pnpm start
-```
-
-Run in watch mode during development:
-
-```bash
-pnpm dev
-```
-
-Build the publishable package output:
-
-```bash
-pnpm run build
-```
-
-Run the package smoke check:
-
-```bash
-pnpm run smoke:package
-```
-
-## Release
-
-Releases publish to npm from GitHub Actions using npm trusted publishing. The repository does not need an `NPM_TOKEN` secret.
-
-Before using tag-triggered releases, configure a trusted publisher for `@crankshift/opencode-remote` on npmjs.com. It must match the GitHub repository and workflow filename `publish.yml`.
-
-To publish a release:
-
-1. Update `package.json` version and `CHANGELOG.md`.
-2. Run `pnpm run check`.
-3. Commit the release changes.
-4. Tag the commit with `vX.Y.Z`, matching the package version.
-5. Push the commit and tag.
-6. Verify the `Publish to npm` GitHub Actions workflow completes and the package appears on npm.
-
-The workflow runs `pnpm run check` before `npm publish --access public`.
 
 ## Telegram Commands
 
@@ -196,26 +153,8 @@ If startup fails because OpenCode is unreachable, either start OpenCode yourself
 
 If auto-start fails, check `opencode.workdir`. The gateway starts `opencode serve` from that directory, or from the current process directory when `opencode.workdir` is empty.
 
+If background mode does not start, run `opencode-remote status` and inspect `.opencode-remote/gateway.log` beside the selected config.
+
+If `opencode-remote status` reports a stale PID file, run `opencode-remote stop` once to remove it.
+
 If session selection is not preserved, check that the parent directory for the settings file is writable. The default path is `.opencode-remote/settings.json` beside the selected config.
-
-## Development Checks
-
-Run linting:
-
-```bash
-pnpm run lint
-```
-
-Run tests:
-
-```bash
-pnpm test
-```
-
-Run the full local check:
-
-```bash
-pnpm run check
-```
-
-Default tests mock external systems. They do not require live Telegram, live OpenCode, Groq, or TTS services.

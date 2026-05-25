@@ -7,7 +7,7 @@ import {
   loadConfig,
   loadConfigFromObject,
 } from "../../src/config/loadConfig.js"
-import { loadOrCreateConfig } from "../../src/config/setupConfig.js"
+import { createConfig, loadOrCreateConfig } from "../../src/config/setupConfig.js"
 
 const tempDirs = []
 
@@ -178,6 +178,55 @@ describe("loadOrCreateConfig", () => {
     expect(config.settingsPath).toBe(join(homeDir, ".opencode-remote", "settings.json"))
     await expect(readJson(globalPath)).resolves.toMatchObject({
       telegram: { botToken: "created-token", allowedUserId: 555 },
+    })
+  })
+})
+
+describe("createConfig", () => {
+  test("prompts before replacing an existing local config", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const existingPath = join(cwd, ".opencode-remote", "config.json")
+    await writeConfig(existingPath, {
+      telegram: { botToken: "old-token", allowedUserId: 111 },
+    })
+    const confirmOverwrite = vi.fn(async () => true)
+    const prompter = vi.fn(async () => ({
+      scope: "local",
+      config: {
+        telegram: { botToken: "new-token", allowedUserId: 222 },
+      },
+    }))
+
+    const config = await createConfig({ cwd, homeDir, prompter, confirmOverwrite })
+
+    expect(confirmOverwrite).toHaveBeenCalledWith(existingPath)
+    expect(config.telegram).toEqual({ botToken: "new-token", allowedUserId: 222 })
+    await expect(readJson(existingPath)).resolves.toMatchObject({
+      telegram: { botToken: "new-token", allowedUserId: 222 },
+    })
+  })
+
+  test("keeps an existing config when overwrite is declined", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const existingPath = join(cwd, ".opencode-remote", "config.json")
+    await writeConfig(existingPath, {
+      telegram: { botToken: "old-token", allowedUserId: 333 },
+    })
+    const confirmOverwrite = vi.fn(async () => false)
+    const prompter = vi.fn(async () => ({
+      scope: "local",
+      config: {
+        telegram: { botToken: "new-token", allowedUserId: 444 },
+      },
+    }))
+
+    const config = await createConfig({ cwd, homeDir, prompter, confirmOverwrite })
+
+    expect(confirmOverwrite).toHaveBeenCalledWith(existingPath)
+    expect(prompter).not.toHaveBeenCalled()
+    expect(config.telegram).toEqual({ botToken: "old-token", allowedUserId: 333 })
+    await expect(readJson(existingPath)).resolves.toMatchObject({
+      telegram: { botToken: "old-token", allowedUserId: 333 },
     })
   })
 })

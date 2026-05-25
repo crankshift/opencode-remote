@@ -8,7 +8,7 @@
 
 2. [x] Make the project a buildable/publishable CLI package for npm.
    - Add package metadata, `files`, `exports`, `prepack`, and package smoke checks.
-   - Add README install/run docs for `npm install -g @crankshift/opencode-remote`, `pnpm add -g @crankshift/opencode-remote`, and `gateway run`.
+   - Add README install/run docs for `npm install -g @crankshift/opencode-remote`, `pnpm add -g @crankshift/opencode-remote`, and `opencode-remote run`.
    - Build publishable `dist/` output with `tsdown`.
 
 3. [ ] Prefer absolute imports such as `@/core/...` instead of deep relative imports like `../../...`.
@@ -40,7 +40,7 @@
    - `/help` - Show available commands.
 
 6. [ ] Change OpenCode startup behavior.
-   - When `gateway run` starts and OpenCode is not running, prompt the CLI user before starting `opencode serve`.
+   - When `opencode-remote run` starts and OpenCode is not running, prompt the CLI user before starting `opencode serve`.
    - Do not silently auto-start OpenCode by default.
    - Add a non-interactive flag or env option for explicit auto-start behavior.
 

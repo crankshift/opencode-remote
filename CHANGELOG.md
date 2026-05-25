@@ -4,6 +4,23 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.2.0] - 2026-05-25
+
+### Added
+
+- Added `opencode-remote setup`, `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status` CLI commands.
+- Added background gateway PID and log management beside the selected config.
+- Added `DEVELOPMENT.md` for source, test, build, and release workflow notes.
+
+### Changed
+
+- Changed the public package command surface to the single `opencode-remote` bin.
+- Moved development and release instructions out of `README.md` so the README focuses on user install and usage.
+
+### Removed
+
+- Removed the legacy `gateway` package bin.
+
 ## [0.1.2] - 2026-05-25
 
 ### Added
@@ -14,7 +31,7 @@ This project follows Semantic Versioning.
 - Added a tag-triggered GitHub Actions workflow for npm trusted publishing.
 - Added GitHub repository metadata to the npm package manifest.
 - Added a package smoke check that keeps the repository URL aligned with npm trusted publishing.
-- Added interactive JSON config setup for `gateway run` when no config exists.
+- Added interactive JSON config setup for the foreground CLI run command when no config exists.
 - Added project-local and global `.opencode-remote/config.json` discovery.
 
 ### Changed

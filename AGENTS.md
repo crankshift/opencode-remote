@@ -4,7 +4,7 @@ AI operating guide for `opencode-remote`. Keep this file compact and current: it
 
 ## Project Snapshot
 
-- Package: `@crankshift/opencode-remote`, CLI bins `opencode-remote` and `gateway`.
+- Package: `@crankshift/opencode-remote`, CLI bin `opencode-remote`.
 - Product: local-first messenger gateway for OpenCode. Telegram is the first adapter.
 - Current state: text-first Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, and active-session persistence.
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
@@ -40,6 +40,8 @@ Implemented now:
 - Telegram single-photo and photo-album prompts. Albums are grouped by `media_group_id` with a short debounce.
 - Telegram photos are downloaded to temp files, sent as OpenCode file prompt parts, then cleaned up.
 - Publishable npm package output is built to `dist/` with `tsdown`.
+- Public CLI bin is `opencode-remote`.
+- Background CLI lifecycle supports `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status`.
 - Public docs exist: `README.md`, `FEATURES.md`, `CHANGELOG.md`, `TODO.md`, `LICENSE`.
 
 Not implemented yet:
@@ -57,9 +59,10 @@ Do not describe planned items as shipped. If you implement one, update this file
 ## Architecture Map
 
 ```text
-src/bin/gateway.js                 CLI entry
-src/bin/program.js                 commander command `gateway run`
+src/bin/opencode-remote.js         CLI entry
+src/bin/program.js                 commander commands for `opencode-remote`
 src/runtime/bootstrap.js           runtime wiring, shutdown, Telegram polling startup
+src/runtime/background.js          background PID/log lifecycle helpers
 src/config/loadConfig.js           JSON config discovery + zod validation
 src/config/setupConfig.js          interactive config creation flow
 src/utils/logger.js                pino logger factory
@@ -100,6 +103,7 @@ Implemented command surface:
 /new       Create and select a new OpenCode session
 /sessions  List OpenCode sessions and switch with inline buttons
 /stop      Request abort for the active OpenCode session
+/progress  Show or set tool progress visibility: off, new, all, verbose
 /help      Show available commands
 ```
 
@@ -157,7 +161,7 @@ User reacts to recent bot message
 Startup/shutdown:
 
 ```text
-gateway run
+opencode-remote run
   -> load or create JSON config
   -> ensure OpenCode server reachable or auto-start owned child
   -> create SDK client, settings store, controller, Telegram bot
@@ -172,7 +176,7 @@ Runtime config is discovered in this order:
 1. Project-local `.opencode-remote/config.json` in the current working directory.
 2. Global `~/.opencode-remote/config.json`.
 
-If no config exists, `gateway run` prompts the CLI user to create one locally or globally.
+If no config exists, `opencode-remote run` and `opencode-remote start` prompt the CLI user to create one locally or globally.
 
 Current config shape:
 
@@ -199,6 +203,7 @@ Rules:
 - `opencode.autoStart=true` starts `opencode.command serve` only when `opencode.apiUrl` is unreachable.
 - If the gateway starts OpenCode, it owns and stops that child on shutdown. It must not stop a server that was already running.
 - `settingsPath` is optional; by default state is stored as `.opencode-remote/settings.json` beside the selected config.
+- Background runtime files are stored beside the selected config as `.opencode-remote/gateway.pid` and `.opencode-remote/gateway.log` by default.
 - Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.
 - Do not add voice, model, or provider env vars until the related feature is actually implemented.
 
@@ -223,7 +228,8 @@ Rules:
 
 ## Docs And Packaging
 
-- README is the public quick start.
+- README is the public install and usage guide.
+- `DEVELOPMENT.md` contains source, test, build, and release workflow notes.
 - `FEATURES.md` is the public current-capability inventory.
 - `CHANGELOG.md` is public release history.
 - `TODO.md` is the roadmap/backlog.

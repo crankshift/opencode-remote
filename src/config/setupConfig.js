@@ -32,8 +32,35 @@ export async function loadOrCreateConfig({
     }
   }
 
+  return createConfig({ cwd, homeDir, prompter, skipExistingCheck: true })
+}
+
+export async function createConfig({
+  cwd = process.cwd(),
+  homeDir,
+  prompter = promptForConfig,
+  confirmOverwrite = confirmOverwriteConfig,
+  skipExistingCheck = false,
+} = {}) {
+  if (!skipExistingCheck) {
+    try {
+      const existingConfig = await loadConfig({ cwd, homeDir })
+      if (!(await confirmOverwrite(existingConfig.configPath))) {
+        return existingConfig
+      }
+    } catch (error) {
+      if (error?.code !== "missing_config") {
+        throw error
+      }
+    }
+  }
+
   const paths = getConfigPaths({ cwd, homeDir })
   const answers = await prompter(paths)
+  return writePromptedConfig({ answers, paths, cwd })
+}
+
+async function writePromptedConfig({ answers, paths, cwd }) {
   const configPath = answers.scope === "global" ? paths.globalConfigPath : paths.localConfigPath
   const config = loadConfigFromObject(answers.config, { configPath, cwd })
 
@@ -41,6 +68,16 @@ export async function loadOrCreateConfig({
   await writeFile(configPath, `${JSON.stringify(answers.config, null, 2)}\n`, "utf8")
 
   return config
+}
+
+export async function confirmOverwriteConfig(configPath) {
+  const rl = createInterface({ input, output })
+
+  try {
+    return askBoolean(rl, `Config already exists at ${configPath}. Replace it`, false)
+  } finally {
+    rl.close()
+  }
 }
 
 export async function promptForConfig(paths) {

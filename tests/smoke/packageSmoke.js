@@ -9,11 +9,14 @@ const execFile = promisify(execFileCallback)
 const packageJson = JSON.parse(await readFile("package.json", "utf8"))
 const readme = await readFile("README.md", "utf8")
 
-assertEqual(packageJson.bin?.gateway, "dist/bin/gateway.mjs", "gateway bin points at dist")
 assertEqual(
   packageJson.bin?.["opencode-remote"],
-  "dist/bin/gateway.mjs",
+  "dist/bin/opencode-remote.mjs",
   "opencode-remote bin points at dist",
+)
+assert(
+  !Object.hasOwn(packageJson.bin ?? {}, "gateway"),
+  "package does not expose legacy gateway command",
 )
 assertEqual(
   packageJson.main,
@@ -46,13 +49,13 @@ assert(
   `README links should work from npm package pages: ${relativeReadmeLinks.join(", ")}`,
 )
 
-const gatewayBin = await readFile("dist/bin/gateway.mjs", "utf8")
+const gatewayBin = await readFile("dist/bin/opencode-remote.mjs", "utf8")
 assert(
   gatewayBin.startsWith("#!/usr/bin/env node"),
-  "dist/bin/gateway.mjs preserves the Node.js shebang",
+  "dist/bin/opencode-remote.mjs preserves the Node.js shebang",
 )
 
-const help = await execFile(process.execPath, ["dist/bin/gateway.mjs", "--help"])
+const help = await execFile(process.execPath, ["dist/bin/opencode-remote.mjs", "--help"])
 assert(help.stdout.includes("OpenCode messaging gateway"), "dist CLI help renders")
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm"
@@ -61,7 +64,7 @@ const packed = JSON.parse(pack.stdout)[0].files.map((file) => file.path)
 
 for (const required of [
   "dist/index.mjs",
-  "dist/bin/gateway.mjs",
+  "dist/bin/opencode-remote.mjs",
   "package.json",
   "README.md",
   "LICENSE",
@@ -69,7 +72,12 @@ for (const required of [
   assert(packed.includes(required), `package includes ${required}`)
 }
 
-for (const forbidden of ["src/bin/gateway.js", "tests/config/loadConfig.test.js", ".env.example"]) {
+for (const forbidden of [
+  "dist/bin/gateway.mjs",
+  "src/bin/gateway.js",
+  "tests/config/loadConfig.test.js",
+  ".env.example",
+]) {
   assert(!packed.includes(forbidden), `package excludes ${forbidden}`)
 }
 

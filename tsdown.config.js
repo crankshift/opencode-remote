@@ -3,7 +3,7 @@ import { defineConfig } from "tsdown"
 export default defineConfig({
   entry: {
     index: "src/index.js",
-    "bin/gateway": "src/bin/gateway.js",
+    "bin/opencode-remote": "src/bin/opencode-remote.js",
   },
   outDir: "dist",
   clean: true,
