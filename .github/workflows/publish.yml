@@ -26,6 +26,17 @@ jobs:
       - name: Enable pnpm
         run: corepack enable pnpm
 
+      - name: Use trusted publishing capable npm
+        run: npm install -g npm@^11.10.0
+
+      - name: Show publish environment
+        run: |
+          node --version
+          npm --version
+          npm config get registry
+          test -n "$ACTIONS_ID_TOKEN_REQUEST_URL"
+          test -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

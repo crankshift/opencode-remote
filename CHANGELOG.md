@@ -4,7 +4,7 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
-## [0.1.1] - 2026-05-25
+## [0.1.2] - 2026-05-25
 
 ### Added
 
@@ -13,6 +13,7 @@ This project follows Semantic Versioning.
 - Added a package smoke check that prevents relative README links from breaking on npm package pages.
 - Added a tag-triggered GitHub Actions workflow for npm trusted publishing.
 - Added GitHub repository metadata to the npm package manifest.
+- Added a package smoke check that keeps the repository URL aligned with npm trusted publishing.
 - Added interactive JSON config setup for `gateway run` when no config exists.
 - Added project-local and global `.opencode-remote/config.json` discovery.
 
@@ -20,6 +21,8 @@ This project follows Semantic Versioning.
 
 - Replaced `.env` runtime configuration with validated JSON config files.
 - Changed default gateway state persistence to `.opencode-remote/settings.json` beside the selected config.
+- Changed package repository metadata to npm's public GitHub `git+https` format for trusted publishing.
+- Pinned the release workflow to a trusted-publishing-capable npm CLI before publishing.
 - Updated package bins and exports to point at built `dist/` output.
 - Raised the Node.js engine requirement to `>=22.18.0`.
 

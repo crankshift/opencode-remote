@@ -25,6 +25,11 @@ assertEqual(
   "./dist/index.mjs",
   "package export points at side-effect-free dist entry",
 )
+assertEqual(
+  packageJson.repository?.url,
+  "git+https://github.com/crankshift/opencode-remote.git",
+  "package repository URL matches the trusted publishing GitHub repository",
+)
 
 const packageEntry = await import(pathToFileURL(join(process.cwd(), "dist/index.mjs")))
 assert(
