@@ -21,6 +21,7 @@ OpenCode Remote is currently a text-first Telegram gateway for OpenCode.
 - `/stop` requests abort for the active OpenCode session.
 - `/progress` shows or sets prompt activity visibility: `off`, `new`, `all`, or `verbose`.
 - `/help` shows the available bot commands.
+- The Telegram slash-command menu is refreshed on gateway startup.
 - Non-command text from the authorized user is sent to OpenCode as a prompt.
 - The bot shows Telegram typing activity while a prompt is running.
 - The bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt.

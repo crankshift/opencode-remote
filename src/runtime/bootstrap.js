@@ -1,4 +1,7 @@
-import { createTelegramBot as defaultCreateTelegramBot } from "../adapters/telegram/bot.js"
+import {
+  createTelegramBot as defaultCreateTelegramBot,
+  registerTelegramBotCommands as defaultRegisterTelegramBotCommands,
+} from "../adapters/telegram/bot.js"
 import { loadConfig } from "../config/loadConfig.js"
 import { createGatewayController as defaultCreateGatewayController } from "../core/gateway/controller.js"
 import { createOpenCodeClient as defaultCreateOpenCodeClient } from "../core/opencode/client.js"
@@ -18,6 +21,8 @@ export async function runGateway({
   const createGatewayController =
     dependencies.createGatewayController ?? defaultCreateGatewayController
   const createTelegramBot = dependencies.createTelegramBot ?? defaultCreateTelegramBot
+  const registerTelegramBotCommands =
+    dependencies.registerTelegramBotCommands ?? defaultRegisterTelegramBotCommands
 
   const server = await ensureOpenCodeServer(config.opencode)
   const opencode = createOpenCodeClient({ apiUrl: config.opencode.apiUrl })
@@ -49,6 +54,7 @@ export async function runGateway({
   processLike.once("SIGINT", shutdown)
   processLike.once("SIGTERM", shutdown)
 
+  await registerTelegramBotCommands(bot, logger)
   logger.info("Starting Telegram polling")
   await bot.start({
     allowed_updates: ["message", "callback_query", "message_reaction"],

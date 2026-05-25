@@ -38,7 +38,7 @@ describe("createTelegramBot", () => {
     vi.useRealTimers()
   })
 
-  test("registers v1 commands and message handlers", () => {
+  test("registers v1 command handlers and message handlers", () => {
     const bot = createTelegramBot({
       token: "token",
       allowedUserId: 123,
@@ -60,14 +60,7 @@ describe("createTelegramBot", () => {
     expect(bot.messageHandlers.has("message:photo")).toBe(true)
     expect(bot.messageHandlers.has("message_reaction")).toBe(true)
     expect(bot.errorHandler).toEqual(expect.any(Function))
-    expect(bot.api.setMyCommands).toHaveBeenCalledWith([
-      { command: "status", description: "Show gateway and OpenCode status" },
-      { command: "new", description: "Create and select a new OpenCode session" },
-      { command: "sessions", description: "List and switch OpenCode sessions" },
-      { command: "stop", description: "Abort current OpenCode task" },
-      { command: "progress", description: "Set tool progress visibility" },
-      { command: "help", description: "Show available commands" },
-    ])
+    expect(bot.api.setMyCommands).not.toHaveBeenCalled()
   })
 
   test("status command reports progress verbosity", async () => {

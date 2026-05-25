@@ -105,7 +105,7 @@ You can also call the CLI entry directly:
 node src/bin/gateway.js run
 ```
 
-On startup, the gateway checks `OPENCODE_API_URL`. If it is reachable, the gateway uses that server. If it is not reachable and `OPENCODE_AUTO_START=true`, the gateway starts `OPENCODE_COMMAND serve` and waits for it to become reachable before starting Telegram polling.
+On startup, the gateway checks `OPENCODE_API_URL`. If it is reachable, the gateway uses that server. If it is not reachable and `OPENCODE_AUTO_START=true`, the gateway starts `OPENCODE_COMMAND serve` and waits for it to become reachable before starting Telegram polling. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
 
 Stop the gateway with `Ctrl+C`. If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.
 

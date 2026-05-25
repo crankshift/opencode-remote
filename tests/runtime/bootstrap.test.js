@@ -1,10 +1,15 @@
 import { describe, expect, test, vi } from "vitest"
+import { botCommands } from "../../src/core/commands/commands.js"
 import { runGateway } from "../../src/runtime/bootstrap.js"
 
 describe("runGateway", () => {
   test("starts OpenCode server before Telegram polling", async () => {
     const server = { stop: vi.fn(async () => undefined) }
-    const bot = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
     const ensureOpenCodeServer = vi.fn(async () => server)
     const createBot = vi.fn(() => bot)
     const processLike = { once: vi.fn() }
@@ -35,9 +40,83 @@ describe("runGateway", () => {
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
   })
 
+  test("registers Telegram commands before polling starts", async () => {
+    const order = []
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: {
+        setMyCommands: vi.fn(async (_commands, options) => {
+          order.push(options?.scope?.type ?? "default")
+        }),
+      },
+      start: vi.fn(async () => {
+        order.push("start")
+      }),
+      stop: vi.fn(async () => undefined),
+    }
+
+    await runGateway({
+      config: testConfig(),
+      logger: testLogger(),
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        createSettingsStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => bot),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(1, botCommands)
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, botCommands, {
+      scope: { type: "all_private_chats" },
+    })
+    expect(order).toEqual(["default", "all_private_chats", "start"])
+  })
+
+  test("starts polling when Telegram command registration fails", async () => {
+    const logger = testLogger()
+    const server = { stop: vi.fn(async () => undefined) }
+    const error = new Error("telegram unavailable")
+    const bot = {
+      api: {
+        setMyCommands: vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined),
+      },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+
+    await runGateway({
+      config: testConfig(),
+      logger,
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        createSettingsStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => bot),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(logger.warn).toHaveBeenCalledWith({ error }, "Could not register Telegram commands")
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(1, botCommands)
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, botCommands, {
+      scope: { type: "all_private_chats" },
+    })
+    expect(bot.start).toHaveBeenCalledWith({
+      allowed_updates: ["message", "callback_query", "message_reaction"],
+    })
+  })
+
   test("registered shutdown stops Telegram polling and owned server", async () => {
     const server = { stop: vi.fn(async () => undefined) }
-    const bot = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
     const handlers = new Map()
     const processLike = { once: vi.fn((signal, handler) => handlers.set(signal, handler)) }
 

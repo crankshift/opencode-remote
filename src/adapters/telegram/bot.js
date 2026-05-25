@@ -17,6 +17,20 @@ import { createMediaGroupBuffer } from "./mediaGroupBuffer.js"
 
 const SAFE_ERROR_REPLY = "OpenCode Remote failed while handling that request."
 
+export async function registerTelegramBotCommands(bot, logger) {
+  for (const scope of [null, { type: "all_private_chats" }]) {
+    try {
+      if (scope) {
+        await bot.api.setMyCommands(botCommands, { scope })
+      } else {
+        await bot.api.setMyCommands(botCommands)
+      }
+    } catch (error) {
+      logger.warn({ error }, "Could not register Telegram commands")
+    }
+  }
+}
+
 export function createTelegramBot({
   token,
   allowedUserId,
@@ -51,10 +65,6 @@ export function createTelegramBot({
       return
     }
     await next()
-  })
-
-  bot.api.setMyCommands(botCommands).catch((error) => {
-    logger.warn({ error }, "Could not register Telegram commands")
   })
 
   if (typeof bot.catch === "function") {
