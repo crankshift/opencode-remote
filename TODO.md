@@ -45,19 +45,25 @@
    - `/opencode_stop` - Stop the local OpenCode server on the bot machine.
    - `/help` - Show available commands.
 
-7. [ ] Change OpenCode startup behavior.
+7. [ ] Investigate moving gateway-authored OpenCode prompts into bundled skills.
+   - Inventory hardcoded prompts currently injected by the gateway, including Telegram reaction instructions, reaction feedback prompts, and image fallback prompts.
+   - Evaluate whether these should stay adapter-owned strings or become built-in gateway skills invoked through OpenCode.
+   - Preserve messenger-neutral core boundaries and avoid shipping a noisy default skill set unless the skills are isolated and clearly useful.
+   - Document how Telegram-specific context would be passed without leaking Telegram concerns into core.
+
+8. [ ] Change OpenCode startup behavior.
    - When `opencode-remote run` starts and OpenCode is not running, prompt the CLI user before starting `opencode serve`.
    - Do not silently auto-start OpenCode by default.
    - Add a non-interactive flag or env option for explicit auto-start behavior.
 
-8. [ ] Add modern Vitest coverage reporting.
+9. [ ] Add modern Vitest coverage reporting.
    - Add `@vitest/coverage-v8` and a `pnpm run coverage` script using `vitest run --coverage`.
    - Configure V8 coverage for `src/**/*.js` with `text`, `html`, and `lcov` reporters.
    - Start with realistic global thresholds: 80% lines, statements, and functions; 70% branches.
    - Keep external Telegram, OpenCode, STT, and TTS systems mocked by default.
    - Add optional env-gated live smoke tests later instead of requiring live services in normal coverage runs.
 
-9. [x] Add interactive JSON config discovery for the published npm CLI.
+10. [x] Add interactive JSON config discovery for the published npm CLI.
    - Replace `.env`-based runtime config with `.opencode-remote/config.json`.
    - Discover config in this order:
      1. Project-local `.opencode-remote/config.json` in the current working directory.
