@@ -30,6 +30,7 @@ export async function ensureOpenCodeServer({
 
   const child = processFactory(command, ["serve"], {
     cwd: workdir,
+    reject: false,
     stdio: "pipe",
   })
 

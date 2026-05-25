@@ -37,6 +37,7 @@ describe("ensureOpenCodeServer", () => {
     expect(manager.started).toBe(true)
     expect(processFactory).toHaveBeenCalledWith("opencode", ["serve"], {
       cwd: "/tmp/project",
+      reject: false,
       stdio: "pipe",
     })
 
