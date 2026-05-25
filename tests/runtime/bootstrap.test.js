@@ -24,7 +24,9 @@ describe("runGateway", () => {
 
     expect(ensureOpenCodeServer).toHaveBeenCalledWith(testConfig().opencode)
     expect(createBot).toHaveBeenCalled()
-    expect(bot.start).toHaveBeenCalled()
+    expect(bot.start).toHaveBeenCalledWith({
+      allowed_updates: ["message", "callback_query", "message_reaction"],
+    })
     expect(processLike.once).toHaveBeenCalledWith("SIGINT", expect.any(Function))
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
   })

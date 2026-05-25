@@ -6,6 +6,7 @@ import { isAuthorizedTelegramUser } from "./auth.js"
 export function createTelegramBot({ token, allowedUserId, controller, logger, botFactory = Bot }) {
   const bot = new botFactory(token)
   const sessionSelectionTokens = new Map()
+  const botMessageMemory = createBotMessageMemory(200)
 
   bot.use(async (ctx, next) => {
     if (!isAuthorizedTelegramUser(ctx, allowedUserId)) {
@@ -24,29 +25,43 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
       const logError = logger.error ?? logger.warn
       logError.call(logger, { error: botError.error }, "Telegram update handling failed")
       try {
-        await botError.ctx?.reply?.("OpenCode Gateway failed while handling that request.")
+        if (botError.ctx?.reply) {
+          await replyAndRemember(
+            botError.ctx,
+            "OpenCode Gateway failed while handling that request.",
+            botMessageMemory,
+          )
+        }
       } catch (replyError) {
         logger.warn({ error: replyError }, "Could not send Telegram error reply")
       }
     })
   }
 
-  bot.command("help", async (ctx) => ctx.reply(renderHelpText()))
+  bot.command("help", async (ctx) => replyAndRemember(ctx, renderHelpText(), botMessageMemory))
 
   bot.command("status", async (ctx) => {
     const status = await controller.status()
-    await ctx.reply(`Gateway is running. Active session: ${status.activeSessionId ?? "none"}`)
+    await replyAndRemember(
+      ctx,
+      `Gateway is running. Active session: ${status.activeSessionId ?? "none"}`,
+      botMessageMemory,
+    )
   })
 
   bot.command("new", async (ctx) => {
     const session = await controller.createSession()
-    await ctx.reply(`Created session ${session.title ?? session.id}`)
+    await replyAndRemember(ctx, `Created session ${session.title ?? session.id}`, botMessageMemory)
   })
 
   bot.command("sessions", async (ctx) => {
     const sessions = await controller.listSessions()
     if (sessions.length === 0) {
-      await ctx.reply("No OpenCode sessions found. Use /new to create one.")
+      await replyAndRemember(
+        ctx,
+        "No OpenCode sessions found. Use /new to create one.",
+        botMessageMemory,
+      )
       return
     }
 
@@ -58,7 +73,7 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
       keyboard.text(formatSessionLabel(session), `session:${token}`).row()
     }
 
-    await ctx.reply("Select a session:", { reply_markup: keyboard })
+    await replyAndRemember(ctx, "Select a session:", botMessageMemory, { reply_markup: keyboard })
   })
 
   bot.callbackQuery(/^session:(.+)$/u, async (ctx) => {
@@ -69,16 +84,33 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
     }
     await controller.selectSession(sessionId)
     await ctx.answerCallbackQuery({ text: "Session selected" })
-    await ctx.reply(`Selected session ${sessionId}`)
+    await replyAndRemember(ctx, `Selected session ${sessionId}`, botMessageMemory)
   })
 
   bot.command("stop", async (ctx) => {
     const result = await controller.stop()
     if (!result.stopped) {
-      await ctx.reply("No active OpenCode session to stop.")
+      await replyAndRemember(ctx, "No active OpenCode session to stop.", botMessageMemory)
       return
     }
-    await ctx.reply("Stop requested for the active OpenCode session.")
+    await replyAndRemember(ctx, "Stop requested for the active OpenCode session.", botMessageMemory)
+  })
+
+  bot.on("message_reaction", async (ctx) => {
+    const update = ctx.messageReaction
+    const botMessage = botMessageMemory.get(update.chat.id, update.message_id)
+    if (!botMessage) {
+      return
+    }
+
+    const addedEmojis = getAddedEmojiReactions(update.old_reaction, update.new_reaction)
+    for (const emoji of addedEmojis) {
+      const response = await controller.sendPrompt(formatReactionFeedbackPrompt(emoji, botMessage))
+      const { visibleText } = parseTelegramReactionMarker(response)
+      for (const chunk of chunkText(visibleText)) {
+        await replyAndRemember(ctx, chunk, botMessageMemory)
+      }
+    }
   })
 
   bot.on("message:text", async (ctx) => {
@@ -86,14 +118,24 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
       return
     }
 
+    const chatId = ctx.message.chat.id
+    const messageId = ctx.message.message_id
     const stopTyping = startTypingIndicator(ctx, logger)
+    let requestedReaction = null
     try {
+      await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
       const response = await controller.sendPrompt(ctx.message.text)
-      for (const chunk of chunkText(response)) {
-        await ctx.reply(chunk)
+      const parsedResponse = parseTelegramReactionMarker(response)
+      requestedReaction = parsedResponse.requestedReaction
+      for (const chunk of chunkText(parsedResponse.visibleText)) {
+        await replyAndRemember(ctx, chunk, botMessageMemory)
       }
     } finally {
+      await clearMessageReaction(ctx, chatId, messageId, logger)
       stopTyping()
+    }
+    if (requestedReaction) {
+      await setEmojiReaction(ctx, chatId, messageId, requestedReaction, logger)
     }
   })
 
@@ -106,6 +148,96 @@ function formatSessionLabel(session) {
     return label
   }
   return `${label.slice(0, 61)}...`
+}
+
+function createBotMessageMemory(limit) {
+  const messages = new Map()
+
+  return {
+    remember(chatId, messageId, text) {
+      if (!chatId || !messageId || typeof text !== "string") {
+        return
+      }
+      const key = botMessageKey(chatId, messageId)
+      messages.delete(key)
+      messages.set(key, text)
+      while (messages.size > limit) {
+        messages.delete(messages.keys().next().value)
+      }
+    },
+
+    get(chatId, messageId) {
+      return messages.get(botMessageKey(chatId, messageId))
+    },
+  }
+}
+
+function botMessageKey(chatId, messageId) {
+  return `${chatId}:${messageId}`
+}
+
+async function replyAndRemember(ctx, text, botMessageMemory, options) {
+  const sentMessage = options === undefined ? await ctx.reply(text) : await ctx.reply(text, options)
+  const chatId = sentMessage?.chat?.id ?? ctx.chat?.id ?? ctx.message?.chat?.id
+  botMessageMemory.remember(chatId, sentMessage?.message_id, text)
+  return sentMessage
+}
+
+const TELEGRAM_REACTION_MARKER = /\[telegram_reaction:\s*([^\]\n]+?)\s*\]/giu
+
+function parseTelegramReactionMarker(text) {
+  let requestedReaction = null
+  const visibleText = String(text).replace(TELEGRAM_REACTION_MARKER, (_match, emoji) => {
+    requestedReaction ??= emoji.trim()
+    return ""
+  })
+
+  return {
+    visibleText: visibleText.trim(),
+    requestedReaction,
+  }
+}
+
+async function setEmojiReaction(ctx, chatId, messageId, emoji, logger) {
+  if (!chatId || !messageId || !ctx.api?.setMessageReaction) {
+    return
+  }
+
+  try {
+    await ctx.api.setMessageReaction(chatId, messageId, [{ type: "emoji", emoji }])
+  } catch (error) {
+    logger.warn({ error }, "Could not set Telegram message reaction")
+  }
+}
+
+async function clearMessageReaction(ctx, chatId, messageId, logger) {
+  if (!chatId || !messageId || !ctx.api?.setMessageReaction) {
+    return
+  }
+
+  try {
+    await ctx.api.setMessageReaction(chatId, messageId, [])
+  } catch (error) {
+    logger.warn({ error }, "Could not clear Telegram message reaction")
+  }
+}
+
+function getAddedEmojiReactions(oldReactions = [], newReactions = []) {
+  const oldEmojis = new Set(
+    oldReactions.filter((reaction) => reaction.type === "emoji").map((reaction) => reaction.emoji),
+  )
+  return newReactions
+    .filter((reaction) => reaction.type === "emoji" && !oldEmojis.has(reaction.emoji))
+    .map((reaction) => reaction.emoji)
+}
+
+function formatReactionFeedbackPrompt(emoji, botMessage) {
+  return [
+    `User reacted to one of your Telegram bot messages with ${emoji}.`,
+    "",
+    "Bot message:",
+    botMessage,
+  ].join("\n")
 }
 
 function startTypingIndicator(ctx, logger) {

@@ -34,7 +34,7 @@ class FakeBot {
 }
 
 describe("createTelegramBot", () => {
-  test("registers v1 commands and text handler", () => {
+  test("registers v1 commands and message handlers", () => {
     const bot = createTelegramBot({
       token: "token",
       allowedUserId: 123,
@@ -46,6 +46,7 @@ describe("createTelegramBot", () => {
     expect(bot.token).toBe("token")
     expect([...bot.commands.keys()]).toEqual(["help", "status", "new", "sessions", "stop"])
     expect(bot.messageHandlers.has("message:text")).toBe(true)
+    expect(bot.messageHandlers.has("message_reaction")).toBe(true)
     expect(bot.errorHandler).toEqual(expect.any(Function))
     expect(bot.api.setMyCommands).toHaveBeenCalledWith([
       { command: "status", description: "Show gateway and OpenCode status" },
@@ -188,5 +189,171 @@ describe("createTelegramBot", () => {
     expect(sendChatAction).toHaveBeenNthCalledWith(2, 456, "typing")
     expect(reply).toHaveBeenCalledWith("answer")
     vi.useRealTimers()
+  })
+
+  test("text prompts apply and clear an eye reaction", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" }))
+    const sendChatAction = vi.fn(async () => undefined)
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: { sendChatAction, setMessageReaction },
+      reply,
+    })
+
+    expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
+    expect(controller.sendPrompt).toHaveBeenCalledWith("hello")
+    expect(reply).toHaveBeenCalledWith("answer")
+    expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+  })
+
+  test("hidden telegram reaction markers are stripped and applied to the user message", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "Nice idea.\n[telegram_reaction: 👍]"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "Nice idea." }))
+    const sendChatAction = vi.fn(async () => undefined)
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: { sendChatAction, setMessageReaction },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Nice idea.")
+    expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
+    expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+    expect(setMessageReaction).toHaveBeenNthCalledWith(3, 456, 10, [{ type: "emoji", emoji: "👍" }])
+  })
+
+  test("user reaction to a known bot message sends a feedback prompt and reply", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (prompt) => {
+        if (prompt === "hello") {
+          return "answer"
+        }
+        return "feedback response"
+      }),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction },
+      reply,
+    })
+
+    const feedbackReply = vi.fn(async (text) => ({ message_id: 12, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message_reaction")({
+      messageReaction: {
+        chat: { id: 456 },
+        message_id: 11,
+        old_reaction: [],
+        new_reaction: [{ type: "emoji", emoji: "👍" }],
+      },
+      reply: feedbackReply,
+    })
+
+    expect(controller.sendPrompt).toHaveBeenNthCalledWith(
+      2,
+      [
+        "User reacted to one of your Telegram bot messages with 👍.",
+        "",
+        "Bot message:",
+        "answer",
+      ].join("\n"),
+    )
+    expect(feedbackReply).toHaveBeenCalledWith("feedback response")
+  })
+
+  test("user reaction to an unknown bot message does nothing", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message_reaction")({
+      messageReaction: {
+        chat: { id: 456 },
+        message_id: 999,
+        old_reaction: [],
+        new_reaction: [{ type: "emoji", emoji: "👍" }],
+      },
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(controller.sendPrompt).not.toHaveBeenCalled()
+  })
+
+  test("bot message memory evicts older messages", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (prompt) => `answer ${prompt}`),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    let nextReplyId = 100
+    const reply = vi.fn(async (text) => ({ message_id: nextReplyId++, chat: { id: 456 }, text }))
+
+    for (let index = 0; index < 201; index += 1) {
+      await bot.messageHandlers.get("message:text")({
+        message: { message_id: index + 1, text: String(index), chat: { id: 456 } },
+        api: {
+          sendChatAction: vi.fn(async () => undefined),
+          setMessageReaction: vi.fn(async () => true),
+        },
+        reply,
+      })
+    }
+
+    await bot.messageHandlers.get("message_reaction")({
+      messageReaction: {
+        chat: { id: 456 },
+        message_id: 100,
+        old_reaction: [],
+        new_reaction: [{ type: "emoji", emoji: "👍" }],
+      },
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(201)
   })
 })

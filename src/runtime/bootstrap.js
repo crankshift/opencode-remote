@@ -45,5 +45,7 @@ export async function runGateway({
   processLike.once("SIGTERM", shutdown)
 
   logger.info("Starting Telegram polling")
-  await bot.start()
+  await bot.start({
+    allowed_updates: ["message", "callback_query", "message_reaction"],
+  })
 }
