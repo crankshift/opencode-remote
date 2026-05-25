@@ -33,8 +33,17 @@ describe("telegram media helpers", () => {
     ).toBe("Compare these screenshots\nand explain the error")
   })
 
-  test("falls back to a default image prompt when captions are empty", () => {
-    expect(captionFromMessages([{ caption: "" }, {}])).toBe("Please describe these images.")
+  test("falls back to a funny reaction prompt when captions are empty", () => {
+    expect(captionFromMessages([{ caption: "" }, {}])).toBe(
+      [
+        "React to this image as the Telegram bot persona.",
+        "",
+        "Do not describe the image in detail unless the user explicitly asks what is in it.",
+        "Give a short, funny, chatty reaction to the main joke, mood, issue, or surprising detail.",
+        "If it is a meme or news screenshot, respond to the point of it, not with OCR.",
+        "Keep it under 3 short sentences.",
+      ].join("\n"),
+    )
   })
 
   test("downloads Telegram photos to local file URLs without exposing the bot token", async () => {

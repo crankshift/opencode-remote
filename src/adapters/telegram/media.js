@@ -4,7 +4,14 @@ import { tmpdir } from "node:os"
 import { extname, join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-export const DEFAULT_IMAGE_PROMPT = "Please describe these images."
+export const DEFAULT_IMAGE_PROMPT = [
+  "React to this image as the Telegram bot persona.",
+  "",
+  "Do not describe the image in detail unless the user explicitly asks what is in it.",
+  "Give a short, funny, chatty reaction to the main joke, mood, issue, or surprising detail.",
+  "If it is a meme or news screenshot, respond to the point of it, not with OCR.",
+  "Keep it under 3 short sentences.",
+].join("\n")
 
 export function selectLargestPhoto(photoSizes = []) {
   if (!Array.isArray(photoSizes) || photoSizes.length === 0) {
