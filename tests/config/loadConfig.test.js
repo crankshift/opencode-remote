@@ -1,52 +1,202 @@
-import { describe, expect, test } from "vitest"
-import { loadConfigFromEnv } from "../../src/config/loadConfig.js"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+import { afterEach, describe, expect, test, vi } from "vitest"
+import {
+  GatewayConfigError,
+  loadConfig,
+  loadConfigFromObject,
+} from "../../src/config/loadConfig.js"
+import { loadOrCreateConfig } from "../../src/config/setupConfig.js"
 
-const REQUIRED_ENV = {
-  TELEGRAM_BOT_TOKEN: "123:token",
-  TELEGRAM_ALLOWED_USER_ID: "123",
-}
+const tempDirs = []
 
-describe("loadConfigFromEnv", () => {
-  test("requires Telegram token and allowed user ID", () => {
-    expect(() => loadConfigFromEnv({})).toThrow(/TELEGRAM_BOT_TOKEN/)
+afterEach(async () => {
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })))
+  tempDirs.length = 0
+})
+
+describe("loadConfig", () => {
+  test("normalizes JSON config defaults", () => {
+    const cwd = "/project"
+    const configPath = join(cwd, ".opencode-remote", "config.json")
+
+    const config = loadConfigFromObject(
+      {
+        telegram: {
+          botToken: "token",
+          allowedUserId: "12345",
+        },
+      },
+      { configPath, cwd },
+    )
+
+    expect(config).toEqual({
+      configPath,
+      telegram: {
+        botToken: "token",
+        allowedUserId: 12345,
+      },
+      opencode: {
+        apiUrl: "http://localhost:4096",
+        command: "opencode",
+        autoStart: true,
+        workdir: cwd,
+      },
+      progressVerbosity: "all",
+      logLevel: "info",
+      settingsPath: join(cwd, ".opencode-remote", "settings.json"),
+    })
   })
 
-  test("parses defaults and numeric Telegram user ID", () => {
-    const config = loadConfigFromEnv({
-      TELEGRAM_BOT_TOKEN: "token",
-      TELEGRAM_ALLOWED_USER_ID: "12345",
+  test("loads project-local config before global config", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    await writeConfig(join(homeDir, ".opencode-remote", "config.json"), {
+      telegram: { botToken: "global-token", allowedUserId: 111 },
+    })
+    await writeConfig(join(cwd, ".opencode-remote", "config.json"), {
+      telegram: { botToken: "local-token", allowedUserId: 222 },
     })
 
-    expect(config.telegram.botToken).toBe("token")
-    expect(config.telegram.allowedUserId).toBe(12345)
-    expect(config.opencode.apiUrl).toBe("http://localhost:4096")
-    expect(config.opencode.autoStart).toBe(true)
-    expect(config.settingsPath).toBe(".data/settings.json")
-    expect(config.progressVerbosity).toBe("all")
+    const config = await loadConfig({ cwd, homeDir })
+
+    expect(config.configPath).toBe(join(cwd, ".opencode-remote", "config.json"))
+    expect(config.telegram).toEqual({ botToken: "local-token", allowedUserId: 222 })
+    expect(config.settingsPath).toBe(join(cwd, ".opencode-remote", "settings.json"))
   })
 
-  test("accepts false boolean for OpenCode auto-start", () => {
-    const config = loadConfigFromEnv({
-      TELEGRAM_BOT_TOKEN: "token",
-      TELEGRAM_ALLOWED_USER_ID: "12345",
-      OPENCODE_AUTO_START: "false",
+  test("loads global config when local config is missing", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    await writeConfig(join(homeDir, ".opencode-remote", "config.json"), {
+      telegram: { botToken: "global-token", allowedUserId: 333 },
     })
 
-    expect(config.opencode.autoStart).toBe(false)
+    const config = await loadConfig({ cwd, homeDir })
+
+    expect(config.configPath).toBe(join(homeDir, ".opencode-remote", "config.json"))
+    expect(config.telegram).toEqual({ botToken: "global-token", allowedUserId: 333 })
+    expect(config.settingsPath).toBe(join(homeDir, ".opencode-remote", "settings.json"))
   })
 
-  test("defaults progress verbosity to all", () => {
-    const config = loadConfigFromEnv(REQUIRED_ENV)
+  test("throws a safe missing-config error when no JSON config exists", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
 
-    expect(config.progressVerbosity).toBe("all")
-  })
-
-  test("loads explicit progress verbosity", () => {
-    const config = loadConfigFromEnv({
-      ...REQUIRED_ENV,
-      OPENCODE_PROGRESS_VERBOSITY: "off",
+    await expect(loadConfig({ cwd, homeDir })).rejects.toMatchObject({
+      code: "missing_config",
     })
 
-    expect(config.progressVerbosity).toBe("off")
+    await expect(loadConfig({ cwd, homeDir })).rejects.not.toThrow(/TELEGRAM_BOT_TOKEN/)
+  })
+
+  test("throws a safe invalid-JSON error", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const configPath = join(cwd, ".opencode-remote", "config.json")
+    await mkdir(dirname(configPath), { recursive: true })
+    await writeFile(configPath, "{not json", "utf8")
+
+    await expect(loadConfig({ cwd, homeDir })).rejects.toMatchObject({
+      code: "invalid_json",
+      configPath,
+    })
+    await expect(loadConfig({ cwd, homeDir })).rejects.not.toThrow(/not json/)
+  })
+
+  test("throws safe validation errors for invalid config", async () => {
+    expect(() =>
+      loadConfigFromObject(
+        {
+          telegram: { botToken: "", allowedUserId: "abc" },
+        },
+        { configPath: "/project/.opencode-remote/config.json", cwd: "/project" },
+      ),
+    ).toThrow(GatewayConfigError)
+
+    expect(() =>
+      loadConfigFromObject(
+        {
+          telegram: { botToken: "", allowedUserId: "abc" },
+        },
+        { configPath: "/project/.opencode-remote/config.json", cwd: "/project" },
+      ),
+    ).toThrow(/telegram\.botToken/)
+  })
+
+  test("does not use dotenv or environment variables", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    await writeFile(
+      join(cwd, ".env"),
+      "TELEGRAM_BOT_TOKEN=env-token\nTELEGRAM_ALLOWED_USER_ID=123\n",
+      "utf8",
+    )
+
+    await expect(loadConfig({ cwd, homeDir })).rejects.toMatchObject({
+      code: "missing_config",
+    })
   })
 })
+
+describe("loadOrCreateConfig", () => {
+  test("prompts for and writes a local config when no config exists", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const prompter = vi.fn(async () => ({
+      scope: "local",
+      config: {
+        telegram: { botToken: "created-token", allowedUserId: 444 },
+        opencode: { apiUrl: "http://localhost:4096", command: "opencode", autoStart: true },
+        progressVerbosity: "all",
+        logLevel: "info",
+      },
+    }))
+
+    const config = await loadOrCreateConfig({ cwd, homeDir, prompter })
+    const localPath = join(cwd, ".opencode-remote", "config.json")
+
+    expect(prompter).toHaveBeenCalledWith({
+      localConfigPath: localPath,
+      globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+    })
+    expect(config.configPath).toBe(localPath)
+    expect(config.settingsPath).toBe(join(cwd, ".opencode-remote", "settings.json"))
+    await expect(readJson(localPath)).resolves.toMatchObject({
+      telegram: { botToken: "created-token", allowedUserId: 444 },
+    })
+  })
+
+  test("prompts for and writes a global config when requested", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const prompter = vi.fn(async () => ({
+      scope: "global",
+      config: {
+        telegram: { botToken: "created-token", allowedUserId: 555 },
+      },
+    }))
+
+    const config = await loadOrCreateConfig({ cwd, homeDir, prompter })
+    const globalPath = join(homeDir, ".opencode-remote", "config.json")
+
+    expect(config.configPath).toBe(globalPath)
+    expect(config.settingsPath).toBe(join(homeDir, ".opencode-remote", "settings.json"))
+    await expect(readJson(globalPath)).resolves.toMatchObject({
+      telegram: { botToken: "created-token", allowedUserId: 555 },
+    })
+  })
+})
+
+async function tempWorkspace() {
+  const root = await mkdtemp(join(tmpdir(), "opencode-remote-config-"))
+  tempDirs.push(root)
+  const cwd = join(root, "project")
+  const homeDir = join(root, "home")
+  await mkdir(cwd, { recursive: true })
+  await mkdir(homeDir, { recursive: true })
+  return { cwd, homeDir }
+}
+
+async function writeConfig(filePath, config) {
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf8")
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"))
+}

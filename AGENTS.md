@@ -8,7 +8,7 @@ AI operating guide for `opencode-remote`. Keep this file compact and current: it
 - Product: local-first messenger gateway for OpenCode. Telegram is the first adapter.
 - Current state: text-first Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, and active-session persistence.
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
-- Runtime: Node.js `>=22`; Node.js 24 LTS recommended.
+- Runtime: Node.js `>=22.18.0`; Node.js 24 LTS recommended.
 - Package manager: pnpm.
 - Language: JavaScript ESM.
 - Tests: Vitest.
@@ -24,11 +24,13 @@ Local OpenCode session history for this repo shows recent work on public release
 Implemented now:
 
 - Telegram long polling via grammY.
-- Single authorized Telegram user using `TELEGRAM_ALLOWED_USER_ID`.
+- Single authorized Telegram user configured in `.opencode-remote/config.json`.
 - OpenCode server reachability check and optional local `opencode serve` auto-start.
 - OpenCode session create/list/select, prompt sending, and active-session abort.
 - Auto-create an OpenCode session before the first prompt when no active session is selected.
-- JSON settings persistence for `activeSessionId` at `SETTINGS_PATH`.
+- JSON config discovery from project-local `.opencode-remote/config.json`, then global `~/.opencode-remote/config.json`.
+- Interactive CLI config setup when no JSON config exists.
+- JSON settings persistence for `activeSessionId` beside the selected config by default.
 - Telegram-safe text chunking below message limits.
 - Telegram typing action while prompts are running.
 - Temporary eye reaction on incoming text prompts while OpenCode processes.
@@ -37,6 +39,7 @@ Implemented now:
 - Bounded in-memory bot-message memory, currently 200 entries.
 - Telegram single-photo and photo-album prompts. Albums are grouped by `media_group_id` with a short debounce.
 - Telegram photos are downloaded to temp files, sent as OpenCode file prompt parts, then cleaned up.
+- Publishable npm package output is built to `dist/` with `tsdown`.
 - Public docs exist: `README.md`, `FEATURES.md`, `CHANGELOG.md`, `TODO.md`, `LICENSE`.
 
 Not implemented yet:
@@ -49,14 +52,16 @@ Not implemented yet:
 - Telegram webhooks, HTTP admin server, health checks, metrics, or browser UI.
 - Multi-user accounts, group-first operation, scheduled tasks, MCP/skills command browsing.
 
-Do not describe planned items as shipped. If you implement one, update this file, `README.md`/`FEATURES.md`, tests, and `.env.example` if config changes.
+Do not describe planned items as shipped. If you implement one, update this file, `README.md`/`FEATURES.md`, tests, and config docs if config changes.
 
 ## Architecture Map
 
 ```text
-src/bin/gateway.js                 CLI entry, commander command `gateway run`
+src/bin/gateway.js                 CLI entry
+src/bin/program.js                 commander command `gateway run`
 src/runtime/bootstrap.js           runtime wiring, shutdown, Telegram polling startup
-src/config/loadConfig.js           dotenv + zod env validation
+src/config/loadConfig.js           JSON config discovery + zod validation
+src/config/setupConfig.js          interactive config creation flow
 src/utils/logger.js                pino logger factory
 src/core/commands/commands.js      centralized Telegram command definitions/help text
 src/core/formatting/chunkText.js   messenger-neutral reply chunking
@@ -153,7 +158,7 @@ Startup/shutdown:
 
 ```text
 gateway run
-  -> load config
+  -> load or create JSON config
   -> ensure OpenCode server reachable or auto-start owned child
   -> create SDK client, settings store, controller, Telegram bot
   -> bot.start({ allowed_updates: ["message", "callback_query", "message_reaction"] })
@@ -162,25 +167,39 @@ gateway run
 
 ## Current Configuration
 
-`.env.example` is the source of current runtime config:
+Runtime config is discovered in this order:
 
-```text
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_ALLOWED_USER_ID=
-OPENCODE_API_URL=http://localhost:4096
-OPENCODE_COMMAND=opencode
-OPENCODE_AUTO_START=true
-OPENCODE_WORKDIR=
-LOG_LEVEL=info
-SETTINGS_PATH=.data/settings.json
+1. Project-local `.opencode-remote/config.json` in the current working directory.
+2. Global `~/.opencode-remote/config.json`.
+
+If no config exists, `gateway run` prompts the CLI user to create one locally or globally.
+
+Current config shape:
+
+```json
+{
+  "telegram": {
+    "botToken": "123456:telegram-bot-token",
+    "allowedUserId": 123456789
+  },
+  "opencode": {
+    "apiUrl": "http://localhost:4096",
+    "command": "opencode",
+    "autoStart": true,
+    "workdir": null
+  },
+  "progressVerbosity": "all",
+  "logLevel": "info"
+}
 ```
 
 Rules:
 
-- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_USER_ID` are required.
-- `OPENCODE_AUTO_START=true` starts `OPENCODE_COMMAND serve` only when `OPENCODE_API_URL` is unreachable.
+- `telegram.botToken` and `telegram.allowedUserId` are required.
+- `opencode.autoStart=true` starts `opencode.command serve` only when `opencode.apiUrl` is unreachable.
 - If the gateway starts OpenCode, it owns and stops that child on shutdown. It must not stop a server that was already running.
-- `SETTINGS_PATH` stores non-secret JSON state only.
+- `settingsPath` is optional; by default state is stored as `.opencode-remote/settings.json` beside the selected config.
+- Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.
 - Do not add voice, model, or provider env vars until the related feature is actually implemented.
 
 ## OpenCode Integration Notes
@@ -209,7 +228,7 @@ Rules:
 - `CHANGELOG.md` is public release history.
 - `TODO.md` is the roadmap/backlog.
 - `AGENTS.md` is for AI/developer operating context, not marketing copy.
-- Package metadata currently targets public publishing, but check `TODO.md` before assuming npm release readiness is complete.
+- Package metadata targets public npm publishing. `tsdown` builds `dist/`; package smoke checks validate bins, exports, and pack contents.
 - If behavior changes, update docs in the same task when useful to users or future agents.
 
 ## Testing
@@ -245,7 +264,7 @@ Current test priorities:
 1. Inspect current code/tests/docs before changing behavior.
 2. Keep changes minimal and aligned with existing boundaries.
 3. Add or update tests for behavior changes. Docs-only changes usually do not need new tests.
-4. Update `.env.example` when config changes.
+4. Update README/FEATURES/AGENTS config docs when config changes.
 5. Update README/FEATURES/CHANGELOG/TODO when public behavior, release notes, or roadmap change.
 6. Run available verification before claiming completion.
 

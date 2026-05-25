@@ -14,6 +14,7 @@ This project is currently a text-first MVP. Telegram is the first adapter, and t
 - Telegram typing indicators while prompts are running.
 - Telegram emoji reactions for processing state, user feedback, and assistant-requested reactions.
 - Telegram photo and photo-album prompts.
+- Interactive JSON config setup for the published CLI.
 - JSON settings persistence for the active session.
 
 Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are planned but not implemented in this MVP.
@@ -22,13 +23,104 @@ See [Features](FEATURES.md) for the full current capability list, [Changelog](CH
 
 ## Prerequisites
 
-- Node.js 22 or newer. Node.js 24 LTS is recommended.
-- pnpm 10.x.
+- Node.js 22.18.0 or newer. Node.js 24 LTS is recommended.
 - OpenCode CLI available on the machine running the gateway.
 - A Telegram bot token from BotFather.
 - Your Telegram numeric user ID for the allowlist.
 
-## Setup
+## Install
+
+Install globally with npm:
+
+```bash
+npm install -g @crankshift/opencode-remote
+```
+
+Or with pnpm:
+
+```bash
+pnpm add -g @crankshift/opencode-remote
+```
+
+The package installs two equivalent CLI bins: `gateway` and `opencode-remote`.
+
+## First Run
+
+Start the gateway:
+
+```bash
+gateway run
+```
+
+If no config exists, the CLI prompts to create one. It asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, OpenCode connection settings, progress verbosity, log level, and settings path.
+
+Config discovery order:
+
+1. Project-local `./.opencode-remote/config.json` in the current working directory.
+2. Global `~/.opencode-remote/config.json`.
+
+Local project config is useful when different projects need different OpenCode workdirs or Telegram bots. Global config is useful for one machine-wide gateway setup.
+
+## Configuration
+
+The config file is JSON:
+
+```json
+{
+  "telegram": {
+    "botToken": "123456:telegram-bot-token",
+    "allowedUserId": 123456789
+  },
+  "opencode": {
+    "apiUrl": "http://localhost:4096",
+    "command": "opencode",
+    "autoStart": true,
+    "workdir": null
+  },
+  "progressVerbosity": "all",
+  "logLevel": "info"
+}
+```
+
+`telegram.botToken` is required. It is the token for the bot that receives Telegram messages.
+
+`telegram.allowedUserId` is required. Updates from other Telegram users are ignored.
+
+`opencode.apiUrl` is the OpenCode server URL. The default is `http://localhost:4096`.
+
+`opencode.command` is the executable used when the gateway starts OpenCode itself. The default is `opencode`.
+
+`opencode.autoStart` controls whether the gateway runs `opencode serve` if `opencode.apiUrl` is not reachable. Set it to `false` if you want to manage the OpenCode server yourself.
+
+`opencode.workdir` is the working directory used when auto-starting OpenCode. If omitted or `null`, the gateway uses the current process directory.
+
+`progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `all`, which shows every distinct tool or skill invocation. The Telegram `/progress` command can change this at runtime and persists the selected value in the settings file.
+
+`logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
+
+`settingsPath` is optional. If omitted, gateway state is stored beside the selected config as `.opencode-remote/settings.json`. Do not store secrets in the settings file.
+
+Keep `config.json` private because it contains your Telegram bot token. Project-local `.opencode-remote/` is ignored by git.
+
+## Running
+
+Run the installed CLI:
+
+```bash
+gateway run
+```
+
+You can also run the equivalent bin:
+
+```bash
+opencode-remote run
+```
+
+On startup, the gateway checks `opencode.apiUrl`. If it is reachable, the gateway uses that server. If it is not reachable and `opencode.autoStart=true`, the gateway starts `opencode.command serve` and waits for it to become reachable before starting Telegram polling. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
+
+Stop the gateway with `Ctrl+C`. If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.
+
+## Development
 
 Install dependencies:
 
@@ -36,58 +128,7 @@ Install dependencies:
 pnpm install
 ```
 
-Create a local environment file from the example:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set at least these required values:
-
-```dotenv
-TELEGRAM_BOT_TOKEN=123456:telegram-bot-token
-TELEGRAM_ALLOWED_USER_ID=123456789
-```
-
-Keep `.env` private. It is ignored by git.
-
-## Configuration
-
-The current runtime configuration is:
-
-```dotenv
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_ALLOWED_USER_ID=
-OPENCODE_API_URL=http://localhost:4096
-OPENCODE_COMMAND=opencode
-OPENCODE_AUTO_START=true
-OPENCODE_WORKDIR=
-OPENCODE_PROGRESS_VERBOSITY=all
-LOG_LEVEL=info
-SETTINGS_PATH=.data/settings.json
-```
-
-`TELEGRAM_BOT_TOKEN` is required. It is the token for the bot that receives Telegram messages.
-
-`TELEGRAM_ALLOWED_USER_ID` is required. Updates from other Telegram users are ignored.
-
-`OPENCODE_API_URL` is the OpenCode server URL. The default is `http://localhost:4096`.
-
-`OPENCODE_COMMAND` is the executable used when the gateway starts OpenCode itself.
-
-`OPENCODE_AUTO_START` controls whether the gateway runs `opencode serve` if `OPENCODE_API_URL` is not reachable. Set it to `false` if you want to manage the OpenCode server yourself.
-
-`OPENCODE_WORKDIR` is the working directory used when auto-starting OpenCode. If empty, the gateway uses the current process directory.
-
-`OPENCODE_PROGRESS_VERBOSITY` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `all`, which shows every distinct tool or skill invocation. The Telegram `/progress` command can change this at runtime and persists the selected value in `SETTINGS_PATH`.
-
-`LOG_LEVEL` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
-
-`SETTINGS_PATH` stores gateway state such as the selected OpenCode session. Do not store secrets there.
-
-## Running
-
-Start the gateway in the foreground:
+Start from source:
 
 ```bash
 pnpm start
@@ -99,15 +140,17 @@ Run in watch mode during development:
 pnpm dev
 ```
 
-You can also call the CLI entry directly:
+Build the publishable package output:
 
 ```bash
-node src/bin/gateway.js run
+pnpm run build
 ```
 
-On startup, the gateway checks `OPENCODE_API_URL`. If it is reachable, the gateway uses that server. If it is not reachable and `OPENCODE_AUTO_START=true`, the gateway starts `OPENCODE_COMMAND serve` and waits for it to become reachable before starting Telegram polling. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
+Run the package smoke check:
 
-Stop the gateway with `Ctrl+C`. If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.
+```bash
+pnpm run smoke:package
+```
 
 ## Telegram Commands
 
@@ -128,15 +171,15 @@ Telegram photo albums are handled as one OpenCode prompt when Telegram provides 
 
 ## Troubleshooting
 
-If startup fails with a Telegram configuration error, check that `.env` contains non-empty `TELEGRAM_BOT_TOKEN` and a numeric `TELEGRAM_ALLOWED_USER_ID`.
+If startup fails with a configuration error, check the selected `.opencode-remote/config.json` and make sure `telegram.botToken` is non-empty and `telegram.allowedUserId` is numeric.
 
-If Telegram messages appear to be ignored, confirm that `TELEGRAM_ALLOWED_USER_ID` matches your Telegram user ID, not the bot ID or chat ID.
+If Telegram messages appear to be ignored, confirm that `telegram.allowedUserId` matches your Telegram user ID, not the bot ID or chat ID.
 
-If startup fails because OpenCode is unreachable, either start OpenCode yourself at `OPENCODE_API_URL` or set `OPENCODE_AUTO_START=true` and make sure `OPENCODE_COMMAND` is available in `PATH`.
+If startup fails because OpenCode is unreachable, either start OpenCode yourself at `opencode.apiUrl` or set `opencode.autoStart=true` and make sure `opencode.command` is available in `PATH`.
 
-If auto-start fails, check `OPENCODE_WORKDIR`. The gateway starts `opencode serve` from that directory, or from the current process directory when `OPENCODE_WORKDIR` is empty.
+If auto-start fails, check `opencode.workdir`. The gateway starts `opencode serve` from that directory, or from the current process directory when `opencode.workdir` is empty.
 
-If session selection is not preserved, check that the parent directory for `SETTINGS_PATH` is writable. The default path is `.data/settings.json`.
+If session selection is not preserved, check that the parent directory for the settings file is writable. The default path is `.opencode-remote/settings.json` beside the selected config.
 
 ## Development Checks
 

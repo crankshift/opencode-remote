@@ -6,10 +6,10 @@
    - Preserve existing behavior while extracting cohesive modules.
    - Add or update tests around moved behavior.
 
-2. [ ] Make the project a buildable/publishable CLI package for npm.
+2. [x] Make the project a buildable/publishable CLI package for npm.
    - Add package metadata, `files`, `exports`, `prepack`, and package smoke checks.
-   - Add README install/run docs for `pnpm add -g opencode-remote` and `gateway run`.
-   - Decide whether plain JS source publishing is enough or whether to add `dist/` via `tsup`/`esbuild`.
+   - Add README install/run docs for `npm install -g @crankshift/opencode-remote`, `pnpm add -g @crankshift/opencode-remote`, and `gateway run`.
+   - Build publishable `dist/` output with `tsdown`.
 
 3. [ ] Prefer absolute imports such as `@/core/...` instead of deep relative imports like `../../...`.
    - Configure runtime/package import aliases.
@@ -51,7 +51,7 @@
    - Keep external Telegram, OpenCode, STT, and TTS systems mocked by default.
    - Add optional env-gated live smoke tests later instead of requiring live services in normal coverage runs.
 
-8. [ ] Add interactive JSON config discovery for the published npm CLI.
+8. [x] Add interactive JSON config discovery for the published npm CLI.
    - Replace `.env`-based runtime config with `.opencode-remote/config.json`.
    - Discover config in this order:
      1. Project-local `.opencode-remote/config.json` in the current working directory.

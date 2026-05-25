@@ -10,11 +10,14 @@ import { createSettingsStore as defaultCreateSettingsStore } from "../core/sessi
 import { createLogger } from "../utils/logger.js"
 
 export async function runGateway({
-  config = loadConfig(),
-  logger = createLogger(config.logLevel),
+  config,
+  logger,
   dependencies = {},
   processLike = process,
 } = {}) {
+  const loadRuntimeConfig = dependencies.loadConfig ?? loadConfig
+  const resolvedConfig = config ?? (await loadRuntimeConfig())
+  const resolvedLogger = logger ?? createLogger(resolvedConfig.logLevel)
   const ensureOpenCodeServer = dependencies.ensureOpenCodeServer ?? defaultEnsureOpenCodeServer
   const createOpenCodeClient = dependencies.createOpenCodeClient ?? defaultCreateOpenCodeClient
   const createSettingsStore = dependencies.createSettingsStore ?? defaultCreateSettingsStore
@@ -24,20 +27,20 @@ export async function runGateway({
   const registerTelegramBotCommands =
     dependencies.registerTelegramBotCommands ?? defaultRegisterTelegramBotCommands
 
-  const server = await ensureOpenCodeServer(config.opencode)
-  const opencode = createOpenCodeClient({ apiUrl: config.opencode.apiUrl })
-  const store = createSettingsStore(config.settingsPath)
+  const server = await ensureOpenCodeServer(resolvedConfig.opencode)
+  const opencode = createOpenCodeClient({ apiUrl: resolvedConfig.opencode.apiUrl })
+  const store = createSettingsStore(resolvedConfig.settingsPath)
   const controller = createGatewayController({
     opencode,
     store,
-    defaultProgressVerbosity: config.progressVerbosity,
+    defaultProgressVerbosity: resolvedConfig.progressVerbosity,
   })
   const bot = createTelegramBot({
-    token: config.telegram.botToken,
-    allowedUserId: config.telegram.allowedUserId,
+    token: resolvedConfig.telegram.botToken,
+    allowedUserId: resolvedConfig.telegram.allowedUserId,
     controller,
-    logger,
-    progressVerbosity: config.progressVerbosity,
+    logger: resolvedLogger,
+    progressVerbosity: resolvedConfig.progressVerbosity,
   })
 
   let stopping = false
@@ -46,7 +49,7 @@ export async function runGateway({
       return
     }
     stopping = true
-    logger.info({ signal }, "Shutting down gateway")
+    resolvedLogger.info({ signal }, "Shutting down gateway")
     await bot.stop()
     await server.stop()
   }
@@ -54,8 +57,8 @@ export async function runGateway({
   processLike.once("SIGINT", shutdown)
   processLike.once("SIGTERM", shutdown)
 
-  await registerTelegramBotCommands(bot, logger)
-  logger.info("Starting Telegram polling")
+  await registerTelegramBotCommands(bot, resolvedLogger)
+  resolvedLogger.info("Starting Telegram polling")
   await bot.start({
     allowed_updates: ["message", "callback_query", "message_reaction"],
   })

@@ -2,6 +2,22 @@
 
 This project follows Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- Added `tsdown` build output under `dist/` for the published npm CLI package.
+- Added package smoke checks for bins, exports, and npm pack contents.
+- Added interactive JSON config setup for `gateway run` when no config exists.
+- Added project-local and global `.opencode-remote/config.json` discovery.
+
+### Changed
+
+- Replaced `.env` runtime configuration with validated JSON config files.
+- Changed default gateway state persistence to `.opencode-remote/settings.json` beside the selected config.
+- Updated package bins and exports to point at built `dist/` output.
+- Raised the Node.js engine requirement to `>=22.18.0`.
+
 ## [0.1.0] - 2026-05-25
 
 ### Added
@@ -22,4 +38,3 @@ This project follows Semantic Versioning.
 
 - Voice input and spoken replies are not implemented yet.
 - Model switching, permission callbacks, and multi-messenger adapters are not implemented yet.
-- The package is not yet prepared as a public npm CLI package.

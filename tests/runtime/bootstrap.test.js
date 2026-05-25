@@ -3,6 +3,36 @@ import { botCommands } from "../../src/core/commands/commands.js"
 import { runGateway } from "../../src/runtime/bootstrap.js"
 
 describe("runGateway", () => {
+  test("loads config before creating runtime dependencies", async () => {
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+    const loadConfig = vi.fn(async () => ({
+      ...testConfig(),
+      settingsPath: ".opencode-remote/settings.json",
+    }))
+    const createSettingsStore = vi.fn(() => ({}))
+
+    await runGateway({
+      logger: testLogger(),
+      dependencies: {
+        loadConfig,
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        createSettingsStore,
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => bot),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(loadConfig).toHaveBeenCalled()
+    expect(createSettingsStore).toHaveBeenCalledWith(".opencode-remote/settings.json")
+  })
+
   test("starts OpenCode server before Telegram polling", async () => {
     const server = { stop: vi.fn(async () => undefined) }
     const bot = {

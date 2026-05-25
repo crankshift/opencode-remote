@@ -4,33 +4,44 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.mjs",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "src/",
-    ".env.example"
+    "dist/",
+    "README.md",
+    "FEATURES.md",
+    "CHANGELOG.md",
+    "TODO.md",
+    "LICENSE"
   ],
   "bin": {
-    "opencode-remote": "src/bin/gateway.js",
-    "gateway": "src/bin/gateway.js"
+    "opencode-remote": "dist/bin/gateway.mjs",
+    "gateway": "dist/bin/gateway.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18.0"
   },
   "packageManager": "pnpm@10.11.0",
   "scripts": {
     "start": "node src/bin/gateway.js run",
     "dev": "node --watch src/bin/gateway.js run",
+    "build": "tsdown",
+    "prepack": "pnpm run build",
+    "smoke:package": "pnpm run build && node tests/smoke/packageSmoke.js",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
-    "check": "pnpm run lint && pnpm test"
+    "check": "pnpm run lint && pnpm test && pnpm run smoke:package"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.15.10",
     "commander": "^14.0.3",
-    "dotenv": "^17.4.2",
     "execa": "^9.6.1",
     "grammy": "^1.43.0",
     "pino": "^10.3.1",
@@ -38,6 +49,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
+    "publint": "^0.3.21",
+    "tsdown": "^0.22.0",
     "vitest": "^4.1.7"
   }
 }
