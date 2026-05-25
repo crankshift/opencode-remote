@@ -6,21 +6,27 @@
    - Preserve existing behavior while extracting cohesive modules.
    - Add or update tests around moved behavior.
 
-2. [x] Make the project a buildable/publishable CLI package for npm.
+2. [ ] Add a README section explaining why OpenCode Remote exists.
+   - Compare it with richer remote-agent projects such as Hermes and OpenClaw.
+   - Acknowledge that those tools may offer broader functionality, but emphasize the isolation tradeoff: agent-owned `.hermes/` or `.openclaw/` source/runtime folders can be changed by the agent and make updates more fragile.
+   - Explain that OpenCode Remote is narrower today, with Telegram as the only messenger adapter, but keeps the gateway as an isolated CLI around a normal OpenCode project workflow.
+   - Position the project as preserving the Claude Code, Codex CLI, and OpenCode style of working from a project folder while inheriting OpenCode global skills and project-local skills instead of shipping a noisy default skill set that pollutes context.
+
+3. [x] Make the project a buildable/publishable CLI package for npm.
    - Add package metadata, `files`, `exports`, `prepack`, and package smoke checks.
    - Add README install/run docs for `npm install -g @crankshift/opencode-remote`, `pnpm add -g @crankshift/opencode-remote`, and `opencode-remote run`.
    - Build publishable `dist/` output with `tsdown`.
 
-3. [ ] Prefer absolute imports such as `@/core/...` instead of deep relative imports like `../../...`.
+4. [ ] Prefer absolute imports such as `@/core/...` instead of deep relative imports like `../../...`.
    - Configure runtime/package import aliases.
    - Configure Vitest/Biome support for the alias.
    - Update source and tests consistently.
 
-4. [ ] Evaluate using `remeda` for runtime checks instead of raw manual checks.
+5. [ ] Evaluate using `remeda` for runtime checks instead of raw manual checks.
    - Replace raw `typeof`, `Number.isInteger`, and similar checks where `remeda` improves clarity.
    - Do not replace checks where native JavaScript is clearer.
 
-5. [ ] Expand bot command surface.
+6. [ ] Expand bot command surface.
    - `/status` - Server health, current session, and model info.
    - `/new` - Create a new session.
    - `/abort` - Abort the current task.
@@ -39,19 +45,19 @@
    - `/opencode_stop` - Stop the local OpenCode server on the bot machine.
    - `/help` - Show available commands.
 
-6. [ ] Change OpenCode startup behavior.
+7. [ ] Change OpenCode startup behavior.
    - When `opencode-remote run` starts and OpenCode is not running, prompt the CLI user before starting `opencode serve`.
    - Do not silently auto-start OpenCode by default.
    - Add a non-interactive flag or env option for explicit auto-start behavior.
 
-7. [ ] Add modern Vitest coverage reporting.
+8. [ ] Add modern Vitest coverage reporting.
    - Add `@vitest/coverage-v8` and a `pnpm run coverage` script using `vitest run --coverage`.
    - Configure V8 coverage for `src/**/*.js` with `text`, `html`, and `lcov` reporters.
    - Start with realistic global thresholds: 80% lines, statements, and functions; 70% branches.
    - Keep external Telegram, OpenCode, STT, and TTS systems mocked by default.
    - Add optional env-gated live smoke tests later instead of requiring live services in normal coverage runs.
 
-8. [x] Add interactive JSON config discovery for the published npm CLI.
+9. [x] Add interactive JSON config discovery for the published npm CLI.
    - Replace `.env`-based runtime config with `.opencode-remote/config.json`.
    - Discover config in this order:
      1. Project-local `.opencode-remote/config.json` in the current working directory.
