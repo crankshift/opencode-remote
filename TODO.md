@@ -59,8 +59,8 @@
    - If no config exists, prompt the CLI user to create one.
    - Ask whether the config should be local or global before writing it.
    - Prompt for required values: Telegram bot token and Telegram allowed user ID.
-   - Prompt or default optional values: OpenCode API URL, command, auto-start, workdir, progress verbosity, log level, and settings path.
-   - Store gateway state under `.opencode-remote/` by default, separate from secrets when practical.
+   - Prompt for progress verbosity and log level; keep OpenCode API URL, command, auto-start, and workdir on validated defaults unless users edit JSON.
+   - Store gateway state in the platform app-data SQLite database, separate from secrets.
    - Validate `config.json` with zod and show safe, user-friendly errors.
    - Update README, FEATURES, `.env.example` removal/replacement, AGENTS.md, and tests.
    - Add tests for config precedence, missing-config setup flow, invalid JSON, validation errors, and no `.env` dependency.

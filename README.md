@@ -37,14 +37,14 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, OpenCode connection settings, progress verbosity, log level, and settings path.
+Run setup from the OpenCode project folder you want to control. The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, and log level. Choice prompts support arrow-key selection with Enter to confirm.
 
 Config discovery order:
 
 1. Project-local `./.opencode-remote/config.json` in the current working directory.
 2. Global `~/.opencode-remote/config.json`.
 
-Local project config is useful when different projects need different OpenCode workdirs or Telegram bots. Global config is useful for one machine-wide gateway setup.
+Local project config is useful when different projects need different Telegram bots or overrides. Global config is useful for one machine-wide Telegram setup. In both cases, app state is stored in a project-scoped SQLite database under the platform app-data directory.
 
 If no config exists, `opencode-remote run` and `opencode-remote start` run setup automatically before starting the gateway.
 
@@ -55,6 +55,8 @@ Run in the foreground:
 ```bash
 opencode-remote run
 ```
+
+Run foreground and background commands from the target OpenCode project folder. By default, the gateway starts `opencode serve` from that folder and uses it as the project identity for persisted state.
 
 Stop the foreground gateway with `Ctrl+C`.
 
@@ -101,7 +103,7 @@ The config file is JSON:
     "autoStart": true,
     "workdir": null
   },
-  "progressVerbosity": "all",
+  "progressVerbosity": "verbose",
   "logLevel": "info"
 }
 ```
@@ -118,11 +120,19 @@ The config file is JSON:
 
 `opencode.workdir` is the working directory used when auto-starting OpenCode. If omitted or `null`, the gateway uses the current process directory.
 
-`progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `all`, which shows every distinct tool or skill invocation. The Telegram `/progress` command can change this at runtime and persists the selected value in the settings file.
+`progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime and persists the selected value in the app state database.
 
 `logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
 
-`settingsPath` is optional. If omitted, gateway state is stored beside the selected config as `.opencode-remote/settings.json`. Do not store secrets in the settings file.
+`settingsPath` is deprecated for normal use. Gateway state is app-managed and stored in a SQLite database named `opencode-remote.db` under the platform app-data directory:
+
+- Linux: `$XDG_DATA_HOME/opencode-remote/opencode-remote.db`, or `~/.local/share/opencode-remote/opencode-remote.db` when `XDG_DATA_HOME` is unset.
+- macOS: `~/Library/Application Support/opencode-remote/opencode-remote.db`.
+- Windows: `%LOCALAPPDATA%\opencode-remote\opencode-remote.db`, with `%APPDATA%` and `%USERPROFILE%\AppData\Local` fallbacks.
+
+The database stores non-secret project state such as the active OpenCode session and `/progress` preference. It keys Git projects similarly to OpenCode: Git remote identity first, then a cached repo ID, then root commit. Non-Git folders use a shared global project identity.
+
+Advanced runs can use `opencode-remote run --state-suffix dev` to use `opencode-remote-dev.db` instead of the normal state database. The source `pnpm dev` script uses this to keep development state separate from regular gateway state.
 
 Keep `config.json` private because it contains your Telegram bot token. Project-local `.opencode-remote/` is ignored by git.
 
@@ -157,4 +167,4 @@ If background mode does not start, run `opencode-remote status` and inspect `.op
 
 If `opencode-remote status` reports a stale PID file, run `opencode-remote stop` once to remove it.
 
-If session selection is not preserved, check that the parent directory for the settings file is writable. The default path is `.opencode-remote/settings.json` beside the selected config.
+If session selection is not preserved, check that the platform app-data directory is writable and inspect the `opencode-remote.db` path listed above.

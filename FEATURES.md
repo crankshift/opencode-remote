@@ -13,8 +13,8 @@ OpenCode Remote is currently a text-first Telegram gateway for OpenCode.
 - Telegram-safe response chunking for long assistant replies.
 - Published npm CLI package with the `opencode-remote` bin built to `dist/` with `tsdown`.
 - Background gateway lifecycle commands: `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status`.
-- Interactive JSON config setup with project-local and global config discovery.
-- JSON settings persistence for the selected OpenCode session.
+- Interactive JSON config setup with project-local and global config discovery, plus arrow-key choices for setup options.
+- SQLite app-state persistence for selected OpenCode sessions and progress preferences, scoped by OpenCode project identity.
 
 ## Telegram Chat Behavior
 
@@ -35,7 +35,7 @@ OpenCode Remote is currently a text-first Telegram gateway for OpenCode.
 ## OpenCode Sessions
 
 - If no active session is selected, the gateway creates one before sending a prompt.
-- Selected session state is stored in `.opencode-remote/settings.json` beside the selected config by default.
+- Selected session state is stored in `opencode-remote.db` under the platform app-data directory and scoped by project identity.
 - Stopping a task uses OpenCode's session abort API for the active session.
 - Session state is messenger-neutral in the gateway core, so future adapters can reuse it.
 

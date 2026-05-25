@@ -23,7 +23,7 @@ const configSchema = z.object({
       workdir: z.string().min(1).nullable().optional(),
     })
     .default({}),
-  progressVerbosity: progressVerbositySchema.default("all"),
+  progressVerbosity: progressVerbositySchema.default("verbose"),
   logLevel: logLevelSchema.default("info"),
   settingsPath: z.string().min(1).optional(),
 })

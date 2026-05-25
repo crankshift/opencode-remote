@@ -30,7 +30,7 @@ Implemented now:
 - Auto-create an OpenCode session before the first prompt when no active session is selected.
 - JSON config discovery from project-local `.opencode-remote/config.json`, then global `~/.opencode-remote/config.json`.
 - Interactive CLI config setup when no JSON config exists.
-- JSON settings persistence for `activeSessionId` beside the selected config by default.
+- SQLite app-state persistence for `activeSessionId` and `/progress` preference in the platform app-data directory, scoped by OpenCode-style project identity.
 - Telegram-safe text chunking below message limits.
 - Telegram typing action while prompts are running.
 - Temporary eye reaction on incoming text prompts while OpenCode processes.
@@ -42,6 +42,7 @@ Implemented now:
 - Publishable npm package output is built to `dist/` with `tsdown`.
 - Public CLI bin is `opencode-remote`.
 - Background CLI lifecycle supports `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status`.
+- Source watch mode `pnpm dev` runs with `--state-suffix dev`, so development state uses `opencode-remote-dev.db` instead of the normal app-state database.
 - Public docs exist: `README.md`, `FEATURES.md`, `CHANGELOG.md`, `TODO.md`, `LICENSE`.
 
 Not implemented yet:
@@ -68,7 +69,9 @@ src/config/setupConfig.js          interactive config creation flow
 src/utils/logger.js                pino logger factory
 src/core/commands/commands.js      centralized Telegram command definitions/help text
 src/core/formatting/chunkText.js   messenger-neutral reply chunking
-src/core/session/settingsStore.js  JSON settings persistence
+src/core/state/appDataPath.js      platform app-data path resolution
+src/core/state/projectIdentity.js  Git-aware project identity resolution
+src/core/state/stateDb.js          SQLite app-state persistence
 src/core/gateway/controller.js     messenger-neutral orchestration
 src/core/opencode/serverManager.js OpenCode reachability and owned child lifecycle
 src/core/opencode/client.js        only layer that talks to `@opencode-ai/sdk`
@@ -85,7 +88,7 @@ Keep this split intact. Add modules only when they reduce real complexity; prefe
 
 - `src/core/opencode/` is the only code that should call `@opencode-ai/sdk` or raw OpenCode API endpoints.
 - `src/core/gateway/controller.js` owns messenger-neutral session/prompt orchestration.
-- `src/core/session/` stores messenger-neutral gateway state only. Never persist secrets.
+- `src/core/state/` stores messenger-neutral gateway state only. Never persist secrets.
 - `src/adapters/telegram/` owns grammY types, Telegram IDs, callbacks, reactions, media downloads, and platform UX.
 - Do not leak Telegram types into core service signatures.
 - Do not leak SDK-specific response shapes into adapters unless wrapped by core DTOs.
@@ -132,7 +135,7 @@ Session selection:
   -> adapter renders inline buttons with bounded callback tokens
   -> callback resolves token to session ID
   -> controller.selectSession()
-  -> settingsStore writes activeSessionId
+  -> project state store writes activeSessionId
 ```
 
 Photo or album prompt:
@@ -164,7 +167,7 @@ Startup/shutdown:
 opencode-remote run
   -> load or create JSON config
   -> ensure OpenCode server reachable or auto-start owned child
-  -> create SDK client, settings store, controller, Telegram bot
+  -> resolve project identity, create SDK client, create project state store, controller, Telegram bot
   -> bot.start({ allowed_updates: ["message", "callback_query", "message_reaction"] })
   -> SIGINT/SIGTERM stops Telegram and only the owned OpenCode child
 ```
@@ -192,7 +195,7 @@ Current config shape:
     "autoStart": true,
     "workdir": null
   },
-  "progressVerbosity": "all",
+  "progressVerbosity": "verbose",
   "logLevel": "info"
 }
 ```
@@ -202,7 +205,9 @@ Rules:
 - `telegram.botToken` and `telegram.allowedUserId` are required.
 - `opencode.autoStart=true` starts `opencode.command serve` only when `opencode.apiUrl` is unreachable.
 - If the gateway starts OpenCode, it owns and stops that child on shutdown. It must not stop a server that was already running.
-- `settingsPath` is optional; by default state is stored as `.opencode-remote/settings.json` beside the selected config.
+- App state is stored in `opencode-remote.db` under the platform app-data directory: `$XDG_DATA_HOME/opencode-remote` or `~/.local/share/opencode-remote` on Linux, `~/Library/Application Support/opencode-remote` on macOS, and `%LOCALAPPDATA%\opencode-remote` on Windows.
+- Project state uses OpenCode-style identity: Git remote hash, then cached repo ID, then root commit; non-Git folders use the shared `global` identity.
+- `settingsPath` may still validate for old configs but is not used by the runtime state store.
 - Background runtime files are stored beside the selected config as `.opencode-remote/gateway.pid` and `.opencode-remote/gateway.log` by default.
 - Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.
 - Do not add voice, model, or provider env vars until the related feature is actually implemented.
@@ -257,7 +262,7 @@ Current test priorities:
 - OpenCode server manager reachability/auto-start behavior.
 - OpenCode client prompt shape, file attachments, and response unwrapping.
 - Gateway controller session creation, selection, prompt routing, and stop behavior.
-- Settings persistence.
+- SQLite app-state persistence and project identity resolution.
 - Telegram text prompt typing/reaction behavior.
 - Hidden Telegram reaction marker stripping.
 - User reaction feedback prompts.

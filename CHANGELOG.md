@@ -4,6 +4,19 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.3.0] - 2026-05-25
+
+### Added
+
+- Added an OpenCode-style SQLite app-state database at the platform app-data location, with Git-aware project identity for active session and progress state.
+- Added arrow-key selection for interactive setup choices.
+- Added `--state-suffix` for isolated runtime state databases, and made `pnpm dev` use `opencode-remote-dev.db`.
+
+### Changed
+
+- Simplified interactive setup to ask only for config scope, Telegram credentials, progress verbosity, and log level.
+- Changed the default progress verbosity to `verbose`.
+
 ## [0.2.0] - 2026-05-25
 
 ### Added

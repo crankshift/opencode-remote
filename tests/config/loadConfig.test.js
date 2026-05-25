@@ -1,13 +1,14 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { PassThrough, Writable } from "node:stream"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import {
   GatewayConfigError,
   loadConfig,
   loadConfigFromObject,
 } from "../../src/config/loadConfig.js"
-import { createConfig, loadOrCreateConfig } from "../../src/config/setupConfig.js"
+import { createConfig, loadOrCreateConfig, promptForConfig } from "../../src/config/setupConfig.js"
 
 const tempDirs = []
 
@@ -43,7 +44,7 @@ describe("loadConfig", () => {
         autoStart: true,
         workdir: cwd,
       },
-      progressVerbosity: "all",
+      progressVerbosity: "verbose",
       logLevel: "info",
       settingsPath: join(cwd, ".opencode-remote", "settings.json"),
     })
@@ -231,6 +232,38 @@ describe("createConfig", () => {
   })
 })
 
+describe("promptForConfig", () => {
+  test("collects only essential setup answers and omits default OpenCode settings", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["", "token", "123", "", ""])
+    const answers = await prompt
+
+    expect(answers).toEqual({
+      scope: "local",
+      config: {
+        telegram: { botToken: "token", allowedUserId: 123 },
+        progressVerbosity: "verbose",
+        logLevel: "info",
+      },
+    })
+    expect(output.text()).not.toMatch(/OpenCode API URL/)
+    expect(output.text()).not.toMatch(/OpenCode command/)
+    expect(output.text()).not.toMatch(/Auto-start OpenCode/)
+    expect(output.text()).not.toMatch(/OpenCode workdir/)
+    expect(output.text()).not.toMatch(/Settings path/)
+  })
+})
+
 async function tempWorkspace() {
   const root = await mkdtemp(join(tmpdir(), "opencode-remote-config-"))
   tempDirs.push(root)
@@ -248,4 +281,23 @@ async function writeConfig(filePath, config) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"))
+}
+
+function captureOutput() {
+  let text = ""
+  const stream = new Writable({
+    write(chunk, _encoding, callback) {
+      text += chunk.toString()
+      callback()
+    },
+  })
+  stream.text = () => text
+  return stream
+}
+
+async function writeAnswers(input, answers) {
+  for (const answer of answers) {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    input.write(`${answer}\n`)
+  }
 }

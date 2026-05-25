@@ -27,7 +27,7 @@ Run in watch mode during development:
 pnpm dev
 ```
 
-Both scripts execute `src/bin/opencode-remote.js run`.
+`pnpm start` executes `src/bin/opencode-remote.js run` and uses the normal app-state database. `pnpm dev` runs the same gateway in watch mode with `--state-suffix dev`, so development state is stored in `opencode-remote-dev.db` instead of the production `opencode-remote.db`.
 
 ## Build
 

@@ -1,21 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
-import { stdin as input, stdout as output } from "node:process"
+import { dirname } from "node:path"
+import { stdin as defaultInput, stdout as defaultOutput } from "node:process"
+import { emitKeypressEvents } from "node:readline"
 import { createInterface } from "node:readline/promises"
-import {
-  getConfigPaths,
-  loadConfig,
-  loadConfigFromObject,
-  SETTINGS_FILE_NAME,
-} from "./loadConfig.js"
+import { getConfigPaths, loadConfig, loadConfigFromObject } from "./loadConfig.js"
 
 const defaultPromptConfig = {
-  opencode: {
-    apiUrl: "http://localhost:4096",
-    command: "opencode",
-    autoStart: true,
-  },
-  progressVerbosity: "all",
+  progressVerbosity: "verbose",
   logLevel: "info",
 }
 
@@ -71,16 +62,21 @@ async function writePromptedConfig({ answers, paths, cwd }) {
 }
 
 export async function confirmOverwriteConfig(configPath) {
-  const rl = createInterface({ input, output })
+  const rl = createInterface({ input: defaultInput, output: defaultOutput })
 
   try {
-    return askBoolean(rl, `Config already exists at ${configPath}. Replace it`, false)
+    return askBoolean(rl, `Config already exists at ${configPath}. Replace it`, false, {
+      output: defaultOutput,
+    })
   } finally {
     rl.close()
   }
 }
 
-export async function promptForConfig(paths) {
+export async function promptForConfig(
+  _paths,
+  { input = defaultInput, output = defaultOutput } = {},
+) {
   output.write("No OpenCode Remote config found. Let's create one.\n")
   const rl = createInterface({ input, output })
 
@@ -90,32 +86,24 @@ export async function promptForConfig(paths) {
       "Create config where? local/global",
       ["local", "global"],
       "local",
+      { input, output },
     )
-    const selectedConfigPath = scope === "global" ? paths.globalConfigPath : paths.localConfigPath
-    const defaultSettingsPath = join(dirname(selectedConfigPath), SETTINGS_FILE_NAME)
     const botToken = await askRequired(rl, "Telegram bot token")
     const allowedUserId = Number(await askInteger(rl, "Telegram allowed user ID"))
-    const apiUrl = await askWithDefault(rl, "OpenCode API URL", defaultPromptConfig.opencode.apiUrl)
-    const command = await askWithDefault(
-      rl,
-      "OpenCode command",
-      defaultPromptConfig.opencode.command,
-    )
-    const autoStart = await askBoolean(rl, "Auto-start OpenCode when unreachable", true)
-    const workdir = await askWithDefault(rl, "OpenCode workdir", "")
     const progressVerbosity = await askChoice(
       rl,
-      "Progress verbosity off/new/all/verbose",
+      "Progress verbosity",
       ["off", "new", "all", "verbose"],
       defaultPromptConfig.progressVerbosity,
+      { input, output },
     )
     const logLevel = await askChoice(
       rl,
-      "Log level fatal/error/warn/info/debug/trace/silent",
+      "Log level",
       ["fatal", "error", "warn", "info", "debug", "trace", "silent"],
       defaultPromptConfig.logLevel,
+      { input, output },
     )
-    const settingsPath = await askWithDefault(rl, "Settings path", defaultSettingsPath)
 
     return {
       scope,
@@ -124,15 +112,8 @@ export async function promptForConfig(paths) {
           botToken,
           allowedUserId,
         },
-        opencode: {
-          apiUrl,
-          command,
-          autoStart,
-          ...(workdir ? { workdir } : {}),
-        },
         progressVerbosity,
         logLevel,
-        ...(settingsPath === defaultSettingsPath ? {} : { settingsPath }),
       },
     }
   } finally {
@@ -146,7 +127,7 @@ async function askRequired(rl, label) {
     if (value) {
       return value
     }
-    output.write(`${label} is required.\n`)
+    rl.output.write(`${label} is required.\n`)
   }
 }
 
@@ -157,11 +138,11 @@ async function askInteger(rl, label) {
     if (Number.isInteger(parsed) && parsed > 0) {
       return value
     }
-    output.write(`${label} must be a positive integer.\n`)
+    rl.output.write(`${label} must be a positive integer.\n`)
   }
 }
 
-async function askBoolean(rl, label, defaultValue) {
+async function askBoolean(rl, label, defaultValue, { output = defaultOutput } = {}) {
   const suffix = defaultValue ? "Y/n" : "y/N"
   while (true) {
     const value = (await rl.question(`${label} (${suffix}): `)).trim().toLowerCase()
@@ -178,9 +159,21 @@ async function askBoolean(rl, label, defaultValue) {
   }
 }
 
-async function askChoice(rl, label, choices, defaultValue) {
+async function askChoice(
+  rl,
+  label,
+  choices,
+  defaultValue,
+  { input = defaultInput, output = defaultOutput } = {},
+) {
+  if (isInteractive(input, output)) {
+    return askInteractiveChoice({ input, output, label, choices, defaultValue })
+  }
+
   while (true) {
-    const value = (await askWithDefault(rl, label, defaultValue)).toLowerCase()
+    const value = (
+      await askWithDefault(rl, `${label} ${choices.join("/")}`, defaultValue)
+    ).toLowerCase()
     if (choices.includes(value)) {
       return value
     }
@@ -191,4 +184,60 @@ async function askChoice(rl, label, choices, defaultValue) {
 async function askWithDefault(rl, label, defaultValue) {
   const value = (await rl.question(`${label} (${defaultValue}): `)).trim()
   return value || defaultValue
+}
+
+function isInteractive(input, output) {
+  return Boolean(input.isTTY && output.isTTY && typeof input.setRawMode === "function")
+}
+
+async function askInteractiveChoice({ input, output, label, choices, defaultValue }) {
+  const defaultIndex = Math.max(choices.indexOf(defaultValue), 0)
+  let selected = defaultIndex
+  let rawWasEnabled = false
+
+  emitKeypressEvents(input)
+  if (input.isRaw !== true) {
+    input.setRawMode(true)
+    rawWasEnabled = true
+  }
+  input.resume()
+
+  function render() {
+    output.write(`\r${label}: ${choices[selected]}${" ".repeat(20)}`)
+  }
+
+  render()
+  return await new Promise((resolve, reject) => {
+    function cleanup() {
+      input.off("keypress", onKeypress)
+      if (rawWasEnabled) {
+        input.setRawMode(false)
+      }
+      output.write("\n")
+    }
+
+    function onKeypress(_str, key = {}) {
+      if (key.name === "up" || key.name === "left") {
+        selected = (selected - 1 + choices.length) % choices.length
+        render()
+        return
+      }
+      if (key.name === "down" || key.name === "right") {
+        selected = (selected + 1) % choices.length
+        render()
+        return
+      }
+      if (key.name === "return" || key.name === "enter") {
+        cleanup()
+        resolve(choices[selected])
+        return
+      }
+      if (key.name === "c" && key.ctrl) {
+        cleanup()
+        reject(new Error("Setup cancelled"))
+      }
+    }
+
+    input.on("keypress", onKeypress)
+  })
 }

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { describe, expect, test, vi } from "vitest"
 import { createGatewayProgram } from "../../src/bin/program.js"
 
@@ -18,6 +19,27 @@ describe("opencode-remote CLI program", () => {
 
     expect(loadOrCreateConfig).toHaveBeenCalled()
     expect(runGateway).toHaveBeenCalledWith({ config })
+  })
+
+  test("run command passes a state DB suffix", async () => {
+    const config = testConfig()
+    const loadOrCreateConfig = vi.fn(async () => config)
+    const runGateway = vi.fn(async () => undefined)
+    const program = createGatewayProgram({ loadOrCreateConfig, runGateway })
+
+    await program.parseAsync(["node", "opencode-remote", "run", "--state-suffix", "dev"])
+
+    expect(runGateway).toHaveBeenCalledWith({ config, stateSuffix: "dev" })
+  })
+
+  test("dev script uses an isolated state DB suffix", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    )
+
+    expect(packageJson.scripts.dev).toBe(
+      "node --watch src/bin/opencode-remote.js run --state-suffix dev",
+    )
   })
 
   test("setup command creates config without starting the gateway", async () => {

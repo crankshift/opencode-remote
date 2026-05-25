@@ -6,11 +6,13 @@ import { loadConfig } from "../config/loadConfig.js"
 import { createGatewayController as defaultCreateGatewayController } from "../core/gateway/controller.js"
 import { createOpenCodeClient as defaultCreateOpenCodeClient } from "../core/opencode/client.js"
 import { ensureOpenCodeServer as defaultEnsureOpenCodeServer } from "../core/opencode/serverManager.js"
-import { createSettingsStore as defaultCreateSettingsStore } from "../core/session/settingsStore.js"
+import { resolveProjectIdentity as defaultResolveProjectIdentity } from "../core/state/projectIdentity.js"
+import { createProjectStateStore as defaultCreateProjectStateStore } from "../core/state/stateDb.js"
 import { createLogger } from "../utils/logger.js"
 
 export async function runGateway({
   config,
+  stateSuffix,
   logger,
   dependencies = {},
   processLike = process,
@@ -20,7 +22,10 @@ export async function runGateway({
   const resolvedLogger = logger ?? createLogger(resolvedConfig.logLevel)
   const ensureOpenCodeServer = dependencies.ensureOpenCodeServer ?? defaultEnsureOpenCodeServer
   const createOpenCodeClient = dependencies.createOpenCodeClient ?? defaultCreateOpenCodeClient
-  const createSettingsStore = dependencies.createSettingsStore ?? defaultCreateSettingsStore
+  const resolveProjectIdentity =
+    dependencies.resolveProjectIdentity ?? defaultResolveProjectIdentity
+  const createProjectStateStore =
+    dependencies.createProjectStateStore ?? defaultCreateProjectStateStore
   const createGatewayController =
     dependencies.createGatewayController ?? defaultCreateGatewayController
   const createTelegramBot = dependencies.createTelegramBot ?? defaultCreateTelegramBot
@@ -29,7 +34,8 @@ export async function runGateway({
 
   const server = await ensureOpenCodeServer(resolvedConfig.opencode)
   const opencode = createOpenCodeClient({ apiUrl: resolvedConfig.opencode.apiUrl })
-  const store = createSettingsStore(resolvedConfig.settingsPath)
+  const project = await resolveProjectIdentity({ directory: resolvedConfig.opencode.workdir })
+  const store = createProjectStateStore({ project, ...(stateSuffix ? { stateSuffix } : {}) })
   const controller = createGatewayController({
     opencode,
     store,

@@ -36,9 +36,12 @@ export function createGatewayProgram({
   program
     .command("run")
     .description("Run the gateway in the foreground")
-    .action(async () => {
+    .option("--state-suffix <suffix>", "Use a suffixed state database")
+    .action(async (options) => {
       const config = await loadOrCreateConfig()
-      await runGateway({ config })
+      await runGateway(
+        options.stateSuffix ? { config, stateSuffix: options.stateSuffix } : { config },
+      )
     })
 
   program
