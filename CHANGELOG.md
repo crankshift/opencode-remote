@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.3.1] - 2026-05-25
+
+### Changed
+
+- Moved runtime and app-state storage internals out of `README.md` and into `DEVELOPMENT.md`.
+
 ## [0.3.0] - 2026-05-25
 
 ### Added
