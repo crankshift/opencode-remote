@@ -85,10 +85,15 @@ export function createTelegramBot({ token, allowedUserId, controller, logger, bo
     if (ctx.message.text.startsWith("/")) {
       return
     }
-    await ctx.reply("Sending prompt to OpenCode...")
-    const response = await controller.sendPrompt(ctx.message.text)
-    for (const chunk of chunkText(response)) {
-      await ctx.reply(chunk)
+
+    const stopTyping = startTypingIndicator(ctx, logger)
+    try {
+      const response = await controller.sendPrompt(ctx.message.text)
+      for (const chunk of chunkText(response)) {
+        await ctx.reply(chunk)
+      }
+    } finally {
+      stopTyping()
     }
   })
 
@@ -101,4 +106,21 @@ function formatSessionLabel(session) {
     return label
   }
   return `${label.slice(0, 61)}...`
+}
+
+function startTypingIndicator(ctx, logger) {
+  const chatId = ctx.message?.chat?.id
+  if (!chatId || !ctx.api?.sendChatAction) {
+    return () => undefined
+  }
+
+  const sendTyping = () => {
+    ctx.api.sendChatAction(chatId, "typing").catch((error) => {
+      logger.warn({ error }, "Could not send Telegram typing action")
+    })
+  }
+
+  sendTyping()
+  const interval = setInterval(sendTyping, 4000)
+  return () => clearInterval(interval)
 }

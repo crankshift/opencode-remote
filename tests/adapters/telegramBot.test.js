@@ -152,4 +152,41 @@ describe("createTelegramBot", () => {
 
     expect(reply).toHaveBeenCalledWith("No active OpenCode session to stop.")
   })
+
+  test("text prompts show typing instead of sending a status reply", async () => {
+    vi.useFakeTimers()
+    const controller = {
+      sendPrompt: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve("answer"), 4100)
+          }),
+      ),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+    const sendChatAction = vi.fn(async () => undefined)
+
+    const handling = bot.messageHandlers.get("message:text")({
+      message: { text: "hello", chat: { id: 456 } },
+      api: { sendChatAction },
+      reply,
+    })
+
+    await vi.advanceTimersByTimeAsync(4100)
+    await handling
+
+    expect(reply).not.toHaveBeenCalledWith("Sending prompt to OpenCode...")
+    expect(sendChatAction).toHaveBeenCalledTimes(2)
+    expect(sendChatAction).toHaveBeenNthCalledWith(1, 456, "typing")
+    expect(sendChatAction).toHaveBeenNthCalledWith(2, 456, "typing")
+    expect(reply).toHaveBeenCalledWith("answer")
+    vi.useRealTimers()
+  })
 })
