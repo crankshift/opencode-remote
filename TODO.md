@@ -50,3 +50,17 @@
    - Start with realistic global thresholds: 80% lines, statements, and functions; 70% branches.
    - Keep external Telegram, OpenCode, STT, and TTS systems mocked by default.
    - Add optional env-gated live smoke tests later instead of requiring live services in normal coverage runs.
+
+8. [ ] Add interactive JSON config discovery for the published npm CLI.
+   - Replace `.env`-based runtime config with `.opencode-remote/config.json`.
+   - Discover config in this order:
+     1. Project-local `.opencode-remote/config.json` in the current working directory.
+     2. Global `~/.opencode-remote/config.json`.
+   - If no config exists, prompt the CLI user to create one.
+   - Ask whether the config should be local or global before writing it.
+   - Prompt for required values: Telegram bot token and Telegram allowed user ID.
+   - Prompt or default optional values: OpenCode API URL, command, auto-start, workdir, progress verbosity, log level, and settings path.
+   - Store gateway state under `.opencode-remote/` by default, separate from secrets when practical.
+   - Validate `config.json` with zod and show safe, user-friendly errors.
+   - Update README, FEATURES, `.env.example` removal/replacement, AGENTS.md, and tests.
+   - Add tests for config precedence, missing-config setup flow, invalid JSON, validation errors, and no `.env` dependency.
