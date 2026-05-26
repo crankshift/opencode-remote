@@ -27,7 +27,7 @@ export function createGatewayProgram({
 } = {}) {
   const program = new Command()
 
-  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.2.0")
+  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.4.0")
 
   program
     .command("setup")

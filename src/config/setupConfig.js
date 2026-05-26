@@ -3,7 +3,11 @@ import { dirname } from "node:path"
 import { stdin as defaultInput, stdout as defaultOutput } from "node:process"
 import { emitKeypressEvents } from "node:readline"
 import { createInterface } from "node:readline/promises"
-import { checkFfmpeg as defaultCheckFfmpeg } from "../core/voice/audioConverter.js"
+import {
+  checkFfmpeg as defaultCheckFfmpeg,
+  detectFfmpegInstaller as defaultDetectFfmpegInstaller,
+  installFfmpeg as defaultInstallFfmpeg,
+} from "../core/voice/audioConverter.js"
 import { getConfigPaths, loadConfig, loadConfigFromObject } from "./loadConfig.js"
 
 const defaultPromptConfig = {
@@ -49,7 +53,13 @@ async function writePromptedConfig({ answers, paths, cwd }) {
 
 export async function promptForConfig(
   _paths,
-  { input = defaultInput, output = defaultOutput, checkFfmpeg = defaultCheckFfmpeg } = {},
+  {
+    input = defaultInput,
+    output = defaultOutput,
+    checkFfmpeg = defaultCheckFfmpeg,
+    detectFfmpegInstaller = defaultDetectFfmpegInstaller,
+    installFfmpeg = defaultInstallFfmpeg,
+  } = {},
 ) {
   output.write("Let's create OpenCode Remote config.\n")
   const rl = createInterface({ input, output })
@@ -82,7 +92,15 @@ export async function promptForConfig(
       input,
       output,
     })
-    const voice = await promptForVoiceConfig({ rl, enableVoice, checkFfmpeg, output })
+    const voice = await promptForVoiceConfig({
+      rl,
+      enableVoice,
+      checkFfmpeg,
+      detectFfmpegInstaller,
+      installFfmpeg,
+      input,
+      output,
+    })
 
     return {
       scope,
@@ -101,14 +119,28 @@ export async function promptForConfig(
   }
 }
 
-async function promptForVoiceConfig({ rl, enableVoice, checkFfmpeg, output }) {
+async function promptForVoiceConfig({
+  rl,
+  enableVoice,
+  checkFfmpeg,
+  detectFfmpegInstaller,
+  installFfmpeg,
+  input,
+  output,
+}) {
   if (enableVoice !== "yes") {
     return null
   }
 
-  const ffmpeg = await checkFfmpeg()
-  if (!ffmpeg.available) {
-    output.write(`${ffmpeg.message}\nVoice mode will remain disabled until ffmpeg is installed.\n`)
+  const hasFfmpeg = await waitForFfmpeg({
+    rl,
+    checkFfmpeg,
+    detectFfmpegInstaller,
+    installFfmpeg,
+    input,
+    output,
+  })
+  if (!hasFfmpeg) {
     return null
   }
 
@@ -119,6 +151,72 @@ async function promptForVoiceConfig({ rl, enableVoice, checkFfmpeg, output }) {
     mode: "on",
     groqApiKey,
     voice,
+  }
+}
+
+async function waitForFfmpeg({
+  rl,
+  checkFfmpeg,
+  detectFfmpegInstaller,
+  installFfmpeg,
+  input,
+  output,
+}) {
+  let offeredAutomaticInstall = false
+
+  while (true) {
+    const ffmpeg = await checkFfmpeg()
+    if (ffmpeg.available) {
+      return true
+    }
+
+    output.write(`${ffmpeg.message}\n`)
+
+    if (!offeredAutomaticInstall) {
+      offeredAutomaticInstall = true
+      const installer = await detectFfmpegInstaller()
+      if (installer) {
+        const useInstaller = await askChoice(
+          rl,
+          `Install ffmpeg with ${installer.displayCommand}? no/yes`,
+          ["no", "yes"],
+          "yes",
+          { input, output },
+        )
+        if (useInstaller === "yes") {
+          output.write(`Running ${installer.displayCommand}...\n`)
+          const result = await runWithReadlinePaused(rl, () => installFfmpeg(installer))
+          if (!result.ok) {
+            output.write("Could not install ffmpeg automatically.\n")
+          }
+          continue
+        }
+      } else {
+        output.write("No supported automatic ffmpeg installer was found.\n")
+      }
+    }
+
+    const retry = await askOptional(
+      rl,
+      "Install ffmpeg in another terminal, then press Enter to retry, or type skip",
+    )
+    if (retry.toLowerCase() === "skip") {
+      output.write("Voice mode will remain disabled until ffmpeg is installed.\n")
+      return false
+    }
+  }
+}
+
+async function runWithReadlinePaused(rl, action) {
+  if (typeof rl.pause !== "function" || typeof rl.resume !== "function") {
+    return action()
+  }
+
+  rl.pause()
+  try {
+    return await action()
+  } finally {
+    rl.resume()
   }
 }
 
@@ -168,6 +266,10 @@ async function askChoice(
 async function askWithDefault(rl, label, defaultValue) {
   const value = (await rl.question(`${label} (${defaultValue}): `)).trim()
   return value || defaultValue
+}
+
+async function askOptional(rl, label) {
+  return (await rl.question(`${label}: `)).trim()
 }
 
 function isInteractive(input, output) {

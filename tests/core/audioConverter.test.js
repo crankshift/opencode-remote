@@ -3,6 +3,8 @@ import {
   assertFfmpegAvailable,
   checkFfmpeg,
   convertMp3ToTelegramOgg,
+  detectFfmpegInstaller,
+  installFfmpeg,
 } from "../../src/core/voice/audioConverter.js"
 
 describe("audioConverter", () => {
@@ -25,6 +27,61 @@ describe("audioConverter", () => {
     expect(result.message).toContain("Voice mode requires ffmpeg")
     expect(result.message).toContain("brew install ffmpeg")
     await expect(assertFfmpegAvailable({ execa })).rejects.toThrow(/Voice mode requires ffmpeg/u)
+  })
+
+  test("detects the first available ffmpeg installer for the platform", async () => {
+    const execa = vi.fn(async (command) => {
+      if (command === "apt") {
+        return undefined
+      }
+      throw new Error("missing command")
+    })
+
+    await expect(detectFfmpegInstaller({ platform: "linux", execa })).resolves.toEqual({
+      command: "sudo",
+      args: ["apt", "install", "ffmpeg"],
+      displayCommand: "sudo apt install ffmpeg",
+    })
+    expect(execa).toHaveBeenCalledWith("apt", ["--version"])
+  })
+
+  test("returns null when no supported ffmpeg installer is available", async () => {
+    const execa = vi.fn(async () => {
+      throw new Error("missing command")
+    })
+
+    await expect(detectFfmpegInstaller({ platform: "linux", execa })).resolves.toBeNull()
+  })
+
+  test("runs the ffmpeg installer with inherited terminal IO", async () => {
+    const execa = vi.fn(async () => undefined)
+    const installer = {
+      command: "brew",
+      args: ["install", "ffmpeg"],
+      displayCommand: "brew install ffmpeg",
+    }
+
+    await expect(installFfmpeg(installer, { execa })).resolves.toEqual({ ok: true })
+
+    expect(execa).toHaveBeenCalledWith("brew", ["install", "ffmpeg"], { stdio: "inherit" })
+  })
+
+  test("reports ffmpeg installer failures without throwing", async () => {
+    const error = new Error("install failed")
+    const execa = vi.fn(async () => {
+      throw error
+    })
+
+    await expect(
+      installFfmpeg(
+        {
+          command: "sudo",
+          args: ["apt", "install", "ffmpeg"],
+          displayCommand: "sudo apt install ffmpeg",
+        },
+        { execa },
+      ),
+    ).resolves.toEqual({ ok: false, error })
   })
 
   test("converts mp3 to Telegram voice-compatible OGG Opus", async () => {

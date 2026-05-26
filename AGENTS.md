@@ -29,7 +29,7 @@ Implemented now:
 - OpenCode session create/list/select, prompt sending, and active-session abort.
 - Auto-create an OpenCode session before the first prompt when no active session is selected.
 - JSON config discovery from project-local `.opencode-remote/config.json`, then global `~/.opencode-remote/config.json`.
-- Interactive CLI config setup when no JSON config exists, with highlighted arrow-key lists for choice prompts.
+- Interactive CLI config setup when no JSON config exists, with highlighted arrow-key lists for choice prompts and `ffmpeg` install/retry handling for voice setup.
 - SQLite app-state persistence for `activeSessionId` and `/progress` preference in the platform app-data directory, scoped by OpenCode-style project identity.
 - Telegram-safe text chunking below message limits.
 - Telegram typing action while prompts are running.
@@ -235,7 +235,7 @@ Rules:
 - Project state uses OpenCode-style identity: Git remote hash, then cached repo ID, then root commit; non-Git folders use the shared `global` identity.
 - `settingsPath` may still validate for old configs but is not used by the runtime state store.
 - Background runtime files are stored beside the selected config as `.opencode-remote/gateway.pid` and `.opencode-remote/gateway.log` by default.
-- Voice mode is disabled by default. If enabled, startup requires `ffmpeg`; the CLI never auto-installs it.
+- Voice mode is disabled by default. If enabled, startup requires `ffmpeg`; setup can offer a detected package-manager install and otherwise waits while the user installs `ffmpeg` in another terminal.
 - `voice.groqApiKey` is required for live voice transcription and must stay in private config.
 - Generated voice files are cache under the app-data `cache/voice` directory and are removable with `opencode-remote cache clear`.
 - Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.

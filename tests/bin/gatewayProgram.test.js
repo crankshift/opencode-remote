@@ -6,7 +6,7 @@ describe("opencode-remote CLI program", () => {
   test("reports the package release version", () => {
     const program = createGatewayProgram()
 
-    expect(program.version()).toBe("0.2.0")
+    expect(program.version()).toBe("0.4.0")
   })
 
   test("run command loads or creates config before starting the gateway", async () => {

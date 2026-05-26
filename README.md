@@ -46,7 +46,7 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, and optional voice mode. If a config already exists at the chosen location, setup replaces it. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, and optional voice mode. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. If a config already exists at the chosen location, setup replaces it. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
 
 Config discovery order:
 
@@ -181,7 +181,7 @@ If background mode does not start, run `opencode-remote status`.
 
 If `opencode-remote status` reports a stale PID file, run `opencode-remote stop` once to remove it.
 
-If voice mode is enabled and startup says `ffmpeg` is missing, install it and restart:
+If voice setup says `ffmpeg` is missing, let setup try the detected installer or install it in another terminal, then press Enter in setup to retry. If runtime startup says `ffmpeg` is missing, install it and restart:
 
 ```bash
 brew install ffmpeg

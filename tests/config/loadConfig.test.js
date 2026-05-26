@@ -303,6 +303,136 @@ describe("promptForConfig", () => {
     })
   })
 
+  test("installs ffmpeg automatically before collecting voice setup answers", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+    const installFfmpeg = vi.fn(async () => ({ ok: true }))
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      {
+        input,
+        output,
+        checkFfmpeg: vi
+          .fn()
+          .mockResolvedValueOnce({ available: false, message: "ffmpeg missing" })
+          .mockResolvedValueOnce({ available: true }),
+        detectFfmpegInstaller: vi.fn(async () => ({
+          command: "brew",
+          args: ["install", "ffmpeg"],
+          displayCommand: "brew install ffmpeg",
+        })),
+        installFfmpeg,
+      },
+    )
+    await writeAnswers(input, [
+      "",
+      "token",
+      "123",
+      "",
+      "",
+      "yes",
+      "",
+      "gsk_test",
+      "uk-UA-OstapNeural",
+    ])
+    const answers = await prompt
+
+    expect(installFfmpeg).toHaveBeenCalledWith({
+      command: "brew",
+      args: ["install", "ffmpeg"],
+      displayCommand: "brew install ffmpeg",
+    })
+    expect(answers.config.voice).toEqual({
+      enabled: true,
+      mode: "on",
+      groqApiKey: "gsk_test",
+      voice: "uk-UA-OstapNeural",
+    })
+    expect(output.text()).toContain("Install ffmpeg with brew install ffmpeg?")
+  })
+
+  test("waits for manual ffmpeg install when automatic install fails", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      {
+        input,
+        output,
+        checkFfmpeg: vi
+          .fn()
+          .mockResolvedValueOnce({ available: false, message: "ffmpeg missing" })
+          .mockResolvedValueOnce({ available: false, message: "ffmpeg still missing" })
+          .mockResolvedValueOnce({ available: true }),
+        detectFfmpegInstaller: vi.fn(async () => ({
+          command: "sudo",
+          args: ["apt", "install", "ffmpeg"],
+          displayCommand: "sudo apt install ffmpeg",
+        })),
+        installFfmpeg: vi.fn(async () => ({ ok: false, error: new Error("install failed") })),
+      },
+    )
+    await writeAnswers(input, [
+      "",
+      "token",
+      "123",
+      "",
+      "",
+      "yes",
+      "",
+      "",
+      "gsk_test",
+      "uk-UA-OstapNeural",
+    ])
+    const answers = await prompt
+
+    expect(answers.config.voice).toEqual({
+      enabled: true,
+      mode: "on",
+      groqApiKey: "gsk_test",
+      voice: "uk-UA-OstapNeural",
+    })
+    expect(output.text()).toContain("Could not install ffmpeg automatically.")
+    expect(output.text()).toContain(
+      "Install ffmpeg in another terminal, then press Enter to retry, or type skip",
+    )
+  })
+
+  test("continues setup with voice disabled when missing ffmpeg is skipped", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      {
+        input,
+        output,
+        checkFfmpeg: vi.fn(async () => ({ available: false, message: "ffmpeg missing" })),
+        detectFfmpegInstaller: vi.fn(async () => null),
+      },
+    )
+    await writeAnswers(input, ["", "token", "123", "", "", "yes", "skip"])
+    const answers = await prompt
+
+    expect(answers.config.voice).toBeUndefined()
+    expect(output.text()).toContain("No supported automatic ffmpeg installer was found.")
+    expect(output.text()).toContain("Voice mode will remain disabled until ffmpeg is installed.")
+  })
+
   test("interactive choice prompts render all options and highlight the active option", async () => {
     const { cwd, homeDir } = await tempWorkspace()
     const input = fakeTtyInput()
