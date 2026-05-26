@@ -14,6 +14,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - Telegram-safe response chunking for long assistant replies.
 - Published npm CLI package with the `opencode-remote` bin built to `dist/` with `tsdown`.
 - Background gateway lifecycle commands: `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status`.
+- User-level login startup commands: `opencode-remote startup enable`, `opencode-remote startup disable`, and `opencode-remote startup status`.
 - Interactive JSON config setup with project-local and global config discovery, selected-scope current defaults, highlighted arrow-key lists, and `ffmpeg` install/retry handling for voice setup.
 - SQLite app-state persistence for selected OpenCode sessions and progress preferences, scoped by OpenCode project identity.
 - Optional Telegram voice mode using Groq Whisper transcription, Edge TTS speech generation, and `ffmpeg` OGG Opus conversion.

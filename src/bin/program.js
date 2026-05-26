@@ -12,6 +12,11 @@ import {
   stopGatewayInBackground as defaultStopGatewayInBackground,
 } from "../runtime/background.js"
 import { runGateway as defaultRunGateway } from "../runtime/bootstrap.js"
+import {
+  disableGatewayStartup as defaultDisableGatewayStartup,
+  enableGatewayStartup as defaultEnableGatewayStartup,
+  getGatewayStartupStatus as defaultGetGatewayStartupStatus,
+} from "../runtime/startup.js"
 
 export function createGatewayProgram({
   createConfig = defaultCreateConfig,
@@ -21,19 +26,23 @@ export function createGatewayProgram({
   startGatewayInBackground = defaultStartGatewayInBackground,
   stopGatewayInBackground = defaultStopGatewayInBackground,
   getGatewayBackgroundStatus = defaultGetGatewayBackgroundStatus,
+  enableGatewayStartup = defaultEnableGatewayStartup,
+  disableGatewayStartup = defaultDisableGatewayStartup,
+  getGatewayStartupStatus = defaultGetGatewayStartupStatus,
   setConfigValue = defaultSetConfigValue,
   clearVoiceCache = defaultClearVoiceCache,
   output = process.stdout,
 } = {}) {
   const program = new Command()
+  const afterCreate = createStartupAfterConfigHook({ enableGatewayStartup, output })
 
-  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.4.0")
+  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.5.3")
 
   program
     .command("setup")
     .description("Create or replace the gateway config")
     .action(async () => {
-      const config = await createConfig()
+      const config = await createConfig({ afterCreate })
       output.write(`Config ready: ${config.configPath}\n`)
     })
 
@@ -42,7 +51,7 @@ export function createGatewayProgram({
     .description("Run the gateway in the foreground")
     .option("--state-suffix <suffix>", "Use a suffixed state database")
     .action(async (options) => {
-      const config = await loadOrCreateConfig()
+      const config = await loadOrCreateConfig({ afterCreate })
       await runGateway(
         options.stateSuffix ? { config, stateSuffix: options.stateSuffix } : { config },
       )
@@ -52,7 +61,7 @@ export function createGatewayProgram({
     .command("start")
     .description("Run the gateway in the background")
     .action(async () => {
-      const config = await loadOrCreateConfig()
+      const config = await loadOrCreateConfig({ afterCreate })
       const result = await startGatewayInBackground({ config })
       output.write(formatStartResult(result))
     })
@@ -96,7 +105,47 @@ export function createGatewayProgram({
       output.write(`Cleared voice cache: ${result.directory}\n`)
     })
 
+  const startup = program.command("startup").description("Manage login startup")
+
+  startup
+    .command("enable")
+    .description("Start the gateway when you log in")
+    .action(async () => {
+      const config = await loadConfig()
+      const result = await enableGatewayStartup({ config })
+      output.write(formatStartupEnableResult(result))
+    })
+
+  startup
+    .command("disable")
+    .description("Stop starting the gateway when you log in")
+    .action(async () => {
+      const config = await loadConfig()
+      const result = await disableGatewayStartup({ config })
+      output.write(formatStartupDisableResult(result))
+    })
+
+  startup
+    .command("status")
+    .description("Show login startup status")
+    .action(async () => {
+      const config = await loadConfig()
+      const result = await getGatewayStartupStatus({ config })
+      output.write(formatStartupStatusResult(result))
+    })
+
   return program
+}
+
+function createStartupAfterConfigHook({ enableGatewayStartup, output }) {
+  return async ({ config, startup }) => {
+    if (startup?.enabled !== true) {
+      return
+    }
+
+    const result = await enableGatewayStartup({ config })
+    output.write(formatStartupEnableResult(result))
+  }
 }
 
 function formatStartResult(result) {
@@ -129,4 +178,40 @@ function formatStatusResult(result) {
   }
 
   return "Gateway is not running.\n"
+}
+
+function formatStartupEnableResult(result) {
+  if (result.status === "unsupported") {
+    return `Login startup is not supported on ${result.platform}.\n`
+  }
+
+  return `Login startup enabled for ${result.cwd}. Entry: ${formatStartupEntry(result)}\n`
+}
+
+function formatStartupDisableResult(result) {
+  if (result.status === "unsupported") {
+    return `Login startup is not supported on ${result.platform}.\n`
+  }
+
+  return `Login startup disabled. Entry: ${formatStartupEntry(result)}\n`
+}
+
+function formatStartupStatusResult(result) {
+  if (result.status === "unsupported") {
+    return `Login startup is not supported on ${result.platform}.\n`
+  }
+
+  if (result.status === "enabled") {
+    return `Login startup is enabled for ${result.cwd}. Entry: ${formatStartupEntry(result)}\n`
+  }
+
+  if (result.status === "stale") {
+    return `Login startup entry is stale for ${result.cwd}. Entry: ${formatStartupEntry(result)}\n`
+  }
+
+  return "Login startup is disabled.\n"
+}
+
+function formatStartupEntry(result) {
+  return result.entryPath ?? result.entryName
 }

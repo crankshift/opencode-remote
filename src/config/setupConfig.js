@@ -20,6 +20,7 @@ export async function loadOrCreateConfig({
   cwd = process.cwd(),
   homeDir,
   prompter = promptForConfig,
+  afterCreate,
 } = {}) {
   try {
     return await loadConfig({ cwd, homeDir })
@@ -29,17 +30,22 @@ export async function loadOrCreateConfig({
     }
   }
 
-  return createConfig({ cwd, homeDir, prompter })
+  return createConfig({ cwd, homeDir, prompter, afterCreate })
 }
 
 export async function createConfig({
   cwd = process.cwd(),
   homeDir,
   prompter = promptForConfig,
+  afterCreate,
 } = {}) {
   const paths = getConfigPaths({ cwd, homeDir })
   const answers = await prompter(paths)
-  return writePromptedConfig({ answers, paths, cwd })
+  const config = await writePromptedConfig({ answers, paths, cwd })
+  if (afterCreate) {
+    await afterCreate({ config, startup: answers.startup ?? { enabled: false } })
+  }
+  return config
 }
 
 async function writePromptedConfig({ answers, paths, cwd }) {
@@ -120,6 +126,13 @@ export async function promptForConfig(
       input,
       output,
     })
+    const startup = await askChoice(
+      rl,
+      "Start this gateway from the current project folder when you log in? no/yes",
+      ["no", "yes"],
+      "no",
+      { input, output },
+    )
 
     return {
       scope,
@@ -132,6 +145,7 @@ export async function promptForConfig(
         ...(voice ? { voice } : {}),
         logLevel,
       },
+      startup: { enabled: startup === "yes" },
     }
   } finally {
     rl.close()

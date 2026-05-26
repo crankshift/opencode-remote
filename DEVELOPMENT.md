@@ -55,6 +55,8 @@ Background mode writes runtime files beside the selected config:
 - `.opencode-remote/gateway.pid` stores the background process ID.
 - `.opencode-remote/gateway.log` stores background stdout and stderr.
 
+Login startup is user-level and project-folder scoped. `opencode-remote startup enable` creates a macOS LaunchAgent, Linux systemd user service, or Windows Scheduled Task that runs `opencode-remote start` from the current working directory at user login. `startup disable` removes the matching entry for the current config and project folder, and `startup status` reports that entry without checking unrelated projects.
+
 On startup, the gateway checks `opencode.apiUrl`. If it is reachable, the gateway uses that server. If it is not reachable and `opencode.autoStart=true`, the gateway starts `opencode.command serve` and waits for it to become reachable before starting Telegram polling. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
 
 If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.

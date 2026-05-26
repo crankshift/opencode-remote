@@ -243,6 +243,27 @@ describe("createConfig", () => {
       telegram: { botToken: "new-token", allowedUserId: 222 },
     })
   })
+
+  test("passes startup intent to an after-create hook without writing it to JSON", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const prompter = vi.fn(async () => ({
+      scope: "local",
+      config: {
+        telegram: { botToken: "token", allowedUserId: 123 },
+      },
+      startup: { enabled: true },
+    }))
+    const afterCreate = vi.fn(async () => undefined)
+
+    const config = await createConfig({ cwd, homeDir, prompter, afterCreate })
+    const localPath = join(cwd, ".opencode-remote", "config.json")
+
+    expect(afterCreate).toHaveBeenCalledWith({
+      config,
+      startup: { enabled: true },
+    })
+    await expect(readJson(localPath)).resolves.not.toHaveProperty("startup")
+  })
 })
 
 describe("promptForConfig", () => {
@@ -258,7 +279,7 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "token", "123", "", "", ""])
+    await writeAnswers(input, ["", "token", "123", "", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
@@ -268,6 +289,7 @@ describe("promptForConfig", () => {
         progressVerbosity: "verbose",
         logLevel: "info",
       },
+      startup: { enabled: false },
     })
     expect(output.text()).not.toMatch(/OpenCode API URL/)
     expect(output.text()).not.toMatch(/OpenCode command/)
@@ -294,7 +316,7 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "", "", "", "", ""])
+    await writeAnswers(input, ["", "", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
@@ -304,6 +326,7 @@ describe("promptForConfig", () => {
         progressVerbosity: "all",
         logLevel: "debug",
       },
+      startup: { enabled: false },
     })
     expect(output.text()).toContain("Current config found")
     expect(output.text()).toContain("Telegram bot token (current: set; press Enter to keep)")
@@ -328,7 +351,7 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["global", "", "", "", "", ""])
+    await writeAnswers(input, ["global", "", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
@@ -338,6 +361,7 @@ describe("promptForConfig", () => {
         progressVerbosity: "new",
         logLevel: "warn",
       },
+      startup: { enabled: false },
     })
   })
 
@@ -358,7 +382,7 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "local-token", "111", "", "", ""])
+    await writeAnswers(input, ["", "local-token", "111", "", "", "", ""])
     const answers = await prompt
 
     expect(answers.config.telegram).toEqual({ botToken: "local-token", allowedUserId: 111 })
@@ -381,7 +405,17 @@ describe("promptForConfig", () => {
         checkFfmpeg: vi.fn(async () => ({ available: true })),
       },
     )
-    await writeAnswers(input, ["", "token", "123", "", "", "yes", "gsk_test", "uk-UA-OstapNeural"])
+    await writeAnswers(input, [
+      "",
+      "token",
+      "123",
+      "",
+      "",
+      "yes",
+      "gsk_test",
+      "uk-UA-OstapNeural",
+      "",
+    ])
     const answers = await prompt
 
     expect(answers.config.voice).toEqual({
@@ -390,6 +424,29 @@ describe("promptForConfig", () => {
       groqApiKey: "gsk_test",
       voice: "uk-UA-OstapNeural",
     })
+    expect(answers.startup).toEqual({ enabled: false })
+  })
+
+  test("collects startup enablement without writing it into JSON config", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["", "token", "123", "", "", "", "yes"])
+    const answers = await prompt
+
+    expect(answers.startup).toEqual({ enabled: true })
+    expect(answers.config).not.toHaveProperty("startup")
+    expect(output.text()).toContain(
+      "Start this gateway from the current project folder when you log in?",
+    )
   })
 
   test("uses existing voice config values when voice setup input is blank", async () => {
@@ -419,7 +476,7 @@ describe("promptForConfig", () => {
         checkFfmpeg: vi.fn(async () => ({ available: true })),
       },
     )
-    await writeAnswers(input, ["", "", "", "", "", "", "", ""])
+    await writeAnswers(input, ["", "", "", "", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers.config.voice).toEqual({
@@ -428,6 +485,7 @@ describe("promptForConfig", () => {
       groqApiKey: "existing-groq-key",
       voice: "uk-UA-OstapNeural",
     })
+    expect(answers.startup).toEqual({ enabled: false })
     expect(output.text()).toContain("Groq API key (current: set; press Enter to keep)")
     expect(output.text()).toContain(
       "Edge TTS voice (current: uk-UA-OstapNeural; press Enter to keep)",
@@ -470,6 +528,7 @@ describe("promptForConfig", () => {
       "",
       "gsk_test",
       "uk-UA-OstapNeural",
+      "",
     ])
     const answers = await prompt
 
@@ -484,6 +543,7 @@ describe("promptForConfig", () => {
       groqApiKey: "gsk_test",
       voice: "uk-UA-OstapNeural",
     })
+    expect(answers.startup).toEqual({ enabled: false })
     expect(output.text()).toContain("Install ffmpeg with brew install ffmpeg?")
   })
 
@@ -524,6 +584,7 @@ describe("promptForConfig", () => {
       "",
       "gsk_test",
       "uk-UA-OstapNeural",
+      "",
     ])
     const answers = await prompt
 
@@ -533,6 +594,7 @@ describe("promptForConfig", () => {
       groqApiKey: "gsk_test",
       voice: "uk-UA-OstapNeural",
     })
+    expect(answers.startup).toEqual({ enabled: false })
     expect(output.text()).toContain("Could not install ffmpeg automatically.")
     expect(output.text()).toContain(
       "Install ffmpeg in another terminal, then press Enter to retry, or type skip",
@@ -556,10 +618,11 @@ describe("promptForConfig", () => {
         detectFfmpegInstaller: vi.fn(async () => null),
       },
     )
-    await writeAnswers(input, ["", "token", "123", "", "", "yes", "skip"])
+    await writeAnswers(input, ["", "token", "123", "", "", "yes", "skip", ""])
     const answers = await prompt
 
     expect(answers.config.voice).toBeUndefined()
+    expect(answers.startup).toEqual({ enabled: false })
     expect(output.text()).toContain("No supported automatic ffmpeg installer was found.")
     expect(output.text()).toContain("Voice mode will remain disabled until ffmpeg is installed.")
   })
@@ -585,6 +648,7 @@ describe("promptForConfig", () => {
     await pressKey(input, "\r")
     await pressKey(input, "\r")
     await pressKey(input, "\r")
+    await pressKey(input, "\r")
 
     const answers = await prompt
 
@@ -600,6 +664,7 @@ describe("promptForConfig", () => {
     expect(output.text()).toContain("all")
     expect(output.text()).toContain("verbose")
     expect(output.text()).toContain("Enable voice mode now?")
+    expect(output.text()).toContain("Start this gateway from the current project folder")
     expect(output.text()).toContain("yes")
     expect(output.text()).toContain("\x1b[7m> global\x1b[0m")
     expect(output.text()).toContain("\x1b[7m> all\x1b[0m")

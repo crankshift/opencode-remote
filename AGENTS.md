@@ -46,6 +46,7 @@ Implemented now:
 - Publishable npm package output is built to `dist/` with `tsdown`.
 - Public CLI bin is `opencode-remote`.
 - Background CLI lifecycle supports `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status`.
+- User-level login startup supports `opencode-remote startup enable`, `opencode-remote startup disable`, and `opencode-remote startup status`.
 - Source watch mode `pnpm dev` runs with `--state-suffix dev`, so development state uses `opencode-remote-dev.db` instead of the normal app-state database.
 - Public docs exist: `README.md`, `FEATURES.md`, `CHANGELOG.md`, `TODO.md`, `LICENSE`.
 
@@ -66,6 +67,7 @@ src/bin/opencode-remote.js         CLI entry
 src/bin/program.js                 commander commands for `opencode-remote`
 src/runtime/bootstrap.js           runtime wiring, shutdown, Telegram polling startup
 src/runtime/background.js          background PID/log lifecycle helpers
+src/runtime/startup.js             user-level login startup helpers
 src/config/loadConfig.js           JSON config discovery + zod validation
 src/config/setupConfig.js          interactive config creation flow
 src/utils/logger.js                pino logger factory
@@ -245,6 +247,7 @@ Rules:
 - Project state uses OpenCode-style identity: Git remote hash, then cached repo ID, then root commit; non-Git folders use the shared `global` identity.
 - `settingsPath` may still validate for old configs but is not used by the runtime state store.
 - Background runtime files are stored beside the selected config as `.opencode-remote/gateway.pid` and `.opencode-remote/gateway.log` by default.
+- Login startup entries are user-level and project-folder scoped: macOS LaunchAgents, Linux systemd user services, and Windows Scheduled Tasks run `opencode-remote start` from the selected project folder at user login.
 - Voice mode is disabled by default. If enabled, startup requires `ffmpeg`; setup can offer a detected package-manager install and otherwise waits while the user installs `ffmpeg` in another terminal.
 - `voice.groqApiKey` is required for live voice transcription and must stay in private config.
 - Generated voice files are cache under the app-data `cache/voice` directory and are removable with `opencode-remote cache clear`.
@@ -301,6 +304,7 @@ Current test priorities:
 - Central command definitions and help rendering.
 - Telegram allowlist rejection.
 - OpenCode server manager reachability/auto-start behavior.
+- User-level login startup entry creation, removal, and status.
 - OpenCode client prompt shape, file attachments, and response unwrapping.
 - OpenCode permission event normalization and permission response payloads.
 - Gateway controller session creation, selection, prompt routing, and stop behavior.

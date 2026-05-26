@@ -3,10 +3,13 @@ import { describe, expect, test, vi } from "vitest"
 import { createGatewayProgram } from "../../src/bin/program.js"
 
 describe("opencode-remote CLI program", () => {
-  test("reports the package release version", () => {
+  test("reports the package release version", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    )
     const program = createGatewayProgram()
 
-    expect(program.version()).toBe("0.4.0")
+    expect(program.version()).toBe(packageJson.version)
   })
 
   test("run command loads or creates config before starting the gateway", async () => {
@@ -17,7 +20,7 @@ describe("opencode-remote CLI program", () => {
 
     await program.parseAsync(["node", "opencode-remote", "run"])
 
-    expect(loadOrCreateConfig).toHaveBeenCalled()
+    expect(loadOrCreateConfig).toHaveBeenCalledWith({ afterCreate: expect.any(Function) })
     expect(runGateway).toHaveBeenCalledWith({ config })
   })
 
@@ -29,7 +32,37 @@ describe("opencode-remote CLI program", () => {
 
     await program.parseAsync(["node", "opencode-remote", "run", "--state-suffix", "dev"])
 
+    expect(loadOrCreateConfig).toHaveBeenCalledWith({ afterCreate: expect.any(Function) })
     expect(runGateway).toHaveBeenCalledWith({ config, stateSuffix: "dev" })
+  })
+
+  test("run command enables login startup when automatic setup requested it", async () => {
+    const config = testConfig()
+    const loadOrCreateConfig = vi.fn(async ({ afterCreate }) => {
+      await afterCreate({ config, startup: { enabled: true } })
+      return config
+    })
+    const enableGatewayStartup = vi.fn(async () => ({
+      status: "enabled",
+      cwd: "/project",
+      entryPath: "/startup-entry",
+    }))
+    const runGateway = vi.fn(async () => undefined)
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({
+      loadOrCreateConfig,
+      enableGatewayStartup,
+      runGateway,
+      output,
+    })
+
+    await program.parseAsync(["node", "opencode-remote", "run"])
+
+    expect(enableGatewayStartup).toHaveBeenCalledWith({ config })
+    expect(output.write).toHaveBeenCalledWith(
+      "Login startup enabled for /project. Entry: /startup-entry\n",
+    )
+    expect(runGateway).toHaveBeenCalledWith({ config })
   })
 
   test("dev script uses an isolated state DB suffix", async () => {
@@ -67,9 +100,32 @@ describe("opencode-remote CLI program", () => {
 
     await program.parseAsync(["node", "opencode-remote", "setup"])
 
-    expect(createConfig).toHaveBeenCalled()
+    expect(createConfig).toHaveBeenCalledWith({ afterCreate: expect.any(Function) })
     expect(runGateway).not.toHaveBeenCalled()
     expect(output.write).toHaveBeenCalledWith(`Config ready: ${config.configPath}\n`)
+  })
+
+  test("setup command enables login startup when setup requested it", async () => {
+    const config = testConfig()
+    const createConfig = vi.fn(async ({ afterCreate }) => {
+      await afterCreate({ config, startup: { enabled: true } })
+      return config
+    })
+    const enableGatewayStartup = vi.fn(async () => ({
+      status: "enabled",
+      cwd: "/project",
+      entryPath: "/startup-entry",
+    }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ createConfig, enableGatewayStartup, output })
+
+    await program.parseAsync(["node", "opencode-remote", "setup"])
+
+    expect(enableGatewayStartup).toHaveBeenCalledWith({ config })
+    expect(output.write).toHaveBeenCalledWith(`Config ready: ${config.configPath}\n`)
+    expect(output.write).toHaveBeenCalledWith(
+      "Login startup enabled for /project. Entry: /startup-entry\n",
+    )
   })
 
   test("start command loads or creates config before starting in background", async () => {
@@ -89,7 +145,7 @@ describe("opencode-remote CLI program", () => {
 
     await program.parseAsync(["node", "opencode-remote", "start"])
 
-    expect(loadOrCreateConfig).toHaveBeenCalled()
+    expect(loadOrCreateConfig).toHaveBeenCalledWith({ afterCreate: expect.any(Function) })
     expect(startGatewayInBackground).toHaveBeenCalledWith({ config })
     expect(output.write).toHaveBeenCalledWith(
       "Gateway started in background (PID 1234). Logs: .opencode-remote/gateway.log\n",
@@ -147,6 +203,63 @@ describe("opencode-remote CLI program", () => {
 
     expect(output.write).toHaveBeenCalledWith(
       "Gateway is running (PID 4444). Logs: .opencode-remote/gateway.log\n",
+    )
+  })
+
+  test("startup enable loads config and enables login startup", async () => {
+    const config = testConfig()
+    const loadConfig = vi.fn(async () => config)
+    const enableGatewayStartup = vi.fn(async () => ({
+      status: "enabled",
+      cwd: "/project",
+      entryPath: "/startup-entry",
+    }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ loadConfig, enableGatewayStartup, output })
+
+    await program.parseAsync(["node", "opencode-remote", "startup", "enable"])
+
+    expect(loadConfig).toHaveBeenCalled()
+    expect(enableGatewayStartup).toHaveBeenCalledWith({ config })
+    expect(output.write).toHaveBeenCalledWith(
+      "Login startup enabled for /project. Entry: /startup-entry\n",
+    )
+  })
+
+  test("startup disable loads config and disables login startup", async () => {
+    const config = testConfig()
+    const loadConfig = vi.fn(async () => config)
+    const disableGatewayStartup = vi.fn(async () => ({
+      status: "disabled",
+      entryPath: "/startup-entry",
+    }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ loadConfig, disableGatewayStartup, output })
+
+    await program.parseAsync(["node", "opencode-remote", "startup", "disable"])
+
+    expect(loadConfig).toHaveBeenCalled()
+    expect(disableGatewayStartup).toHaveBeenCalledWith({ config })
+    expect(output.write).toHaveBeenCalledWith("Login startup disabled. Entry: /startup-entry\n")
+  })
+
+  test("startup status reports enabled login startup", async () => {
+    const config = testConfig()
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({
+      loadConfig: vi.fn(async () => config),
+      getGatewayStartupStatus: vi.fn(async () => ({
+        status: "enabled",
+        cwd: "/project",
+        entryPath: "/startup-entry",
+      })),
+      output,
+    })
+
+    await program.parseAsync(["node", "opencode-remote", "startup", "status"])
+
+    expect(output.write).toHaveBeenCalledWith(
+      "Login startup is enabled for /project. Entry: /startup-entry\n",
     )
   })
 
