@@ -1,0 +1,9 @@
+minimumReleaseAgeExclude:
+  - '@babel/helper-string-parser@8.0.0-rc.6'
+  - '@babel/helper-validator-identifier@8.0.0-rc.6'
+  - '@babel/parser@8.0.0-rc.6'
+  - '@babel/types@8.0.0-rc.6'
+  - '@opencode-ai/sdk@1.15.10'
+  - semver@7.8.1
+  - tinyexec@1.2.2
+  - vite@8.0.14

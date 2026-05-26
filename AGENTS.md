@@ -9,7 +9,7 @@ AI operating guide for `opencode-remote`. Keep this file compact and current: it
 - Current state: text-first Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, and active-session persistence.
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
 - Runtime: Node.js `>=22.18.0`; Node.js 24 LTS recommended.
-- Package manager: pnpm.
+- Package manager: pnpm 11.3.0.
 - Language: JavaScript ESM.
 - Tests: Vitest.
 - Lint/format: Biome. Do not add ESLint or Prettier without a concrete need.

@@ -5,7 +5,7 @@ Development notes for `@crankshift/opencode-remote`.
 ## Prerequisites
 
 - Node.js 22.18.0 or newer. Node.js 24 LTS is recommended.
-- pnpm 10.11.0.
+- pnpm 11.3.0.
 
 ## Install Dependencies
 
@@ -14,6 +14,12 @@ pnpm install
 ```
 
 ## Run From Source
+
+Create the config interactively:
+
+```bash
+pnpm setup
+```
 
 Run the gateway from source:
 
@@ -27,7 +33,7 @@ Run in watch mode during development:
 pnpm dev
 ```
 
-`pnpm start` executes `src/bin/opencode-remote.js run` and uses the normal app-state database. `pnpm dev` runs the same gateway in watch mode with `--state-suffix dev`, so development state is stored in `opencode-remote-dev.db` instead of the production `opencode-remote.db`.
+`pnpm setup` executes `src/bin/opencode-remote.js setup` and replaces any existing gateway config. `pnpm start` executes `src/bin/opencode-remote.js run` and uses the normal app-state database. `pnpm dev` runs the same gateway in watch mode with `--state-suffix dev`, so development state is stored in `opencode-remote-dev.db` instead of the production `opencode-remote.db`. If no config exists, `pnpm dev` starts the same interactive setup flow before starting the gateway.
 
 ## App State Storage
 

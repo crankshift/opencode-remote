@@ -184,13 +184,13 @@ describe("loadOrCreateConfig", () => {
 })
 
 describe("createConfig", () => {
-  test("prompts before replacing an existing local config", async () => {
+  test("replaces an existing config without confirmation", async () => {
     const { cwd, homeDir } = await tempWorkspace()
     const existingPath = join(cwd, ".opencode-remote", "config.json")
     await writeConfig(existingPath, {
       telegram: { botToken: "old-token", allowedUserId: 111 },
     })
-    const confirmOverwrite = vi.fn(async () => true)
+    const confirmOverwrite = vi.fn(async () => false)
     const prompter = vi.fn(async () => ({
       scope: "local",
       config: {
@@ -200,34 +200,10 @@ describe("createConfig", () => {
 
     const config = await createConfig({ cwd, homeDir, prompter, confirmOverwrite })
 
-    expect(confirmOverwrite).toHaveBeenCalledWith(existingPath)
+    expect(confirmOverwrite).not.toHaveBeenCalled()
     expect(config.telegram).toEqual({ botToken: "new-token", allowedUserId: 222 })
     await expect(readJson(existingPath)).resolves.toMatchObject({
       telegram: { botToken: "new-token", allowedUserId: 222 },
-    })
-  })
-
-  test("keeps an existing config when overwrite is declined", async () => {
-    const { cwd, homeDir } = await tempWorkspace()
-    const existingPath = join(cwd, ".opencode-remote", "config.json")
-    await writeConfig(existingPath, {
-      telegram: { botToken: "old-token", allowedUserId: 333 },
-    })
-    const confirmOverwrite = vi.fn(async () => false)
-    const prompter = vi.fn(async () => ({
-      scope: "local",
-      config: {
-        telegram: { botToken: "new-token", allowedUserId: 444 },
-      },
-    }))
-
-    const config = await createConfig({ cwd, homeDir, prompter, confirmOverwrite })
-
-    expect(confirmOverwrite).toHaveBeenCalledWith(existingPath)
-    expect(prompter).not.toHaveBeenCalled()
-    expect(config.telegram).toEqual({ botToken: "old-token", allowedUserId: 333 })
-    await expect(readJson(existingPath)).resolves.toMatchObject({
-      telegram: { botToken: "old-token", allowedUserId: 333 },
     })
   })
 })

@@ -1,7 +1,7 @@
 {
   "name": "@crankshift/opencode-remote",
   "description": "A messenger-based chat interface for OpenCode, starting with Telegram.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,8 +30,9 @@
   "engines": {
     "node": ">=22.18.0"
   },
-  "packageManager": "pnpm@10.11.0",
+  "packageManager": "pnpm@11.3.0",
   "scripts": {
+    "setup": "node src/bin/opencode-remote.js setup",
     "start": "node src/bin/opencode-remote.js run",
     "dev": "node --watch src/bin/opencode-remote.js run --state-suffix dev",
     "build": "tsdown",

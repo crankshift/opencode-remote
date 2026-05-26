@@ -2,11 +2,13 @@
 
 This project follows Semantic Versioning.
 
-## Unreleased
+## [0.3.2] - 2026-05-26
 
 ### Changed
 
 - Changed interactive setup choices to show all options in a highlighted arrow-key list.
+- Changed explicit setup to replace existing config without an extra overwrite prompt.
+- Raised the pinned pnpm version to 11.3.0 so `pnpm setup` runs the project setup script.
 
 ## [0.3.1] - 2026-05-25
 

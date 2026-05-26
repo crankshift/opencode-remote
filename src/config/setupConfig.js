@@ -23,29 +23,14 @@ export async function loadOrCreateConfig({
     }
   }
 
-  return createConfig({ cwd, homeDir, prompter, skipExistingCheck: true })
+  return createConfig({ cwd, homeDir, prompter })
 }
 
 export async function createConfig({
   cwd = process.cwd(),
   homeDir,
   prompter = promptForConfig,
-  confirmOverwrite = confirmOverwriteConfig,
-  skipExistingCheck = false,
 } = {}) {
-  if (!skipExistingCheck) {
-    try {
-      const existingConfig = await loadConfig({ cwd, homeDir })
-      if (!(await confirmOverwrite(existingConfig.configPath))) {
-        return existingConfig
-      }
-    } catch (error) {
-      if (error?.code !== "missing_config") {
-        throw error
-      }
-    }
-  }
-
   const paths = getConfigPaths({ cwd, homeDir })
   const answers = await prompter(paths)
   return writePromptedConfig({ answers, paths, cwd })
@@ -61,23 +46,11 @@ async function writePromptedConfig({ answers, paths, cwd }) {
   return config
 }
 
-export async function confirmOverwriteConfig(configPath) {
-  const rl = createInterface({ input: defaultInput, output: defaultOutput })
-
-  try {
-    return askBoolean(rl, `Config already exists at ${configPath}. Replace it`, false, {
-      output: defaultOutput,
-    })
-  } finally {
-    rl.close()
-  }
-}
-
 export async function promptForConfig(
   _paths,
   { input = defaultInput, output = defaultOutput } = {},
 ) {
-  output.write("No OpenCode Remote config found. Let's create one.\n")
+  output.write("Let's create OpenCode Remote config.\n")
   const rl = createInterface({ input, output })
 
   try {
@@ -139,23 +112,6 @@ async function askInteger(rl, label) {
       return value
     }
     rl.output.write(`${label} must be a positive integer.\n`)
-  }
-}
-
-async function askBoolean(rl, label, defaultValue, { output = defaultOutput } = {}) {
-  const suffix = defaultValue ? "Y/n" : "y/N"
-  while (true) {
-    const value = (await rl.question(`${label} (${suffix}): `)).trim().toLowerCase()
-    if (!value) {
-      return defaultValue
-    }
-    if (["y", "yes", "true"].includes(value)) {
-      return true
-    }
-    if (["n", "no", "false"].includes(value)) {
-      return false
-    }
-    output.write("Answer yes or no.\n")
   }
 }
 

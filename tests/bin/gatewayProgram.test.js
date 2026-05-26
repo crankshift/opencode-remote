@@ -42,6 +42,22 @@ describe("opencode-remote CLI program", () => {
     )
   })
 
+  test("setup script runs the source setup command", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    )
+
+    expect(packageJson.scripts.setup).toBe("node src/bin/opencode-remote.js setup")
+  })
+
+  test("package manager version supports setup script shorthand", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    )
+
+    expect(packageJson.packageManager).toMatch(/^pnpm@11\./)
+  })
+
   test("setup command creates config without starting the gateway", async () => {
     const config = testConfig()
     const createConfig = vi.fn(async () => config)
