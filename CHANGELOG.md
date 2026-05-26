@@ -2,6 +2,12 @@
 
 This project follows Semantic Versioning.
 
+## [0.5.3] - 2026-05-26
+
+### Added
+
+- Added user-level login startup setup and `opencode-remote startup enable|disable|status` commands for project-folder scoped gateway autostart.
+
 ## [0.5.2] - 2026-05-26
 
 ### Fixed

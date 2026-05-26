@@ -46,7 +46,7 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, and optional voice mode. If a config already exists at the chosen location, setup shows current values and pressing Enter with no input keeps them; secret values are shown only as set. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, optional voice mode, and optional user-level login startup from the current project folder. If a config already exists at the chosen location, setup shows current values and pressing Enter with no input keeps them; secret values are shown only as set. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
 
 Config discovery order:
 
@@ -88,6 +88,22 @@ Stop the background gateway:
 ```bash
 opencode-remote stop
 ```
+
+Enable user-level login startup for this project folder:
+
+```bash
+cd /path/to/your/project
+opencode-remote startup enable
+```
+
+Check or disable login startup:
+
+```bash
+opencode-remote startup status
+opencode-remote startup disable
+```
+
+Login startup is scoped to the selected config and current project folder. It creates a macOS LaunchAgent, Linux systemd user service, or Windows Scheduled Task that runs `opencode-remote start` when you log in.
 
 ## Configuration
 
