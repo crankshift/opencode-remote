@@ -8,7 +8,11 @@ export class GatewayOpenCodeError extends Error {
   }
 }
 
-export function createOpenCodeClient({ apiUrl, sdkClient = null } = {}) {
+export function createOpenCodeClient({
+  apiUrl,
+  sdkClient = null,
+  fetchImpl = globalThis.fetch,
+} = {}) {
   const client =
     sdkClient ??
     createOpencodeClient({
@@ -35,7 +39,7 @@ export function createOpenCodeClient({ apiUrl, sdkClient = null } = {}) {
     },
 
     async sendPrompt(sessionId, prompt, options = {}) {
-      const progressStream = await startPromptProgressStream(client, sessionId, options.onProgress)
+      const progressStream = await startPromptEventStream(client, sessionId, options)
       try {
         const response = toData(
           await client.session.prompt({
@@ -53,6 +57,38 @@ export function createOpenCodeClient({ apiUrl, sdkClient = null } = {}) {
       }
     },
 
+    async respondToPermission(sessionId, permissionId, decision) {
+      const body = toPermissionResponseBody(decision)
+      try {
+        if (typeof client.postSessionByIdPermissionsByPermissionId === "function") {
+          return toData(
+            await client.postSessionByIdPermissionsByPermissionId({
+              path: { id: sessionId, permissionId },
+              body,
+            }),
+          )
+        }
+        if (typeof fetchImpl !== "function" || !apiUrl) {
+          throw new Error("OpenCode permission API is not available")
+        }
+
+        const response = await fetchImpl(
+          `${apiUrl.replace(/\/$/u, "")}/session/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(permissionId)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        )
+        if (!response.ok) {
+          throw new Error(`OpenCode permission API returned ${response.status}`)
+        }
+        return response.json()
+      } catch (error) {
+        throw new GatewayOpenCodeError("Could not respond to OpenCode permission request", error)
+      }
+    },
+
     async stopSession(sessionId) {
       try {
         return toData(
@@ -67,8 +103,9 @@ export function createOpenCodeClient({ apiUrl, sdkClient = null } = {}) {
   }
 }
 
-async function startPromptProgressStream(client, sessionId, onProgress) {
-  if (typeof onProgress !== "function") {
+async function startPromptEventStream(client, sessionId, options = {}) {
+  const { onProgress, onSystemEvent } = options
+  if (typeof onProgress !== "function" && typeof onSystemEvent !== "function") {
     return noopProgressStream()
   }
 
@@ -83,7 +120,7 @@ async function startPromptProgressStream(client, sessionId, onProgress) {
   }
 
   let stopped = false
-  let activeProgress = Promise.resolve()
+  let activeCallback = Promise.resolve()
   const done = (async () => {
     try {
       for await (const event of eventStream.stream) {
@@ -91,11 +128,16 @@ async function startPromptProgressStream(client, sessionId, onProgress) {
           break
         }
         const progress = normalizeOpenCodeProgressEvent(event, sessionId)
-        if (!progress) {
-          continue
+        if (progress && typeof onProgress === "function") {
+          activeCallback = runEventCallback(onProgress, progress)
+          await activeCallback
         }
-        activeProgress = runProgressCallback(onProgress, progress)
-        await activeProgress
+
+        const systemEvent = normalizeOpenCodeSystemEvent(event, sessionId)
+        if (systemEvent && typeof onSystemEvent === "function") {
+          activeCallback = runEventCallback(onSystemEvent, systemEvent)
+          await activeCallback
+        }
       }
     } catch {
       // Event streaming is best-effort for prompt progress.
@@ -106,7 +148,7 @@ async function startPromptProgressStream(client, sessionId, onProgress) {
     async stop() {
       stopped = true
       eventStream.abort()
-      await activeProgress
+      await activeCallback
       await Promise.race([done, Promise.resolve()])
     },
   }
@@ -140,9 +182,9 @@ async function openEventStream(client) {
   return null
 }
 
-async function runProgressCallback(onProgress, progress) {
+async function runEventCallback(callback, event) {
   try {
-    await onProgress(progress)
+    await callback(event)
   } catch {
     // Progress is best-effort; prompt delivery should not depend on rendering.
   }
@@ -189,6 +231,74 @@ function normalizeOpenCodeProgressEvent(event, expectedSessionId) {
     progress.metadata = metadata
   }
   return progress
+}
+
+function normalizeOpenCodeSystemEvent(event, expectedSessionId) {
+  return normalizeOpenCodePermissionEvent(event, expectedSessionId)
+}
+
+function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
+  if (event?.type !== "permission.updated") {
+    return null
+  }
+
+  const properties = event.properties ?? {}
+  const permission = properties.permission ?? properties.info ?? properties.request ?? properties
+  const sessionId = firstString(
+    permission.sessionID,
+    permission.sessionId,
+    properties.sessionID,
+    properties.sessionId,
+    permission.session?.id,
+    properties.session?.id,
+  )
+  if (sessionId && sessionId !== expectedSessionId) {
+    return null
+  }
+
+  const permissionId = firstString(
+    permission.permissionID,
+    permission.permissionId,
+    permission.id,
+    properties.permissionID,
+    properties.permissionId,
+    properties.id,
+  )
+  if (!permissionId) {
+    return null
+  }
+
+  const metadata = permission.metadata ?? properties.metadata
+  const systemEvent = {
+    type: "permission.requested",
+    sessionId: sessionId ?? expectedSessionId,
+    permissionId,
+    title: firstString(permission.title, properties.title) ?? "OpenCode permission request",
+  }
+
+  const description = firstString(
+    permission.description,
+    permission.message,
+    properties.description,
+    properties.message,
+  )
+  if (description) {
+    systemEvent.description = description
+  }
+
+  const tool = firstString(
+    permission.tool,
+    permission.toolName,
+    properties.tool,
+    properties.toolName,
+  )
+  if (tool) {
+    systemEvent.tool = tool
+  }
+  if (metadata !== undefined) {
+    systemEvent.metadata = metadata
+  }
+  return systemEvent
 }
 
 function extractToolTitle(part, input, metadata, tool) {
@@ -251,6 +361,19 @@ function toData(result) {
     return result.data
   }
   return result
+}
+
+function toPermissionResponseBody(decision) {
+  switch (decision) {
+    case "once":
+      return { response: "accept", remember: false }
+    case "always":
+      return { response: "accept", remember: true }
+    case "reject":
+      return { response: "deny", remember: false }
+    default:
+      throw new Error(`Invalid permission decision: ${decision}`)
+  }
 }
 
 function extractText(response) {

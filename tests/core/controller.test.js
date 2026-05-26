@@ -95,6 +95,18 @@ describe("gatewayController", () => {
     expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello", options)
   })
 
+  test("passes permission decisions to OpenCode", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    const opencode = {
+      respondToPermission: vi.fn(async () => true),
+    }
+    const controller = createGatewayController({ opencode, store })
+
+    await expect(controller.respondToPermission("ses_1", "perm_1", "always")).resolves.toBe(true)
+
+    expect(opencode.respondToPermission).toHaveBeenCalledWith("ses_1", "perm_1", "always")
+  })
+
   test("creates a session before first prompt when none is active", async () => {
     const store = createStore()
     const opencode = {

@@ -6,7 +6,7 @@ AI operating guide for `opencode-remote`. Keep this file compact and current: it
 
 - Package: `@crankshift/opencode-remote`, CLI bin `opencode-remote`.
 - Product: local-first messenger gateway for OpenCode. Telegram is the first adapter.
-- Current state: Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, opt-in voice mode, and active-session persistence.
+- Current state: Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, permission approval buttons, opt-in voice mode, and active-session persistence.
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
 - Runtime: Node.js `>=22.18.0`; Node.js 24 LTS recommended.
 - Package manager: pnpm 11.3.0.
@@ -27,6 +27,7 @@ Implemented now:
 - Single authorized Telegram user configured in `.opencode-remote/config.json`.
 - OpenCode server reachability check and optional local `opencode serve` auto-start.
 - OpenCode session create/list/select, prompt sending, and active-session abort.
+- OpenCode permission requests are surfaced to Telegram with text-only inline buttons for allow once, always allow, and deny.
 - Auto-create an OpenCode session before the first prompt when no active session is selected.
 - JSON config discovery from project-local `.opencode-remote/config.json`, then global `~/.opencode-remote/config.json`.
 - Interactive CLI config setup when no JSON config exists, with selected-scope current defaults, highlighted arrow-key lists for choice prompts, and `ffmpeg` install/retry handling for voice setup.
@@ -40,7 +41,7 @@ Implemented now:
 - Telegram single-photo and photo-album prompts. Albums are grouped by `media_group_id` with a short debounce.
 - Telegram photos are downloaded to temp files, sent as OpenCode file prompt parts, then cleaned up.
 - Optional Telegram voice mode with Groq Whisper transcription, Edge TTS replies, and `ffmpeg` MP3-to-OGG/Opus conversion for Telegram voice notes.
-- `/voice` command for status, on/off/all modes, country-code-filtered paged voice listing, voice selection, and test voice notes.
+- `/voice` command for status, on/off/all modes, country/locale-filtered paged voice listing, voice selection, and test voice notes.
 - CLI `opencode-remote config set` for individual JSON config keys and `opencode-remote cache clear` for generated voice files.
 - Publishable npm package output is built to `dist/` with `tsdown`.
 - Public CLI bin is `opencode-remote`.
@@ -51,7 +52,6 @@ Implemented now:
 Not implemented yet:
 
 - Model/provider switching from Telegram.
-- Permission approval callbacks.
 - OpenCode project/worktree switching from Telegram.
 - Signal or other messenger adapters.
 - Telegram webhooks, HTTP admin server, health checks, metrics, or browser UI.
@@ -130,6 +130,17 @@ Telegram text
   -> adapter strips hidden reaction marker
   -> adapter sends text, or voice-only in /voice all with text fallback on voice failure
   -> optional final emoji reaction
+```
+
+Permission request during a prompt:
+
+```text
+OpenCode permission.updated event
+  -> core normalizes a permission.requested system event
+  -> Telegram adapter sends a text-only permission message with bounded callback tokens
+  -> user taps Allow once, Always allow, or Deny
+  -> controller calls OpenCode permission response API
+  -> original prompt continues or is denied by OpenCode
 ```
 
 Session selection:
@@ -245,6 +256,7 @@ Rules:
 - Current SDK client uses `createOpencodeClient({ baseUrl: apiUrl, responseStyle: "data", throwOnError: true })`.
 - Text prompts are sent as `{ parts: [{ type: "text", text }] }`.
 - Attachments are sent before text as `{ type: "file", mime, url }` prompt parts.
+- Permission events are normalized from `permission.updated`; responses use OpenCode's `/session/:id/permissions/:permissionID` API with `accept`/`deny` and `remember`.
 - Responses are normalized to visible text from text parts, with fallback `OpenCode returned no text response.`.
 - Wrap OpenCode failures in safe `GatewayOpenCodeError` messages.
 - Before changing SDK shapes, permissions, models, projects, events, or SSE behavior, fetch current OpenCode SDK/API docs with Context7 or official docs.
@@ -255,6 +267,7 @@ Rules:
 - Reaction API calls are best-effort warnings. They must not block prompt delivery.
 - `replyAndRemember` stores bot replies for reaction feedback. Use it for bot messages that should be remembered.
 - Session inline callback data uses short tokens, not raw long session IDs.
+- Permission inline callback data uses short bounded tokens and must remain text-only, not voice replies.
 - Photo downloads must not expose bot tokens in persisted attachment URLs.
 - Always clean up downloaded media files in `finally` or equivalent cleanup paths.
 - Keep Telegram UX in the adapter; do not move Telegram reactions, message IDs, or chat actions into core.
@@ -289,9 +302,11 @@ Current test priorities:
 - Telegram allowlist rejection.
 - OpenCode server manager reachability/auto-start behavior.
 - OpenCode client prompt shape, file attachments, and response unwrapping.
+- OpenCode permission event normalization and permission response payloads.
 - Gateway controller session creation, selection, prompt routing, and stop behavior.
 - SQLite app-state persistence and project identity resolution.
 - Telegram text prompt typing/reaction behavior.
+- Telegram permission request buttons and callback decisions.
 - Hidden Telegram reaction marker stripping.
 - User reaction feedback prompts.
 - Photo download, caption fallback, album grouping, and cleanup.

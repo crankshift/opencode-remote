@@ -9,6 +9,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - Local or remote OpenCode server connection configured with `opencode.apiUrl`.
 - Optional local OpenCode startup with `opencode.autoStart=true`.
 - OpenCode session creation, listing, switching, prompt sending, and stop requests.
+- OpenCode permission requests surfaced in Telegram with inline approve/deny buttons.
 - Editable Telegram activity messages showing OpenCode tool and skill usage during prompts.
 - Telegram-safe response chunking for long assistant replies.
 - Published npm CLI package with the `opencode-remote` bin built to `dist/` with `tsdown`.
@@ -25,12 +26,13 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - `/sessions` lists recent OpenCode sessions and lets the user switch with inline buttons.
 - `/stop` requests abort for the active OpenCode session.
 - `/progress` shows or sets prompt activity visibility: `off`, `new`, `all`, or `verbose`.
-- `/voice` shows and controls voice mode, lists voices by required short country/language code, sets the active Edge TTS voice, and sends a test voice note.
+- `/voice` shows and controls voice mode, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
 - Non-command text from the authorized user is sent to OpenCode as a prompt.
 - The bot shows Telegram typing activity while a prompt is running.
 - The bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt.
+- OpenCode permission requests are sent as text with `Allow once`, `Always allow`, and `Deny` buttons, even when voice replies are enabled.
 - Incoming text prompts get a temporary eye reaction while processing.
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
@@ -56,7 +58,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 
 - Voice mode is disabled by default.
 - Groq Whisper uses `whisper-large-v3-turbo` by default for transcription.
-- `/voice list <countryCode> [page]` pages Edge TTS voices for a required short code such as `en` or `uk`.
+- `/voice list <countryCode|locale> [page]` pages Edge TTS voices for a required country code such as `ua` or `us`, or a full locale such as `uk-UA`.
 - Edge TTS voice short names such as `en-US-AndrewNeural` and `uk-UA-OstapNeural` can be selected with `/voice set`.
 - `ffmpeg` is required only when voice mode is enabled.
 - Generated MP3/OGG files are treated as disposable app-data cache.
@@ -72,7 +74,6 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 ## Not Available Yet
 
 - OpenCode model switching from Telegram.
-- OpenCode permission approval callbacks.
 - Signal or other messenger adapters.
 
 See `TODO.md` for the current development roadmap.

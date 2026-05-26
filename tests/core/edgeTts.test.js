@@ -46,6 +46,43 @@ describe("edgeTts", () => {
     })
   })
 
+  test("lists voices by country region before language", async () => {
+    const voices = [
+      {
+        ShortName: "es-AR-ElenaNeural",
+        Locale: "es-AR",
+        Language: "es",
+        Gender: "Female",
+        FriendlyName: "Microsoft Elena Online - Spanish (Argentina)",
+      },
+      {
+        ShortName: "ar-SA-HamedNeural",
+        Locale: "ar-SA",
+        Language: "ar",
+        Gender: "Male",
+        FriendlyName: "Microsoft Hamed Online - Arabic (Saudi Arabia)",
+      },
+    ]
+
+    const result = await listEdgeTtsVoices({
+      locale: "ar",
+      listVoices: async () => voices,
+    })
+
+    expect(result.voices).toEqual([voices[0]])
+    expect(result.total).toBe(1)
+  })
+
+  test("lists Ukrainian voices by Ukraine country code", async () => {
+    const result = await listEdgeTtsVoices({
+      locale: "ua",
+      listVoices: async () => sampleVoices,
+    })
+
+    expect(result.voices).toEqual([sampleVoices[2]])
+    expect(result.total).toBe(1)
+  })
+
   test("paginates long voice lists", async () => {
     const voices = Array.from({ length: 25 }, (_, index) => ({
       ShortName: `en-US-Test${index}Neural`,

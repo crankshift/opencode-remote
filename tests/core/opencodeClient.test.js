@@ -149,6 +149,59 @@ describe("createOpenCodeClient", () => {
     expect(subscribeSignal.aborted).toBe(true)
   })
 
+  test("streams normalized permission requests while a prompt is running", async () => {
+    const stream = createEventStream([
+      {
+        type: "permission.updated",
+        properties: {
+          sessionID: "ses_1",
+          permissionID: "perm_1",
+          title: "Run shell command",
+          description: "pnpm test",
+          tool: "bash",
+          metadata: { command: "pnpm test" },
+        },
+      },
+    ])
+    const onSystemEvent = vi.fn()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        prompt: vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          return { parts: [{ type: "text", text: "answer" }] }
+        }),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(client.sendPrompt("ses_1", "hello", { onSystemEvent })).resolves.toBe("answer")
+
+    expect(onSystemEvent).toHaveBeenCalledWith({
+      type: "permission.requested",
+      sessionId: "ses_1",
+      permissionId: "perm_1",
+      title: "Run shell command",
+      description: "pnpm test",
+      tool: "bash",
+      metadata: { command: "pnpm test" },
+    })
+  })
+
+  test("responds to permission requests with OpenCode API payloads", async () => {
+    const sdkClient = {
+      postSessionByIdPermissionsByPermissionId: vi.fn(async () => true),
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(client.respondToPermission("ses_1", "perm_1", "always")).resolves.toBe(true)
+
+    expect(sdkClient.postSessionByIdPermissionsByPermissionId).toHaveBeenCalledWith({
+      path: { id: "ses_1", permissionId: "perm_1" },
+      body: { response: "accept", remember: true },
+    })
+  })
+
   test("falls back to event.list when event.subscribe fails", async () => {
     const stream = createEventStream([
       {

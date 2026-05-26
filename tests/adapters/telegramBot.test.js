@@ -200,10 +200,10 @@ describe("createTelegramBot", () => {
       listVoices: vi.fn(async () => ({
         voices: [
           {
-            ShortName: "en-US-AndrewNeural",
-            Locale: "en-US",
+            ShortName: "uk-UA-OstapNeural",
+            Locale: "uk-UA",
             Gender: "Male",
-            FriendlyName: "Microsoft Andrew Online",
+            FriendlyName: "Microsoft Ostap Online",
           },
         ],
         page: 2,
@@ -221,22 +221,22 @@ describe("createTelegramBot", () => {
     })
     const reply = vi.fn(async () => undefined)
 
-    await bot.commands.get("voice")({ message: { text: "/voice list en 2" }, reply })
+    await bot.commands.get("voice")({ message: { text: "/voice list ua 2" }, reply })
 
     expect(voiceService.listVoices).toHaveBeenCalledWith({
-      locale: "en",
+      locale: "ua",
       page: 2,
       pageSize: 20,
     })
     expect(reply).toHaveBeenCalledWith(
       [
         "Voices page 2/3 (21 total):",
-        "en-US-AndrewNeural - en-US, Male - Microsoft Andrew Online",
+        "uk-UA-OstapNeural - uk-UA, Male - Microsoft Ostap Online",
       ].join("\n"),
     )
   })
 
-  test("voice list command requires a country code", async () => {
+  test("voice list command requires a country or locale filter", async () => {
     const voiceService = {
       listVoices: vi.fn(async () => ({ voices: [], page: 1, totalPages: 1, total: 0 })),
     }
@@ -253,7 +253,7 @@ describe("createTelegramBot", () => {
     await bot.commands.get("voice")({ message: { text: "/voice list" }, reply })
 
     expect(voiceService.listVoices).not.toHaveBeenCalled()
-    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode> [page].")
+    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode|locale> [page].")
   })
 
   test("voice list command rejects unsupported filters", async () => {
@@ -273,12 +273,24 @@ describe("createTelegramBot", () => {
     await bot.commands.get("voice")({ message: { text: "/voice list en male 2" }, reply })
 
     expect(voiceService.listVoices).not.toHaveBeenCalled()
-    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode> [page].")
+    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode|locale> [page].")
   })
 
-  test("voice list command rejects full locale codes", async () => {
+  test("voice list command accepts full locale codes", async () => {
     const voiceService = {
-      listVoices: vi.fn(async () => ({ voices: [], page: 1, totalPages: 1, total: 0 })),
+      listVoices: vi.fn(async () => ({
+        voices: [
+          {
+            ShortName: "en-US-AndrewNeural",
+            Locale: "en-US",
+            Gender: "Male",
+            FriendlyName: "Microsoft Andrew Online",
+          },
+        ],
+        page: 1,
+        totalPages: 1,
+        total: 1,
+      })),
     }
     const bot = createTelegramBot({
       token: "token",
@@ -292,8 +304,17 @@ describe("createTelegramBot", () => {
 
     await bot.commands.get("voice")({ message: { text: "/voice list en-US" }, reply })
 
-    expect(voiceService.listVoices).not.toHaveBeenCalled()
-    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode> [page].")
+    expect(voiceService.listVoices).toHaveBeenCalledWith({
+      locale: "en-us",
+      page: 1,
+      pageSize: 20,
+    })
+    expect(reply).toHaveBeenCalledWith(
+      [
+        "Voices page 1/1 (1 total):",
+        "en-US-AndrewNeural - en-US, Male - Microsoft Andrew Online",
+      ].join("\n"),
+    )
   })
 
   test("voice set validates and persists selected voice", async () => {
@@ -539,6 +560,132 @@ describe("createTelegramBot", () => {
       ctx: expect.objectContaining({ reply }),
       filePath: "/cache/reply.ogg",
     })
+  })
+
+  test("permission requests are sent as text with approval buttons in voice mode", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        if (typeof options?.onSystemEvent === "function") {
+          await options.onSystemEvent({
+            type: "permission.requested",
+            sessionId: "ses_1",
+            permissionId: "perm_1",
+            title: "Run shell command",
+            description: "pnpm test",
+            tool: "bash",
+          })
+        }
+        return "answer"
+      }),
+    }
+    const voiceService = {
+      shouldSpeak: vi.fn(() => true),
+      synthesizeTelegramVoice: vi.fn(async () => ({ filePath: "/cache/reply.ogg" })),
+    }
+    const sendVoice = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      voiceService,
+      sendVoice,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text, options) => ({
+      message_id: 11,
+      chat: { id: 456 },
+      text,
+      reply_markup: options?.reply_markup,
+    }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    const permissionCall = reply.mock.calls.find(([text]) =>
+      text.startsWith("OpenCode needs permission"),
+    )
+    expect(permissionCall[0]).toBe(
+      [
+        "OpenCode needs permission:",
+        "Run shell command",
+        "Tool: bash",
+        "pnpm test",
+        "",
+        "Choose how to respond:",
+      ].join("\n"),
+    )
+    const buttons = permissionCall[1].reply_markup.inline_keyboard.flat()
+    expect(buttons.map((button) => button.text)).toEqual(["Allow once", "Always allow", "Deny"])
+    expect(buttons.map((button) => button.callback_data)).toEqual([
+      "perm:once:0",
+      "perm:always:0",
+      "perm:reject:0",
+    ])
+    expect(voiceService.synthesizeTelegramVoice).toHaveBeenCalledWith("answer")
+    expect(voiceService.synthesizeTelegramVoice).not.toHaveBeenCalledWith(
+      expect.stringContaining("OpenCode needs permission"),
+    )
+    expect(sendVoice).toHaveBeenCalledWith({
+      ctx: expect.objectContaining({ reply }),
+      filePath: "/cache/reply.ogg",
+    })
+  })
+
+  test("permission callbacks send the selected decision to OpenCode", async () => {
+    let permissionCallbackData
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        if (typeof options?.onSystemEvent === "function") {
+          await options.onSystemEvent({
+            type: "permission.requested",
+            sessionId: "ses_1",
+            permissionId: "perm_1",
+            title: "Run shell command",
+          })
+        }
+        return "answer"
+      }),
+      respondToPermission: vi.fn(async () => true),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text, options) => {
+      if (text.startsWith("OpenCode needs permission")) {
+        permissionCallbackData = options.reply_markup.inline_keyboard[1][0].callback_data
+      }
+      return { message_id: 11, chat: { id: 456 }, text }
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    const handler = bot.callbackHandlers.find(({ pattern }) => pattern.test(permissionCallbackData))
+    expect(handler).toBeDefined()
+    await handler.handler({
+      match: permissionCallbackData.match(handler.pattern),
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(controller.respondToPermission).toHaveBeenCalledWith("ses_1", "perm_1", "always")
   })
 
   test("text prompts fall back to text when voice reply fails", async () => {

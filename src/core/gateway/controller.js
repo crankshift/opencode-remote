@@ -68,6 +68,10 @@ export function createGatewayController({ opencode, store, defaultProgressVerbos
       return opencode.sendPrompt(sessionId, prompt, options)
     },
 
+    async respondToPermission(sessionId, permissionId, decision) {
+      return opencode.respondToPermission(sessionId, permissionId, decision)
+    },
+
     async stop() {
       const settings = await store.read()
       if (!settings.activeSessionId) {

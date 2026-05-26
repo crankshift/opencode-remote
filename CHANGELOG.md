@@ -2,6 +2,16 @@
 
 This project follows Semantic Versioning.
 
+## [0.5.0] - 2026-05-26
+
+### Added
+
+- Added Telegram approval buttons for OpenCode permission requests, with text-only permission prompts in voice modes.
+
+### Changed
+
+- Changed `/voice list` short-code filtering to prefer Edge TTS country/region codes such as `ua` and to accept full locales such as `uk-UA`.
+
 ## [0.4.3] - 2026-05-26
 
 ### Changed

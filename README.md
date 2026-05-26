@@ -2,7 +2,7 @@
 
 OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, connects to your local or remote OpenCode server, and forwards messages from one authorized Telegram user to OpenCode sessions.
 
-This is a Telegram MVP with text prompts, photo prompts, and opt-in voice input/replies. Model switching, permission callbacks, and multi-messenger support are not implemented yet.
+This is a Telegram MVP with text prompts, photo prompts, OpenCode permission approvals, and opt-in voice input/replies. Model switching and multi-messenger support are not implemented yet.
 
 See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
 
@@ -153,6 +153,8 @@ The bot currently supports:
 
 Any non-command text message from the authorized Telegram user is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
 
+When OpenCode requests permission during a prompt, the bot sends a text message with `Allow once`, `Always allow`, and `Deny` buttons. Permission prompts are always text, including when `/voice on` or `/voice all` would make normal assistant replies voice-only.
+
 Telegram photo albums are handled as one OpenCode prompt when Telegram provides a shared `media_group_id`. The album caption becomes the prompt text. Separate text messages sent after an album are treated as separate prompts.
 
 Voice commands:
@@ -162,12 +164,12 @@ Voice commands:
 /voice on
 /voice off
 /voice all
-/voice list <countryCode> [page]
+/voice list <countryCode|locale> [page]
 /voice set <voiceShortName>
 /voice test
 ```
 
-`/voice list` requires a short country or language code such as `en` or `uk`, and page is optional. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only; if speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
+`/voice list` requires a short country code such as `ua` or `us`, or a full locale such as `uk-UA`; page is optional. Short codes match Edge TTS country/region codes first and fall back to language codes when no matching region exists. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only; if speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
 
 ## Troubleshooting
 

@@ -8,8 +8,10 @@ export async function listEdgeTtsVoices({
   pageSize = 20,
   listVoices = defaultListVoices,
 } = {}) {
-  const voices = (await listVoices()).filter((voice) => {
-    return matchesLocale(voice, locale) && matchesGender(voice, gender)
+  const allVoices = await listVoices()
+  const matchesRequestedLocale = createLocaleMatcher(allVoices, locale)
+  const voices = allVoices.filter((voice) => {
+    return matchesRequestedLocale(voice) && matchesGender(voice, gender)
   })
   const safePageSize = Math.max(1, Number(pageSize) || 20)
   const total = voices.length
@@ -70,19 +72,37 @@ async function defaultSynthesize({ text, voice, outputPath }) {
   await writeFile(outputPath, Buffer.concat(chunks))
 }
 
-function matchesLocale(voice, locale) {
+function createLocaleMatcher(voices, locale) {
   const requested = String(locale ?? "")
     .trim()
     .toLocaleLowerCase("en-US")
   if (!requested) {
-    return true
+    return () => true
   }
-  const voiceLocale = String(voice.Locale ?? "").toLocaleLowerCase("en-US")
-  const language = String(voice.Language ?? "").toLocaleLowerCase("en-US")
   if (requested.includes("-")) {
-    return voiceLocale === requested
+    return (voice) => normalizeLocale(voice.Locale) === requested
   }
-  return language === requested || voiceLocale.startsWith(`${requested}-`)
+
+  const regionExists =
+    requested.length === 2 && voices.some((voice) => localeRegion(voice.Locale) === requested)
+  if (regionExists) {
+    return (voice) => localeRegion(voice.Locale) === requested
+  }
+
+  return (voice) => {
+    const voiceLocale = normalizeLocale(voice.Locale)
+    const language = String(voice.Language ?? "").toLocaleLowerCase("en-US")
+    return language === requested || voiceLocale.startsWith(`${requested}-`)
+  }
+}
+
+function normalizeLocale(locale) {
+  return String(locale ?? "").toLocaleLowerCase("en-US")
+}
+
+function localeRegion(locale) {
+  const region = normalizeLocale(locale).split("-").at(-1) ?? ""
+  return /^[a-z]{2}$/u.test(region) ? region : ""
 }
 
 function matchesGender(voice, gender) {

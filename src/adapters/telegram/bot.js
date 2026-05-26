@@ -54,6 +54,7 @@ export function createTelegramBot({
   const bot = new botFactory(token)
   let fallbackProgressVerbosity = progressVerbosity
   const sessionSelectionTokens = new Map()
+  const permissionResponseTokens = createBoundedTokenStore(200)
   const botMessageMemory = createBotMessageMemory(200)
   const mediaGroupBuffer = createMediaGroupBuffer({
     waitMs: mediaGroupWaitMs,
@@ -136,6 +137,23 @@ export function createTelegramBot({
     await controller.selectSession(sessionId)
     await ctx.answerCallbackQuery({ text: "Session selected" })
     await replyAndRemember(ctx, `Selected session ${sessionId}`, botMessageMemory)
+  })
+
+  bot.callbackQuery(/^perm:(once|always|reject):(.+)$/u, async (ctx) => {
+    const decision = ctx.match[1]
+    const token = ctx.match[2]
+    const request = permissionResponseTokens.get(token)
+    if (!request) {
+      await ctx.answerCallbackQuery({ text: "Permission request expired" })
+      return
+    }
+
+    permissionResponseTokens.delete(token)
+    await controller.respondToPermission(request.sessionId, request.permissionId, decision)
+    await ctx.answerCallbackQuery({ text: formatPermissionDecisionAnswer(decision) })
+    if (ctx.reply) {
+      await ctx.reply(formatPermissionDecisionText(decision))
+    }
   })
 
   bot.command("stop", async (ctx) => {
@@ -234,6 +252,7 @@ export function createTelegramBot({
           formatReactionFeedbackPrompt(emoji, botMessage),
         ),
         progress,
+        ctx,
       )
       await progress.flush()
       const { visibleText } = parseTelegramReactionMarker(response, progress)
@@ -258,6 +277,7 @@ export function createTelegramBot({
       const response = await sendPromptWithProgress(
         formatPromptWithTelegramReactionInstruction(ctx.message.text),
         progress,
+        ctx,
       )
       await progress.flush()
       const parsedResponse = parseTelegramReactionMarker(response, progress)
@@ -320,6 +340,7 @@ export function createTelegramBot({
           attachments,
         }),
         progress,
+        ctx,
       )
       await progress.flush()
       const parsedResponse = parseTelegramReactionMarker(response, progress)
@@ -379,6 +400,7 @@ export function createTelegramBot({
       const response = await sendPromptWithProgress(
         formatPromptWithTelegramReactionInstruction(transcript),
         progress,
+        ctx,
       )
       await progress.flush()
       const parsedResponse = parseTelegramReactionMarker(response, progress)
@@ -421,11 +443,43 @@ export function createTelegramBot({
     })
   }
 
-  async function sendPromptWithProgress(prompt, progress) {
-    if (progress.promptOptions === undefined) {
+  async function sendPromptWithProgress(prompt, progress, ctx) {
+    const promptOptions = createPromptOptions(progress, ctx)
+    if (promptOptions === undefined) {
       return controller.sendPrompt(prompt)
     }
-    return controller.sendPrompt(prompt, progress.promptOptions)
+    return controller.sendPrompt(prompt, promptOptions)
+  }
+
+  function createPromptOptions(progress, ctx) {
+    if (!ctx) {
+      return progress.promptOptions
+    }
+    return {
+      ...(progress.promptOptions ?? {}),
+      onSystemEvent: (event) => handleSystemEvent(ctx, event),
+    }
+  }
+
+  async function handleSystemEvent(ctx, event) {
+    if (event?.type === "permission.requested") {
+      await sendPermissionRequest(ctx, event)
+    }
+  }
+
+  async function sendPermissionRequest(ctx, event) {
+    const token = permissionResponseTokens.add({
+      sessionId: event.sessionId,
+      permissionId: event.permissionId,
+    })
+    const keyboard = new InlineKeyboard()
+      .text("Allow once", `perm:once:${token}`)
+      .row()
+      .text("Always allow", `perm:always:${token}`)
+      .row()
+      .text("Deny", `perm:reject:${token}`)
+
+    await ctx.reply(formatPermissionRequest(event), { reply_markup: keyboard })
   }
 
   async function getActiveProgressVerbosity() {
@@ -441,6 +495,38 @@ export function createTelegramBot({
     }
     fallbackProgressVerbosity = progressVerbosity
     return { progressVerbosity }
+  }
+}
+
+function formatPermissionRequest(event) {
+  const lines = ["OpenCode needs permission:", event.title ?? "Permission request"]
+  if (event.tool) {
+    lines.push(`Tool: ${event.tool}`)
+  }
+  if (event.description) {
+    lines.push(event.description)
+  }
+  lines.push("", "Choose how to respond:")
+  return lines.join("\n")
+}
+
+function formatPermissionDecisionAnswer(decision) {
+  if (decision === "reject") {
+    return "Permission denied"
+  }
+  return "Permission approved"
+}
+
+function formatPermissionDecisionText(decision) {
+  switch (decision) {
+    case "once":
+      return "Approved this OpenCode permission request once."
+    case "always":
+      return "Approved this OpenCode permission request and asked OpenCode to remember it."
+    case "reject":
+      return "Denied this OpenCode permission request."
+    default:
+      return "Responded to this OpenCode permission request."
   }
 }
 
@@ -470,12 +556,12 @@ function parseVoiceListFilters(parts) {
   if (parts.length < 1 || parts.length > 2) {
     return null
   }
-  const countryCode = parts[0]?.toLocaleLowerCase("en-US")
+  const localeFilter = parts[0]?.toLocaleLowerCase("en-US")
   const page = parts[1] ?? "1"
-  if (!/^[a-z]{2,3}$/u.test(countryCode) || !/^\d+$/u.test(page)) {
+  if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/u.test(localeFilter) || !/^\d+$/u.test(page)) {
     return null
   }
-  return { locale: countryCode, page: Number(page), pageSize: 20 }
+  return { locale: localeFilter, page: Number(page), pageSize: 20 }
 }
 
 function formatVoiceStatus(status) {
@@ -508,7 +594,7 @@ function voiceUsageText() {
 }
 
 function voiceListUsageText() {
-  return "Use /voice list <countryCode> [page]."
+  return "Use /voice list <countryCode|locale> [page]."
 }
 
 function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs }) {
@@ -640,6 +726,31 @@ function formatSessionLabel(session) {
     return label
   }
   return `${label.slice(0, 61)}...`
+}
+
+function createBoundedTokenStore(limit) {
+  const values = new Map()
+  let nextToken = 0
+
+  return {
+    add(value) {
+      const token = String(nextToken)
+      nextToken += 1
+      values.set(token, value)
+      while (values.size > limit) {
+        values.delete(values.keys().next().value)
+      }
+      return token
+    },
+
+    get(token) {
+      return values.get(token)
+    },
+
+    delete(token) {
+      values.delete(token)
+    },
+  }
 }
 
 function createBotMessageMemory(limit) {
