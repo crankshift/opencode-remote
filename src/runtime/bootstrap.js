@@ -3,11 +3,14 @@ import {
   registerTelegramBotCommands as defaultRegisterTelegramBotCommands,
 } from "../adapters/telegram/bot.js"
 import { loadConfig } from "../config/loadConfig.js"
+import { setConfigValuesAtPath as defaultSetConfigValuesAtPath } from "../config/writeConfig.js"
 import { createGatewayController as defaultCreateGatewayController } from "../core/gateway/controller.js"
 import { createOpenCodeClient as defaultCreateOpenCodeClient } from "../core/opencode/client.js"
 import { ensureOpenCodeServer as defaultEnsureOpenCodeServer } from "../core/opencode/serverManager.js"
 import { resolveProjectIdentity as defaultResolveProjectIdentity } from "../core/state/projectIdentity.js"
 import { createProjectStateStore as defaultCreateProjectStateStore } from "../core/state/stateDb.js"
+import { assertFfmpegAvailable as defaultAssertFfmpegAvailable } from "../core/voice/audioConverter.js"
+import { createVoiceService as defaultCreateVoiceService } from "../core/voice/voiceService.js"
 import { createLogger } from "../utils/logger.js"
 
 export async function runGateway({
@@ -31,6 +34,13 @@ export async function runGateway({
   const createTelegramBot = dependencies.createTelegramBot ?? defaultCreateTelegramBot
   const registerTelegramBotCommands =
     dependencies.registerTelegramBotCommands ?? defaultRegisterTelegramBotCommands
+  const createVoiceService = dependencies.createVoiceService ?? defaultCreateVoiceService
+  const assertFfmpegAvailable = dependencies.assertFfmpegAvailable ?? defaultAssertFfmpegAvailable
+  const setConfigValuesAtPath = dependencies.setConfigValuesAtPath ?? defaultSetConfigValuesAtPath
+
+  if (resolvedConfig.voice.enabled && resolvedConfig.voice.mode !== "off") {
+    await assertFfmpegAvailable()
+  }
 
   const server = await ensureOpenCodeServer(resolvedConfig.opencode)
   const opencode = createOpenCodeClient({ apiUrl: resolvedConfig.opencode.apiUrl })
@@ -41,12 +51,26 @@ export async function runGateway({
     store,
     defaultProgressVerbosity: resolvedConfig.progressVerbosity,
   })
+  const voiceService = createVoiceService({
+    config: resolvedConfig.voice,
+    saveConfig: async (values) => {
+      if (!resolvedConfig.configPath) {
+        return
+      }
+      await setConfigValuesAtPath({
+        configPath: resolvedConfig.configPath,
+        cwd: resolvedConfig.opencode.workdir,
+        values: prefixVoiceConfigValues(values),
+      })
+    },
+  })
   const bot = createTelegramBot({
     token: resolvedConfig.telegram.botToken,
     allowedUserId: resolvedConfig.telegram.allowedUserId,
     controller,
     logger: resolvedLogger,
     progressVerbosity: resolvedConfig.progressVerbosity,
+    voiceService,
   })
 
   let stopping = false
@@ -68,4 +92,10 @@ export async function runGateway({
   await bot.start({
     allowed_updates: ["message", "callback_query", "message_reaction"],
   })
+}
+
+function prefixVoiceConfigValues(values) {
+  return Object.fromEntries(
+    Object.entries(values ?? {}).map(([key, value]) => [`voice.${key}`, value]),
+  )
 }

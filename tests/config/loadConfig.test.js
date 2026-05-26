@@ -45,8 +45,45 @@ describe("loadConfig", () => {
         workdir: cwd,
       },
       progressVerbosity: "verbose",
+      voice: {
+        enabled: false,
+        mode: "on",
+        voice: "en-US-AndrewNeural",
+        groqApiKey: null,
+        sttModel: "whisper-large-v3-turbo",
+      },
       logLevel: "info",
       settingsPath: join(cwd, ".opencode-remote", "settings.json"),
+    })
+  })
+
+  test("normalizes custom voice config", () => {
+    const cwd = "/project"
+    const configPath = join(cwd, ".opencode-remote", "config.json")
+
+    const config = loadConfigFromObject(
+      {
+        telegram: {
+          botToken: "token",
+          allowedUserId: 12345,
+        },
+        voice: {
+          enabled: true,
+          mode: "all",
+          voice: "uk-UA-OstapNeural",
+          groqApiKey: "gsk_test",
+          sttModel: "whisper-large-v3",
+        },
+      },
+      { configPath, cwd },
+    )
+
+    expect(config.voice).toEqual({
+      enabled: true,
+      mode: "all",
+      voice: "uk-UA-OstapNeural",
+      groqApiKey: "gsk_test",
+      sttModel: "whisper-large-v3",
     })
   })
 
@@ -209,7 +246,7 @@ describe("createConfig", () => {
 })
 
 describe("promptForConfig", () => {
-  test("collects only essential setup answers and omits default OpenCode settings", async () => {
+  test("collects setup answers and leaves voice disabled by default", async () => {
     const { cwd, homeDir } = await tempWorkspace()
     const input = new PassThrough()
     const output = captureOutput()
@@ -221,7 +258,7 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "token", "123", "", ""])
+    await writeAnswers(input, ["", "token", "123", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
@@ -237,6 +274,33 @@ describe("promptForConfig", () => {
     expect(output.text()).not.toMatch(/Auto-start OpenCode/)
     expect(output.text()).not.toMatch(/OpenCode workdir/)
     expect(output.text()).not.toMatch(/Settings path/)
+  })
+
+  test("collects voice setup answers when enabled", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      {
+        input,
+        output,
+        checkFfmpeg: vi.fn(async () => ({ available: true })),
+      },
+    )
+    await writeAnswers(input, ["", "token", "123", "", "", "yes", "gsk_test", "uk-UA-OstapNeural"])
+    const answers = await prompt
+
+    expect(answers.config.voice).toEqual({
+      enabled: true,
+      mode: "on",
+      groqApiKey: "gsk_test",
+      voice: "uk-UA-OstapNeural",
+    })
   })
 
   test("interactive choice prompts render all options and highlight the active option", async () => {
@@ -259,6 +323,7 @@ describe("promptForConfig", () => {
     await pressKey(input, "\x1b[A")
     await pressKey(input, "\r")
     await pressKey(input, "\r")
+    await pressKey(input, "\r")
 
     const answers = await prompt
 
@@ -273,6 +338,8 @@ describe("promptForConfig", () => {
     expect(output.text()).toContain("new")
     expect(output.text()).toContain("all")
     expect(output.text()).toContain("verbose")
+    expect(output.text()).toContain("Enable voice mode now?")
+    expect(output.text()).toContain("yes")
     expect(output.text()).toContain("\x1b[7m> global\x1b[0m")
     expect(output.text()).toContain("\x1b[7m> all\x1b[0m")
     expect(input.setRawMode).toHaveBeenCalledWith(true)

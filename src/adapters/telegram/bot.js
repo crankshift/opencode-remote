@@ -14,6 +14,10 @@ import {
   selectLargestPhoto,
 } from "./media.js"
 import { createMediaGroupBuffer } from "./mediaGroupBuffer.js"
+import {
+  downloadTelegramVoice as defaultDownloadVoice,
+  sendTelegramVoice as defaultSendVoice,
+} from "./voice.js"
 
 const SAFE_ERROR_REPLY = "OpenCode Remote failed while handling that request."
 
@@ -42,7 +46,10 @@ export function createTelegramBot({
   progressVerbosity = "all",
   progressEditThrottleMs = 1500,
   downloadPhoto = defaultDownloadPhoto,
+  downloadVoice = defaultDownloadVoice,
+  sendVoice = defaultSendVoice,
   cleanupMediaAttachments = defaultCleanupMediaAttachments,
+  voiceService = null,
 }) {
   const bot = new botFactory(token)
   let fallbackProgressVerbosity = progressVerbosity
@@ -164,6 +171,50 @@ export function createTelegramBot({
     )
   })
 
+  bot.command("voice", async (ctx) => {
+    if (!voiceService) {
+      await replyAndRemember(ctx, "Voice mode is not configured.", botMessageMemory)
+      return
+    }
+
+    const request = parseVoiceCommand(ctx.message?.text)
+    if (request.action === "status") {
+      await replyAndRemember(ctx, formatVoiceStatus(await voiceService.status()), botMessageMemory)
+      return
+    }
+
+    if (["on", "off", "all"].includes(request.action)) {
+      const result = await voiceService.setMode(request.action)
+      await replyAndRemember(ctx, `Voice mode set to ${result.mode}.`, botMessageMemory)
+      return
+    }
+
+    if (request.action === "list") {
+      const result = await voiceService.listVoices(request.filters)
+      await replyAndRemember(ctx, formatVoiceList(result), botMessageMemory)
+      return
+    }
+
+    if (request.action === "set") {
+      if (!request.voice) {
+        await replyAndRemember(ctx, "Use /voice set <voiceShortName>.", botMessageMemory)
+        return
+      }
+      const voice = await voiceService.setVoice(request.voice)
+      await replyAndRemember(ctx, `Voice set to ${voice.ShortName}.`, botMessageMemory)
+      return
+    }
+
+    if (request.action === "test") {
+      const voice = await voiceService.synthesizeTelegramVoice("OpenCode Remote voice test.")
+      await sendVoice({ ctx, filePath: voice.filePath })
+      await replyAndRemember(ctx, "Voice test sent.", botMessageMemory)
+      return
+    }
+
+    await replyAndRemember(ctx, voiceUsageText(), botMessageMemory)
+  })
+
   bot.on("message_reaction", async (ctx) => {
     const update = ctx.messageReaction
     const botMessage = botMessageMemory.get(update.chat.id, update.message_id)
@@ -210,6 +261,7 @@ export function createTelegramBot({
       for (const chunk of chunkText(parsedResponse.visibleText)) {
         await replyAndRemember(ctx, chunk, botMessageMemory)
       }
+      await sendVoiceReply(ctx, parsedResponse.visibleText, "text")
     } finally {
       await progress.flush()
       await clearMessageReaction(ctx, chatId, messageId, logger)
@@ -227,6 +279,10 @@ export function createTelegramBot({
     }
 
     await handlePhotoMessages(ctx, [ctx.message])
+  })
+
+  bot.on("message:voice", async (ctx) => {
+    await handleVoiceMessage(ctx)
   })
 
   return bot
@@ -269,6 +325,7 @@ export function createTelegramBot({
       for (const chunk of chunkText(parsedResponse.visibleText)) {
         await replyAndRemember(ctx, chunk, botMessageMemory)
       }
+      await sendVoiceReply(ctx, parsedResponse.visibleText, "photo")
       if (parsedResponse.requestedReaction) {
         await setEmojiReaction(
           ctx,
@@ -294,6 +351,67 @@ export function createTelegramBot({
         await replyAndRemember(ctx, SAFE_ERROR_REPLY, botMessageMemory)
       } catch (replyError) {
         logger.warn({ error: replyError }, "Could not send Telegram error reply")
+      }
+    }
+  }
+
+  async function handleVoiceMessage(ctx) {
+    if (!voiceService?.isEnabled?.()) {
+      await replyAndRemember(
+        ctx,
+        "Voice mode is off. Use /voice on to enable voice prompts.",
+        botMessageMemory,
+      )
+      return
+    }
+
+    const attachments = []
+    const stopTyping = startTypingIndicator(ctx, logger)
+    try {
+      const attachment = await downloadVoice({
+        api: ctx.api,
+        token,
+        voice: ctx.message.voice,
+        directory: mediaDirectory,
+      })
+      attachments.push(attachment)
+
+      const transcript = await voiceService.transcribe(attachment.filePath)
+      const progress = await createPromptProgressRenderer(ctx)
+      const response = await sendPromptWithProgress(
+        formatPromptWithTelegramReactionInstruction(transcript),
+        progress,
+      )
+      await progress.flush()
+      const parsedResponse = parseTelegramReactionMarker(response, progress)
+      for (const chunk of chunkText(parsedResponse.visibleText)) {
+        await replyAndRemember(ctx, chunk, botMessageMemory)
+      }
+      await sendVoiceReply(ctx, parsedResponse.visibleText, "voice")
+    } finally {
+      stopTyping()
+      await cleanupMediaAttachments(attachments, logger)
+    }
+  }
+
+  async function sendVoiceReply(ctx, text, source) {
+    if (!voiceService?.shouldSpeak?.({ source })) {
+      return
+    }
+
+    try {
+      const voice = await voiceService.synthesizeTelegramVoice(text)
+      await sendVoice({ ctx, filePath: voice.filePath })
+    } catch (error) {
+      logger.warn({ error }, "Could not send Telegram voice reply")
+      try {
+        await replyAndRemember(
+          ctx,
+          "Voice reply failed. Text reply is still available.",
+          botMessageMemory,
+        )
+      } catch (replyError) {
+        logger.warn({ error: replyError }, "Could not send Telegram voice failure reply")
       }
     }
   }
@@ -335,6 +453,66 @@ function parseProgressVerbosity(text) {
     .trim()
     .split(/\s+/u)
   return parts[1] ?? null
+}
+
+function parseVoiceCommand(text) {
+  const parts = String(text ?? "")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
+  const action = parts[1] ?? "status"
+  if (action === "list") {
+    return { action, filters: parseVoiceListFilters(parts.slice(2)) }
+  }
+  if (action === "set") {
+    return { action, voice: parts[2] }
+  }
+  return { action }
+}
+
+function parseVoiceListFilters(parts) {
+  const filters = { pageSize: 20 }
+  for (const part of parts) {
+    const normalized = part.toLocaleLowerCase("en-US")
+    if (/^\d+$/u.test(part)) {
+      filters.page = Number(part)
+    } else if (normalized === "male" || normalized === "female") {
+      filters.gender = normalized
+    } else if (!filters.locale) {
+      filters.locale = part
+    }
+  }
+  filters.page ??= 1
+  return filters
+}
+
+function formatVoiceStatus(status) {
+  return [
+    `Voice mode: ${status.enabled ? status.mode : "off"}`,
+    `Voice: ${status.voice}`,
+    `STT model: ${status.sttModel}`,
+    `Groq API key: ${status.hasGroqApiKey ? "configured" : "missing"}`,
+    `ffmpeg: ${status.ffmpegAvailable ? "available" : "missing"}`,
+    `Cache: ${status.cacheDirectory}`,
+  ].join("\n")
+}
+
+function formatVoiceList(result) {
+  if (!result.voices.length) {
+    return "No voices found for that filter."
+  }
+  return [
+    `Voices page ${result.page}/${result.totalPages} (${result.total} total):`,
+    ...result.voices.map(formatVoiceListItem),
+  ].join("\n")
+}
+
+function formatVoiceListItem(voice) {
+  return `${voice.ShortName} - ${voice.Locale}, ${voice.Gender} - ${voice.FriendlyName}`
+}
+
+function voiceUsageText() {
+  return "Use /voice status|on|off|all|list|set|test."
 }
 
 function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs }) {

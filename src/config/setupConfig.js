@@ -3,6 +3,7 @@ import { dirname } from "node:path"
 import { stdin as defaultInput, stdout as defaultOutput } from "node:process"
 import { emitKeypressEvents } from "node:readline"
 import { createInterface } from "node:readline/promises"
+import { checkFfmpeg as defaultCheckFfmpeg } from "../core/voice/audioConverter.js"
 import { getConfigPaths, loadConfig, loadConfigFromObject } from "./loadConfig.js"
 
 const defaultPromptConfig = {
@@ -48,7 +49,7 @@ async function writePromptedConfig({ answers, paths, cwd }) {
 
 export async function promptForConfig(
   _paths,
-  { input = defaultInput, output = defaultOutput } = {},
+  { input = defaultInput, output = defaultOutput, checkFfmpeg = defaultCheckFfmpeg } = {},
 ) {
   output.write("Let's create OpenCode Remote config.\n")
   const rl = createInterface({ input, output })
@@ -77,6 +78,11 @@ export async function promptForConfig(
       defaultPromptConfig.logLevel,
       { input, output },
     )
+    const enableVoice = await askChoice(rl, "Enable voice mode now? no/yes", ["no", "yes"], "no", {
+      input,
+      output,
+    })
+    const voice = await promptForVoiceConfig({ rl, enableVoice, checkFfmpeg, output })
 
     return {
       scope,
@@ -86,11 +92,33 @@ export async function promptForConfig(
           allowedUserId,
         },
         progressVerbosity,
+        ...(voice ? { voice } : {}),
         logLevel,
       },
     }
   } finally {
     rl.close()
+  }
+}
+
+async function promptForVoiceConfig({ rl, enableVoice, checkFfmpeg, output }) {
+  if (enableVoice !== "yes") {
+    return null
+  }
+
+  const ffmpeg = await checkFfmpeg()
+  if (!ffmpeg.available) {
+    output.write(`${ffmpeg.message}\nVoice mode will remain disabled until ffmpeg is installed.\n`)
+    return null
+  }
+
+  const groqApiKey = await askRequired(rl, "Groq API key")
+  const voice = await askWithDefault(rl, "Edge TTS voice", "en-US-AndrewNeural")
+  return {
+    enabled: true,
+    mode: "on",
+    groqApiKey,
+    voice,
   }
 }
 

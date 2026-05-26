@@ -8,7 +8,16 @@ export const CONFIG_FILE_NAME = "config.json"
 export const SETTINGS_FILE_NAME = "settings.json"
 
 const progressVerbositySchema = z.enum(["off", "new", "all", "verbose"])
+const voiceModeSchema = z.enum(["off", "on", "all"])
 const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+
+const defaultVoiceConfig = {
+  enabled: false,
+  mode: "on",
+  voice: "en-US-AndrewNeural",
+  groqApiKey: null,
+  sttModel: "whisper-large-v3-turbo",
+}
 
 const configSchema = z.object({
   telegram: z.object({
@@ -24,6 +33,15 @@ const configSchema = z.object({
     })
     .default({}),
   progressVerbosity: progressVerbositySchema.default("verbose"),
+  voice: z
+    .object({
+      enabled: z.boolean().default(false),
+      mode: voiceModeSchema.default("on"),
+      voice: z.string().min(1).default("en-US-AndrewNeural"),
+      groqApiKey: z.string().min(1).nullable().default(null),
+      sttModel: z.string().min(1).default("whisper-large-v3-turbo"),
+    })
+    .default(defaultVoiceConfig),
   logLevel: logLevelSchema.default("info"),
   settingsPath: z.string().min(1).optional(),
 })
@@ -109,6 +127,13 @@ export function loadConfigFromObject(rawConfig, { configPath, cwd = process.cwd(
       workdir: parsed.data.opencode.workdir || cwd,
     },
     progressVerbosity: parsed.data.progressVerbosity,
+    voice: {
+      enabled: parsed.data.voice.enabled,
+      mode: parsed.data.voice.mode,
+      voice: parsed.data.voice.voice,
+      groqApiKey: parsed.data.voice.groqApiKey,
+      sttModel: parsed.data.voice.sttModel,
+    },
     logLevel: parsed.data.logLevel,
     settingsPath: parsed.data.settingsPath || join(configDirectory, SETTINGS_FILE_NAME),
   }

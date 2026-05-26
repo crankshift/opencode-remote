@@ -4,6 +4,8 @@ import {
   createConfig as defaultCreateConfig,
   loadOrCreateConfig as defaultLoadOrCreateConfig,
 } from "../config/setupConfig.js"
+import { setConfigValue as defaultSetConfigValue } from "../config/writeConfig.js"
+import { clearVoiceCache as defaultClearVoiceCache } from "../core/voice/cache.js"
 import {
   getGatewayBackgroundStatus as defaultGetGatewayBackgroundStatus,
   startGatewayInBackground as defaultStartGatewayInBackground,
@@ -19,6 +21,8 @@ export function createGatewayProgram({
   startGatewayInBackground = defaultStartGatewayInBackground,
   stopGatewayInBackground = defaultStopGatewayInBackground,
   getGatewayBackgroundStatus = defaultGetGatewayBackgroundStatus,
+  setConfigValue = defaultSetConfigValue,
+  clearVoiceCache = defaultClearVoiceCache,
   output = process.stdout,
 } = {}) {
   const program = new Command()
@@ -69,6 +73,27 @@ export function createGatewayProgram({
       const config = await loadConfig()
       const result = await getGatewayBackgroundStatus({ config })
       output.write(formatStatusResult(result))
+    })
+
+  const config = program.command("config").description("Manage gateway config")
+
+  config
+    .command("set <key> <value>")
+    .description("Set one config value")
+    .option("-g, --global", "Update global config instead of local config")
+    .action(async (key, value, options) => {
+      const result = await setConfigValue({ key, value, global: Boolean(options.global) })
+      output.write(`Updated ${key} in ${result.configPath}.\n`)
+    })
+
+  const cache = program.command("cache").description("Manage gateway cache")
+
+  cache
+    .command("clear")
+    .description("Clear generated voice cache files")
+    .action(async () => {
+      const result = await clearVoiceCache()
+      output.write(`Cleared voice cache: ${result.directory}\n`)
     })
 
   return program

@@ -2,6 +2,15 @@
 
 This project follows Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- Added opt-in Telegram voice mode with Groq Whisper transcription, Edge TTS speech generation, and `ffmpeg` OGG Opus conversion for Telegram voice notes.
+- Added `/voice status|on|off|all|list|set|test`.
+- Added `opencode-remote config set` for individual JSON config updates.
+- Added `opencode-remote cache clear` for generated voice cache files.
+
 ## [0.3.2] - 2026-05-26
 
 ### Changed

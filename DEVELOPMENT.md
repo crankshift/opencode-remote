@@ -6,6 +6,7 @@ Development notes for `@crankshift/opencode-remote`.
 
 - Node.js 22.18.0 or newer. Node.js 24 LTS is recommended.
 - pnpm 11.3.0.
+- Optional voice mode development: local `ffmpeg` for conversion and a Groq API key for live transcription smoke tests.
 
 ## Install Dependencies
 
@@ -43,7 +44,7 @@ Gateway state is app-managed and stored in a SQLite database named `opencode-rem
 - macOS: `~/Library/Application Support/opencode-remote/opencode-remote.db`.
 - Windows: `%LOCALAPPDATA%\opencode-remote\opencode-remote.db`, with `%APPDATA%` and `%USERPROFILE%\AppData\Local` fallbacks.
 
-The database stores non-secret project state such as the active OpenCode session and `/progress` preference. It keys Git projects similarly to OpenCode: Git remote identity first, then a cached repo ID, then root commit. Non-Git folders use a shared global project identity.
+The database stores non-secret project state such as the active OpenCode session and `/progress` preference. It keys Git projects similarly to OpenCode: Git remote identity first, then a cached repo ID, then root commit. Non-Git folders use a shared global project identity. Generated voice files are cache under the same app-data root at `cache/voice` and can be removed with `opencode-remote cache clear`.
 
 Use `opencode-remote run --state-suffix dev` to use `opencode-remote-dev.db` instead of the normal state database. The source `pnpm dev` script uses this to keep development state separate from regular gateway state.
 
@@ -94,7 +95,7 @@ Run the full local check:
 pnpm run check
 ```
 
-Default tests mock external systems. They do not require live Telegram, live OpenCode, Groq, or TTS services.
+Default tests mock external systems. They do not require live Telegram, live OpenCode, Groq, Edge TTS, or `ffmpeg`.
 
 ## Release
 

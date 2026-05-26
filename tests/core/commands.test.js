@@ -9,6 +9,7 @@ describe("commands", () => {
       "sessions",
       "stop",
       "progress",
+      "voice",
       "help",
     ])
   })
@@ -19,5 +20,6 @@ describe("commands", () => {
     expect(help).toContain("/status - Show gateway and OpenCode status")
     expect(help).toContain("/sessions - List and switch OpenCode sessions")
     expect(help).toContain("/progress - Set tool progress visibility")
+    expect(help).toContain("/voice - Show or set voice mode")
   })
 })

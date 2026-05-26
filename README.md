@@ -2,7 +2,7 @@
 
 OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, connects to your local or remote OpenCode server, and forwards messages from one authorized Telegram user to OpenCode sessions.
 
-This is a text-first Telegram MVP. Voice input, voice replies, model switching, permission callbacks, and multi-messenger support are not implemented yet.
+This is a Telegram MVP with text prompts, photo prompts, and opt-in voice input/replies. Model switching, permission callbacks, and multi-messenger support are not implemented yet.
 
 See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
 
@@ -12,6 +12,7 @@ See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.
 - OpenCode CLI available on the machine running the gateway.
 - A Telegram bot token from BotFather.
 - Your Telegram numeric user ID for the allowlist.
+- Optional voice mode: a free Groq API key for Whisper transcription and `ffmpeg` installed locally for Telegram voice-note conversion.
 
 ## Install
 
@@ -45,7 +46,7 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, and log level. If a config already exists at the chosen location, setup replaces it. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, and optional voice mode. If a config already exists at the chosen location, setup replaces it. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
 
 Config discovery order:
 
@@ -98,6 +99,13 @@ The config file is JSON:
     "botToken": "123456:telegram-bot-token",
     "allowedUserId": 123456789
   },
+  "voice": {
+    "enabled": false,
+    "mode": "on",
+    "voice": "en-US-AndrewNeural",
+    "groqApiKey": null,
+    "sttModel": "whisper-large-v3-turbo"
+  },
   "progressVerbosity": "verbose",
   "logLevel": "info"
 }
@@ -109,7 +117,23 @@ The config file is JSON:
 
 `progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime.
 
+`voice` controls optional Telegram voice input and spoken replies. `mode="on"` speaks only after voice prompts, `mode="all"` speaks after all prompts, and `mode="off"` disables voice. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
+
 `logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
+
+Set individual config values from the CLI:
+
+```bash
+opencode-remote config set voice.enabled true
+opencode-remote config set voice.groqApiKey gsk_...
+opencode-remote config set voice.mode all -g
+```
+
+Clear generated voice files from the app-data cache:
+
+```bash
+opencode-remote cache clear
+```
 
 Keep `config.json` private because it contains your Telegram bot token. Project-local `.opencode-remote/` is ignored by git.
 
@@ -123,12 +147,27 @@ The bot currently supports:
 /sessions  List OpenCode sessions and select one with inline buttons
 /stop      Request stop for the active OpenCode session
 /progress  Show or set tool progress visibility: off, new, all, verbose
+/voice     Show or set voice mode
 /help      Show available commands
 ```
 
 Any non-command text message from the authorized Telegram user is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
 
 Telegram photo albums are handled as one OpenCode prompt when Telegram provides a shared `media_group_id`. The album caption becomes the prompt text. Separate text messages sent after an album are treated as separate prompts.
+
+Voice commands:
+
+```text
+/voice status
+/voice on
+/voice off
+/voice all
+/voice list [locale] [gender] [page]
+/voice set <voiceShortName>
+/voice test
+```
+
+`/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` also sends voice notes for text/photo replies. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
 
 ## Troubleshooting
 
@@ -141,3 +180,12 @@ If startup fails because OpenCode is unreachable, make sure the OpenCode CLI is 
 If background mode does not start, run `opencode-remote status`.
 
 If `opencode-remote status` reports a stale PID file, run `opencode-remote stop` once to remove it.
+
+If voice mode is enabled and startup says `ffmpeg` is missing, install it and restart:
+
+```bash
+brew install ffmpeg
+sudo apt install ffmpeg
+sudo dnf install ffmpeg
+winget install Gyan.FFmpeg
+```

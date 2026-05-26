@@ -55,9 +55,11 @@ describe("createTelegramBot", () => {
       "sessions",
       "stop",
       "progress",
+      "voice",
     ])
     expect(bot.messageHandlers.has("message:text")).toBe(true)
     expect(bot.messageHandlers.has("message:photo")).toBe(true)
+    expect(bot.messageHandlers.has("message:voice")).toBe(true)
     expect(bot.messageHandlers.has("message_reaction")).toBe(true)
     expect(bot.errorHandler).toEqual(expect.any(Function))
     expect(bot.api.setMyCommands).not.toHaveBeenCalled()
@@ -137,6 +139,145 @@ describe("createTelegramBot", () => {
 
     expect(controller.setProgressVerbosity).not.toHaveBeenCalled()
     expect(reply).toHaveBeenCalledWith("Use /progress off|new|all|verbose.")
+  })
+
+  test("voice status command reports provider readiness", async () => {
+    const voiceService = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        mode: "on",
+        voice: "en-US-AndrewNeural",
+        sttModel: "whisper-large-v3-turbo",
+        hasGroqApiKey: true,
+        ffmpegAvailable: false,
+        cacheDirectory: "/cache/voice",
+      })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice status" }, reply })
+
+    expect(reply).toHaveBeenCalledWith(
+      [
+        "Voice mode: on",
+        "Voice: en-US-AndrewNeural",
+        "STT model: whisper-large-v3-turbo",
+        "Groq API key: configured",
+        "ffmpeg: missing",
+        "Cache: /cache/voice",
+      ].join("\n"),
+    )
+  })
+
+  test("voice mode commands persist mode changes", async () => {
+    const voiceService = { setMode: vi.fn(async () => ({ enabled: true, mode: "all" })) }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice all" }, reply })
+
+    expect(voiceService.setMode).toHaveBeenCalledWith("all")
+    expect(reply).toHaveBeenCalledWith("Voice mode set to all.")
+  })
+
+  test("voice list command supports locale gender and page filters", async () => {
+    const voiceService = {
+      listVoices: vi.fn(async () => ({
+        voices: [
+          {
+            ShortName: "en-US-AndrewNeural",
+            Locale: "en-US",
+            Gender: "Male",
+            FriendlyName: "Microsoft Andrew Online",
+          },
+        ],
+        page: 2,
+        totalPages: 3,
+        total: 21,
+      })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice list en male 2" }, reply })
+
+    expect(voiceService.listVoices).toHaveBeenCalledWith({
+      locale: "en",
+      gender: "male",
+      page: 2,
+      pageSize: 20,
+    })
+    expect(reply).toHaveBeenCalledWith(
+      [
+        "Voices page 2/3 (21 total):",
+        "en-US-AndrewNeural - en-US, Male - Microsoft Andrew Online",
+      ].join("\n"),
+    )
+  })
+
+  test("voice set validates and persists selected voice", async () => {
+    const voiceService = {
+      setVoice: vi.fn(async () => ({ ShortName: "uk-UA-OstapNeural" })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice set uk-UA-OstapNeural" }, reply })
+
+    expect(voiceService.setVoice).toHaveBeenCalledWith("uk-UA-OstapNeural")
+    expect(reply).toHaveBeenCalledWith("Voice set to uk-UA-OstapNeural.")
+  })
+
+  test("voice test sends a sample voice note", async () => {
+    const voiceService = {
+      synthesizeTelegramVoice: vi.fn(async () => ({ filePath: "/cache/test.ogg" })),
+    }
+    const sendVoice = vi.fn(async () => ({ message_id: 10, chat: { id: 456 } }))
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      sendVoice,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const ctx = { message: { text: "/voice test" }, reply: vi.fn(async () => undefined) }
+
+    await bot.commands.get("voice")(ctx)
+
+    expect(voiceService.synthesizeTelegramVoice).toHaveBeenCalledWith("OpenCode Remote voice test.")
+    expect(sendVoice).toHaveBeenCalledWith({ ctx, filePath: "/cache/test.ogg" })
+    expect(ctx.reply).toHaveBeenCalledWith("Voice test sent.")
   })
 
   test("authorization middleware stops unauthorized updates", async () => {
@@ -301,6 +442,82 @@ describe("createTelegramBot", () => {
     )
     expect(reply).toHaveBeenCalledWith("answer")
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+  })
+
+  test("text prompts send voice replies when voice mode is all", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const voiceService = {
+      shouldSpeak: vi.fn(() => true),
+      synthesizeTelegramVoice: vi.fn(async () => ({ filePath: "/cache/reply.ogg" })),
+    }
+    const sendVoice = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      voiceService,
+      sendVoice,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("answer")
+    expect(voiceService.shouldSpeak).toHaveBeenCalledWith({ source: "text" })
+    expect(voiceService.synthesizeTelegramVoice).toHaveBeenCalledWith("answer")
+    expect(sendVoice).toHaveBeenCalledWith({
+      ctx: expect.objectContaining({ reply }),
+      filePath: "/cache/reply.ogg",
+    })
+  })
+
+  test("text prompts keep text replies when voice reply fails", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const voiceService = {
+      shouldSpeak: vi.fn(() => true),
+      synthesizeTelegramVoice: vi.fn(async () => {
+        throw new Error("ffmpeg missing")
+      }),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      voiceService,
+      logger,
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("answer")
+    expect(reply).toHaveBeenCalledWith("Voice reply failed. Text reply is still available.")
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.any(Error) }),
+      "Could not send Telegram voice reply",
+    )
   })
 
   test("text prompts render tool progress in an editable activity message", async () => {
@@ -677,6 +894,59 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledTimes(1)
     expect(reply).toHaveBeenCalledWith("image answer")
     expect(cleanupMediaAttachments).toHaveBeenCalledWith([attachment], logger)
+  })
+
+  test("voice messages are transcribed, sent as prompts, replied as text and voice", async () => {
+    const voiceAttachment = { mime: "audio/ogg", filePath: "/tmp/voice.ogg" }
+    const controller = {
+      sendPrompt: vi.fn(async () => "voice answer"),
+    }
+    const voiceService = {
+      isEnabled: vi.fn(() => true),
+      transcribe: vi.fn(async () => "transcribed prompt"),
+      shouldSpeak: vi.fn(() => true),
+      synthesizeTelegramVoice: vi.fn(async () => ({ filePath: "/cache/reply.ogg" })),
+    }
+    const downloadVoice = vi.fn(async () => voiceAttachment)
+    const sendVoice = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+    const cleanupMediaAttachments = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      downloadVoice,
+      sendVoice,
+      cleanupMediaAttachments,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:voice")({
+      message: { message_id: 10, chat: { id: 456 }, voice: { file_id: "voice-1" } },
+      api: { sendChatAction: vi.fn(async () => undefined) },
+      reply,
+    })
+
+    expect(downloadVoice).toHaveBeenCalledWith({
+      api: { sendChatAction: expect.any(Function) },
+      token: "token",
+      voice: { file_id: "voice-1" },
+      directory: undefined,
+    })
+    expect(voiceService.transcribe).toHaveBeenCalledWith("/tmp/voice.ogg")
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.stringContaining("transcribed prompt"),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
+    expect(reply).toHaveBeenCalledWith("voice answer")
+    expect(voiceService.shouldSpeak).toHaveBeenCalledWith({ source: "voice" })
+    expect(sendVoice).toHaveBeenCalledWith({
+      ctx: expect.objectContaining({ reply }),
+      filePath: "/cache/reply.ogg",
+    })
+    expect(cleanupMediaAttachments).toHaveBeenCalledWith([voiceAttachment], expect.any(Object))
   })
 
   test("photo albums send one prompt with all photos and one response", async () => {

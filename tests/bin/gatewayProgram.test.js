@@ -149,6 +149,59 @@ describe("opencode-remote CLI program", () => {
       "Gateway is running (PID 4444). Logs: .opencode-remote/gateway.log\n",
     )
   })
+
+  test("config set updates a local config value", async () => {
+    const setConfigValue = vi.fn(async () => ({ configPath: ".opencode-remote/config.json" }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ setConfigValue, output })
+
+    await program.parseAsync(["node", "opencode-remote", "config", "set", "voice.enabled", "true"])
+
+    expect(setConfigValue).toHaveBeenCalledWith({
+      key: "voice.enabled",
+      value: "true",
+      global: false,
+    })
+    expect(output.write).toHaveBeenCalledWith(
+      "Updated voice.enabled in .opencode-remote/config.json.\n",
+    )
+  })
+
+  test("config set updates a global config value", async () => {
+    const setConfigValue = vi.fn(async () => ({ configPath: "~/.opencode-remote/config.json" }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ setConfigValue, output })
+
+    await program.parseAsync([
+      "node",
+      "opencode-remote",
+      "config",
+      "set",
+      "voice.mode",
+      "all",
+      "-g",
+    ])
+
+    expect(setConfigValue).toHaveBeenCalledWith({
+      key: "voice.mode",
+      value: "all",
+      global: true,
+    })
+    expect(output.write).toHaveBeenCalledWith(
+      "Updated voice.mode in ~/.opencode-remote/config.json.\n",
+    )
+  })
+
+  test("cache clear removes voice cache files", async () => {
+    const clearVoiceCache = vi.fn(async () => ({ directory: "/cache/voice" }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ clearVoiceCache, output })
+
+    await program.parseAsync(["node", "opencode-remote", "cache", "clear"])
+
+    expect(clearVoiceCache).toHaveBeenCalledWith()
+    expect(output.write).toHaveBeenCalledWith("Cleared voice cache: /cache/voice\n")
+  })
 })
 
 function testConfig() {

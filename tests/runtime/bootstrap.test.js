@@ -189,6 +189,108 @@ describe("runGateway", () => {
     })
   })
 
+  test("creates and passes the voice service to the Telegram bot", async () => {
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+    const voiceService = { status: vi.fn() }
+    const createVoiceService = vi.fn(() => voiceService)
+    const createTelegramBot = vi.fn(() => bot)
+    const config = testConfig()
+
+    await runGateway({
+      config,
+      logger: testLogger(),
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createVoiceService,
+        createTelegramBot,
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(createVoiceService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: config.voice,
+        saveConfig: expect.any(Function),
+      }),
+    )
+    expect(createTelegramBot).toHaveBeenCalledWith(expect.objectContaining({ voiceService }))
+  })
+
+  test("requires ffmpeg before startup when voice is enabled", async () => {
+    const assertFfmpegAvailable = vi.fn(async () => undefined)
+    const config = {
+      ...testConfig(),
+      voice: { ...testConfig().voice, enabled: true, mode: "on" },
+    }
+
+    await runGateway({
+      config,
+      logger: testLogger(),
+      dependencies: {
+        assertFfmpegAvailable,
+        ensureOpenCodeServer: vi.fn(async () => ({ stop: vi.fn() })),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => ({
+          api: { setMyCommands: vi.fn(async () => undefined) },
+          start: vi.fn(async () => undefined),
+          stop: vi.fn(async () => undefined),
+        })),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(assertFfmpegAvailable).toHaveBeenCalled()
+  })
+
+  test("does not require ffmpeg when voice is disabled", async () => {
+    const assertFfmpegAvailable = vi.fn(async () => undefined)
+
+    await runGateway({
+      config: testConfig(),
+      logger: testLogger(),
+      dependencies: {
+        assertFfmpegAvailable,
+        ensureOpenCodeServer: vi.fn(async () => ({ stop: vi.fn() })),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => ({
+          api: { setMyCommands: vi.fn(async () => undefined) },
+          start: vi.fn(async () => undefined),
+          stop: vi.fn(async () => undefined),
+        })),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(assertFfmpegAvailable).not.toHaveBeenCalled()
+  })
+
   test("registered shutdown stops Telegram polling and owned server", async () => {
     const server = { stop: vi.fn(async () => undefined) }
     const bot = {
@@ -236,6 +338,13 @@ function testConfig() {
     logLevel: "silent",
     settingsPath: ".data/settings.json",
     progressVerbosity: "all",
+    voice: {
+      enabled: false,
+      mode: "on",
+      voice: "en-US-AndrewNeural",
+      groqApiKey: null,
+      sttModel: "whisper-large-v3-turbo",
+    },
   }
 }
 

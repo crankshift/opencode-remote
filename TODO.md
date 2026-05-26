@@ -34,7 +34,7 @@
    - `/sessions` - Browse and switch between recent sessions.
    - `/open` - Add a project by browsing directories.
    - `/ls` - List directory contents, then tap to open or download.
-   - `/tts` - Toggle audio replies.
+    - `/voice` - Toggle and configure audio replies. (Implemented for Telegram voice mode.)
    - `/rename` - Rename the current session.
    - `/commands` - Browse and run custom commands.
    - `/skills` - Browse and run OpenCode skills.

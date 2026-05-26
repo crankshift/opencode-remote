@@ -6,7 +6,7 @@ AI operating guide for `opencode-remote`. Keep this file compact and current: it
 
 - Package: `@crankshift/opencode-remote`, CLI bin `opencode-remote`.
 - Product: local-first messenger gateway for OpenCode. Telegram is the first adapter.
-- Current state: text-first Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, and active-session persistence.
+- Current state: Telegram MVP with sessions, prompts, stop, typing indicators, emoji reactions, image prompts, opt-in voice mode, and active-session persistence.
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
 - Runtime: Node.js `>=22.18.0`; Node.js 24 LTS recommended.
 - Package manager: pnpm 11.3.0.
@@ -39,6 +39,9 @@ Implemented now:
 - Bounded in-memory bot-message memory, currently 200 entries.
 - Telegram single-photo and photo-album prompts. Albums are grouped by `media_group_id` with a short debounce.
 - Telegram photos are downloaded to temp files, sent as OpenCode file prompt parts, then cleaned up.
+- Optional Telegram voice mode with Groq Whisper transcription, Edge TTS replies, and `ffmpeg` MP3-to-OGG/Opus conversion for Telegram voice notes.
+- `/voice` command for status, on/off/all modes, paged voice listing, voice selection, and test voice notes.
+- CLI `opencode-remote config set` for individual JSON config keys and `opencode-remote cache clear` for generated voice files.
 - Publishable npm package output is built to `dist/` with `tsdown`.
 - Public CLI bin is `opencode-remote`.
 - Background CLI lifecycle supports `opencode-remote start`, `opencode-remote stop`, and `opencode-remote status`.
@@ -47,7 +50,6 @@ Implemented now:
 
 Not implemented yet:
 
-- Voice input, STT, TTS, voice selection, or voice reply upload.
 - Model/provider switching from Telegram.
 - Permission approval callbacks.
 - OpenCode project/worktree switching from Telegram.
@@ -72,6 +74,7 @@ src/core/formatting/chunkText.js   messenger-neutral reply chunking
 src/core/state/appDataPath.js      platform app-data path resolution
 src/core/state/projectIdentity.js  Git-aware project identity resolution
 src/core/state/stateDb.js          SQLite app-state persistence
+src/core/voice/                    voice mode orchestration, STT/TTS wrappers, ffmpeg conversion, cache helpers
 src/core/gateway/controller.js     messenger-neutral orchestration
 src/core/opencode/serverManager.js OpenCode reachability and owned child lifecycle
 src/core/opencode/client.js        only layer that talks to `@opencode-ai/sdk`
@@ -79,6 +82,7 @@ src/adapters/telegram/auth.js      Telegram allowlist checks
 src/adapters/telegram/bot.js       grammY bot, commands, callbacks, reactions, photos
 src/adapters/telegram/media.js     Telegram photo download/caption/cleanup helpers
 src/adapters/telegram/mediaGroupBuffer.js photo-album debounce/grouping
+src/adapters/telegram/voice.js     Telegram voice download/send helpers
 tests/                             Vitest tests with mocked Telegram/OpenCode by default
 ```
 
@@ -107,6 +111,7 @@ Implemented command surface:
 /sessions  List OpenCode sessions and switch with inline buttons
 /stop      Request abort for the active OpenCode session
 /progress  Show or set tool progress visibility: off, new, all, verbose
+/voice     Show or set voice mode
 /help      Show available commands
 ```
 
@@ -149,6 +154,20 @@ Telegram photo(s)
   -> OpenCode file parts before text part
   -> adapter chunks response
   -> cleanup temp files in finally
+```
+
+Voice prompt:
+
+```text
+Telegram voice
+  -> adapter downloads temp OGG/voice file
+  -> core voice service transcribes with Groq Whisper
+  -> controller sends transcript as an OpenCode text prompt
+  -> adapter sends text reply
+  -> if /voice on or all applies, Edge TTS creates MP3
+  -> ffmpeg converts MP3 to OGG/Opus
+  -> adapter sends Telegram voice note
+  -> cleanup downloaded input file; generated reply remains cache
 ```
 
 Reaction feedback:
@@ -195,6 +214,13 @@ Current config shape:
     "autoStart": true,
     "workdir": null
   },
+  "voice": {
+    "enabled": false,
+    "mode": "on",
+    "voice": "en-US-AndrewNeural",
+    "groqApiKey": null,
+    "sttModel": "whisper-large-v3-turbo"
+  },
   "progressVerbosity": "verbose",
   "logLevel": "info"
 }
@@ -209,8 +235,11 @@ Rules:
 - Project state uses OpenCode-style identity: Git remote hash, then cached repo ID, then root commit; non-Git folders use the shared `global` identity.
 - `settingsPath` may still validate for old configs but is not used by the runtime state store.
 - Background runtime files are stored beside the selected config as `.opencode-remote/gateway.pid` and `.opencode-remote/gateway.log` by default.
+- Voice mode is disabled by default. If enabled, startup requires `ffmpeg`; the CLI never auto-installs it.
+- `voice.groqApiKey` is required for live voice transcription and must stay in private config.
+- Generated voice files are cache under the app-data `cache/voice` directory and are removable with `opencode-remote cache clear`.
 - Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.
-- Do not add voice, model, or provider env vars until the related feature is actually implemented.
+- Do not add model or provider env vars until the related feature is actually implemented.
 
 ## OpenCode Integration Notes
 
@@ -282,7 +311,7 @@ Current test priorities:
 ## Roadmap Guardrails
 
 - Do not add Hono, Express, or another HTTP framework unless webhooks, health checks, metrics, or admin APIs are explicitly requested.
-- Voice should stay isolated behind core voice/provider boundaries when implemented.
+- Voice stays isolated behind core voice/provider boundaries; keep Groq, Edge TTS, and ffmpeg details out of Telegram command wiring.
 - Signal should be added as an adapter, not by duplicating OpenCode/session logic.
 - Permission approvals must stay explicit; never auto-approve OpenCode permissions by default.
 - Multi-user support, group-first Telegram behavior, scheduled tasks, MCP browsing, and OpenCode skills browsing are future work unless the user explicitly asks for them.
