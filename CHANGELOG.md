@@ -2,6 +2,12 @@
 
 This project follows Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- Fixed Debian/Fedora `ffmpeg` auto-install commands to use non-interactive package-manager confirmation flags.
+
 ## [0.5.1] - 2026-05-26
 
 ### Changed

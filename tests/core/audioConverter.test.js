@@ -31,7 +31,7 @@ describe("audioConverter", () => {
 
   test("detects the first available ffmpeg installer for the platform", async () => {
     const execa = vi.fn(async (command) => {
-      if (command === "apt") {
+      if (command === "apt-get") {
         return undefined
       }
       throw new Error("missing command")
@@ -39,10 +39,10 @@ describe("audioConverter", () => {
 
     await expect(detectFfmpegInstaller({ platform: "linux", execa })).resolves.toEqual({
       command: "sudo",
-      args: ["apt", "install", "ffmpeg"],
-      displayCommand: "sudo apt install ffmpeg",
+      args: ["apt-get", "install", "-y", "ffmpeg"],
+      displayCommand: "sudo apt-get install -y ffmpeg",
     })
-    expect(execa).toHaveBeenCalledWith("apt", ["--version"])
+    expect(execa).toHaveBeenCalledWith("apt-get", ["--version"])
   })
 
   test("returns null when no supported ffmpeg installer is available", async () => {
@@ -76,8 +76,8 @@ describe("audioConverter", () => {
       installFfmpeg(
         {
           command: "sudo",
-          args: ["apt", "install", "ffmpeg"],
-          displayCommand: "sudo apt install ffmpeg",
+          args: ["apt-get", "install", "-y", "ffmpeg"],
+          displayCommand: "sudo apt-get install -y ffmpeg",
         },
         { execa },
       ),

@@ -10,17 +10,17 @@ const ffmpegInstallers = [
   },
   {
     platform: "linux",
-    detectCommand: "apt",
+    detectCommand: "apt-get",
     command: "sudo",
-    args: ["apt", "install", "ffmpeg"],
-    displayCommand: "sudo apt install ffmpeg",
+    args: ["apt-get", "install", "-y", "ffmpeg"],
+    displayCommand: "sudo apt-get install -y ffmpeg",
   },
   {
     platform: "linux",
     detectCommand: "dnf",
     command: "sudo",
-    args: ["dnf", "install", "ffmpeg"],
-    displayCommand: "sudo dnf install ffmpeg",
+    args: ["dnf", "install", "-y", "ffmpeg"],
+    displayCommand: "sudo dnf install -y ffmpeg",
   },
   {
     platform: "win32",
@@ -36,8 +36,8 @@ export const FFMPEG_INSTALL_MESSAGE = [
   "Install ffmpeg, then retry setup or restart opencode-remote.",
   "",
   "macOS:   brew install ffmpeg",
-  "Debian:  sudo apt install ffmpeg",
-  "Fedora:  sudo dnf install ffmpeg",
+  "Debian:  sudo apt-get install -y ffmpeg",
+  "Fedora:  sudo dnf install -y ffmpeg",
   "Windows: winget install Gyan.FFmpeg",
 ].join("\n")
 

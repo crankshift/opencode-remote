@@ -187,7 +187,7 @@ If voice setup says `ffmpeg` is missing, let setup try the detected installer or
 
 ```bash
 brew install ffmpeg
-sudo apt install ffmpeg
-sudo dnf install ffmpeg
+sudo apt-get install -y ffmpeg
+sudo dnf install -y ffmpeg
 winget install Gyan.FFmpeg
 ```

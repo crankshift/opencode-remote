@@ -507,8 +507,8 @@ describe("promptForConfig", () => {
           .mockResolvedValueOnce({ available: true }),
         detectFfmpegInstaller: vi.fn(async () => ({
           command: "sudo",
-          args: ["apt", "install", "ffmpeg"],
-          displayCommand: "sudo apt install ffmpeg",
+          args: ["apt-get", "install", "-y", "ffmpeg"],
+          displayCommand: "sudo apt-get install -y ffmpeg",
         })),
         installFfmpeg: vi.fn(async () => ({ ok: false, error: new Error("install failed") })),
       },
