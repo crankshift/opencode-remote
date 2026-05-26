@@ -503,7 +503,7 @@ describe("createTelegramBot", () => {
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
   })
 
-  test("text prompts send voice replies when voice mode is all", async () => {
+  test("text prompts in voice all mode send voice replies without text", async () => {
     const controller = {
       sendPrompt: vi.fn(async () => "answer"),
     }
@@ -532,7 +532,7 @@ describe("createTelegramBot", () => {
       reply,
     })
 
-    expect(reply).toHaveBeenCalledWith("answer")
+    expect(reply).not.toHaveBeenCalled()
     expect(voiceService.shouldSpeak).toHaveBeenCalledWith({ source: "text" })
     expect(voiceService.synthesizeTelegramVoice).toHaveBeenCalledWith("answer")
     expect(sendVoice).toHaveBeenCalledWith({
@@ -541,7 +541,7 @@ describe("createTelegramBot", () => {
     })
   })
 
-  test("text prompts keep text replies when voice reply fails", async () => {
+  test("text prompts fall back to text when voice reply fails", async () => {
     const controller = {
       sendPrompt: vi.fn(async () => "answer"),
     }
@@ -571,8 +571,8 @@ describe("createTelegramBot", () => {
       reply,
     })
 
+    expect(reply).toHaveBeenCalledTimes(1)
     expect(reply).toHaveBeenCalledWith("answer")
-    expect(reply).toHaveBeenCalledWith("Voice reply failed. Text reply is still available.")
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ error: expect.any(Error) }),
       "Could not send Telegram voice reply",
@@ -955,7 +955,58 @@ describe("createTelegramBot", () => {
     expect(cleanupMediaAttachments).toHaveBeenCalledWith([attachment], logger)
   })
 
-  test("voice messages are transcribed, sent as prompts, replied as text and voice", async () => {
+  test("photo prompts in voice all mode send voice replies without text", async () => {
+    const attachment = {
+      mime: "image/jpeg",
+      url: "file:///tmp/photo-large.jpg",
+      filePath: "/tmp/photo-large.jpg",
+    }
+    const controller = {
+      sendPrompt: vi.fn(async () => "image answer"),
+    }
+    const voiceService = {
+      shouldSpeak: vi.fn(() => true),
+      synthesizeTelegramVoice: vi.fn(async () => ({ filePath: "/cache/reply.ogg" })),
+    }
+    const downloadPhoto = vi.fn(async () => attachment)
+    const sendVoice = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+    const cleanupMediaAttachments = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      downloadPhoto,
+      sendVoice,
+      cleanupMediaAttachments,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+    const large = { file_id: "large", width: 1280, height: 720, file_size: 3000 }
+
+    await bot.messageHandlers.get("message:photo")({
+      message: {
+        message_id: 10,
+        chat: { id: 456 },
+        caption: "What changed?",
+        photo: [large],
+      },
+      api: { sendChatAction: vi.fn(async () => undefined) },
+      reply,
+    })
+
+    expect(reply).not.toHaveBeenCalled()
+    expect(voiceService.shouldSpeak).toHaveBeenCalledWith({ source: "photo" })
+    expect(voiceService.synthesizeTelegramVoice).toHaveBeenCalledWith("image answer")
+    expect(sendVoice).toHaveBeenCalledWith({
+      ctx: expect.objectContaining({ reply }),
+      filePath: "/cache/reply.ogg",
+    })
+    expect(cleanupMediaAttachments).toHaveBeenCalledWith([attachment], expect.any(Object))
+  })
+
+  test("voice messages are transcribed and answered with voice only", async () => {
     const voiceAttachment = { mime: "audio/ogg", filePath: "/tmp/voice.ogg" }
     const controller = {
       sendPrompt: vi.fn(async () => "voice answer"),
@@ -999,7 +1050,7 @@ describe("createTelegramBot", () => {
       expect.stringContaining("transcribed prompt"),
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
-    expect(reply).toHaveBeenCalledWith("voice answer")
+    expect(reply).not.toHaveBeenCalled()
     expect(voiceService.shouldSpeak).toHaveBeenCalledWith({ source: "voice" })
     expect(sendVoice).toHaveBeenCalledWith({
       ctx: expect.objectContaining({ reply }),

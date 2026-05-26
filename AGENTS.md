@@ -128,8 +128,8 @@ Telegram text
   -> controller resolves or creates active session
   -> OpenCode client sends prompt parts
   -> adapter strips hidden reaction marker
-  -> chunkText
-  -> Telegram replies + optional final emoji reaction
+  -> adapter sends text, or voice-only in /voice all with text fallback on voice failure
+  -> optional final emoji reaction
 ```
 
 Session selection:
@@ -152,7 +152,7 @@ Telegram photo(s)
   -> adapter downloads temp files
   -> controller.sendPrompt({ text, attachments })
   -> OpenCode file parts before text part
-  -> adapter chunks response
+  -> adapter sends text, or voice-only in /voice all with text fallback on voice failure
   -> cleanup temp files in finally
 ```
 
@@ -163,10 +163,9 @@ Telegram voice
   -> adapter downloads temp OGG/voice file
   -> core voice service transcribes with Groq Whisper
   -> controller sends transcript as an OpenCode text prompt
-  -> adapter sends text reply
   -> if /voice on or all applies, Edge TTS creates MP3
   -> ffmpeg converts MP3 to OGG/Opus
-  -> adapter sends Telegram voice note
+  -> adapter sends Telegram voice note, with text fallback on voice failure
   -> cleanup downloaded input file; generated reply remains cache
 ```
 

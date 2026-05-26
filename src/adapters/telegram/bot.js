@@ -262,10 +262,7 @@ export function createTelegramBot({
       await progress.flush()
       const parsedResponse = parseTelegramReactionMarker(response, progress)
       requestedReaction = parsedResponse.requestedReaction
-      for (const chunk of chunkText(parsedResponse.visibleText)) {
-        await replyAndRemember(ctx, chunk, botMessageMemory)
-      }
-      await sendVoiceReply(ctx, parsedResponse.visibleText, "text")
+      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "text")
     } finally {
       await progress.flush()
       await clearMessageReaction(ctx, chatId, messageId, logger)
@@ -326,10 +323,7 @@ export function createTelegramBot({
       )
       await progress.flush()
       const parsedResponse = parseTelegramReactionMarker(response, progress)
-      for (const chunk of chunkText(parsedResponse.visibleText)) {
-        await replyAndRemember(ctx, chunk, botMessageMemory)
-      }
-      await sendVoiceReply(ctx, parsedResponse.visibleText, "photo")
+      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "photo")
       if (parsedResponse.requestedReaction) {
         await setEmojiReaction(
           ctx,
@@ -388,35 +382,33 @@ export function createTelegramBot({
       )
       await progress.flush()
       const parsedResponse = parseTelegramReactionMarker(response, progress)
-      for (const chunk of chunkText(parsedResponse.visibleText)) {
-        await replyAndRemember(ctx, chunk, botMessageMemory)
-      }
-      await sendVoiceReply(ctx, parsedResponse.visibleText, "voice")
+      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "voice")
     } finally {
       stopTyping()
       await cleanupMediaAttachments(attachments, logger)
     }
   }
 
-  async function sendVoiceReply(ctx, text, source) {
+  async function replyWithPreferredMode(ctx, text, source) {
     if (!voiceService?.shouldSpeak?.({ source })) {
+      await sendTextReply(ctx, text)
       return
     }
 
     try {
       const voice = await voiceService.synthesizeTelegramVoice(text)
-      await sendVoice({ ctx, filePath: voice.filePath })
+      const sentMessage = await sendVoice({ ctx, filePath: voice.filePath })
+      const chatId = sentMessage?.chat?.id ?? ctx.chat?.id ?? ctx.message?.chat?.id
+      botMessageMemory.remember(chatId, sentMessage?.message_id, text)
     } catch (error) {
       logger.warn({ error }, "Could not send Telegram voice reply")
-      try {
-        await replyAndRemember(
-          ctx,
-          "Voice reply failed. Text reply is still available.",
-          botMessageMemory,
-        )
-      } catch (replyError) {
-        logger.warn({ error: replyError }, "Could not send Telegram voice failure reply")
-      }
+      await sendTextReply(ctx, text)
+    }
+  }
+
+  async function sendTextReply(ctx, text) {
+    for (const chunk of chunkText(text)) {
+      await replyAndRemember(ctx, chunk, botMessageMemory)
     }
   }
 

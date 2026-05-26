@@ -117,7 +117,7 @@ The config file is JSON:
 
 `progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime.
 
-`voice` controls optional Telegram voice input and spoken replies. `mode="on"` speaks only after voice prompts, `mode="all"` speaks after all prompts, and `mode="off"` disables voice. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
+`voice` controls optional Telegram voice input and spoken replies. `mode="on"` sends voice-note replies only after voice prompts, `mode="all"` sends voice-note replies after text, photo, and voice prompts, and `mode="off"` disables voice. When a voice-note reply succeeds, the bot does not also send the text reply; if speech generation or sending fails, it falls back to text. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
 
 `logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
 
@@ -167,7 +167,7 @@ Voice commands:
 /voice test
 ```
 
-`/voice list` requires a short country or language code such as `en` or `uk`, and page is optional. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` also sends voice notes for text/photo replies. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
+`/voice list` requires a short country or language code such as `en` or `uk`, and page is optional. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only; if speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
 
 ## Troubleshooting
 

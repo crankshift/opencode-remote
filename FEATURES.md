@@ -35,7 +35,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
 - Telegram voice messages are transcribed and sent to OpenCode when voice mode is enabled.
-- Voice replies are sent after voice prompts in `/voice on` mode and after all prompt replies in `/voice all` mode.
+- Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with text fallback if speech generation or sending fails.
 
 ## OpenCode Sessions
 

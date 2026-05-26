@@ -4,6 +4,10 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Changed successful Telegram voice replies to be voice-only in `/voice on` and `/voice all`, with text fallback when voice generation or sending fails.
+
 ## [0.4.2] - 2026-05-26
 
 ### Changed
