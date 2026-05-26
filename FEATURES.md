@@ -25,7 +25,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - `/sessions` lists recent OpenCode sessions and lets the user switch with inline buttons.
 - `/stop` requests abort for the active OpenCode session.
 - `/progress` shows or sets prompt activity visibility: `off`, `new`, `all`, or `verbose`.
-- `/voice` shows and controls voice mode, lists voices, sets the active Edge TTS voice, and sends a test voice note.
+- `/voice` shows and controls voice mode, lists voices by required short country/language code, sets the active Edge TTS voice, and sends a test voice note.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
 - Non-command text from the authorized user is sent to OpenCode as a prompt.
@@ -56,6 +56,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 
 - Voice mode is disabled by default.
 - Groq Whisper uses `whisper-large-v3-turbo` by default for transcription.
+- `/voice list <countryCode> [page]` pages Edge TTS voices for a required short code such as `en` or `uk`.
 - Edge TTS voice short names such as `en-US-AndrewNeural` and `uk-UA-OstapNeural` can be selected with `/voice set`.
 - `ffmpeg` is required only when voice mode is enabled.
 - Generated MP3/OGG files are treated as disposable app-data cache.

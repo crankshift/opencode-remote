@@ -162,12 +162,12 @@ Voice commands:
 /voice on
 /voice off
 /voice all
-/voice list [locale] [gender] [page]
+/voice list <countryCode> [page]
 /voice set <voiceShortName>
 /voice test
 ```
 
-`/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` also sends voice notes for text/photo replies. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
+`/voice list` requires a short country or language code such as `en` or `uk`, and page is optional. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` also sends voice notes for text/photo replies. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
 
 ## Troubleshooting
 

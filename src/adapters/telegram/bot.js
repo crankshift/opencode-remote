@@ -190,6 +190,10 @@ export function createTelegramBot({
     }
 
     if (request.action === "list") {
+      if (!request.filters) {
+        await replyAndRemember(ctx, voiceListUsageText(), botMessageMemory)
+        return
+      }
       const result = await voiceService.listVoices(request.filters)
       await replyAndRemember(ctx, formatVoiceList(result), botMessageMemory)
       return
@@ -471,19 +475,15 @@ function parseVoiceCommand(text) {
 }
 
 function parseVoiceListFilters(parts) {
-  const filters = { pageSize: 20 }
-  for (const part of parts) {
-    const normalized = part.toLocaleLowerCase("en-US")
-    if (/^\d+$/u.test(part)) {
-      filters.page = Number(part)
-    } else if (normalized === "male" || normalized === "female") {
-      filters.gender = normalized
-    } else if (!filters.locale) {
-      filters.locale = part
-    }
+  if (parts.length < 1 || parts.length > 2) {
+    return null
   }
-  filters.page ??= 1
-  return filters
+  const countryCode = parts[0]?.toLocaleLowerCase("en-US")
+  const page = parts[1] ?? "1"
+  if (!/^[a-z]{2,3}$/u.test(countryCode) || !/^\d+$/u.test(page)) {
+    return null
+  }
+  return { locale: countryCode, page: Number(page), pageSize: 20 }
 }
 
 function formatVoiceStatus(status) {
@@ -513,6 +513,10 @@ function formatVoiceListItem(voice) {
 
 function voiceUsageText() {
   return "Use /voice status|on|off|all|list|set|test."
+}
+
+function voiceListUsageText() {
+  return "Use /voice list <countryCode> [page]."
 }
 
 function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs }) {

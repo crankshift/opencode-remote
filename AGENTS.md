@@ -40,7 +40,7 @@ Implemented now:
 - Telegram single-photo and photo-album prompts. Albums are grouped by `media_group_id` with a short debounce.
 - Telegram photos are downloaded to temp files, sent as OpenCode file prompt parts, then cleaned up.
 - Optional Telegram voice mode with Groq Whisper transcription, Edge TTS replies, and `ffmpeg` MP3-to-OGG/Opus conversion for Telegram voice notes.
-- `/voice` command for status, on/off/all modes, paged voice listing, voice selection, and test voice notes.
+- `/voice` command for status, on/off/all modes, country-code-filtered paged voice listing, voice selection, and test voice notes.
 - CLI `opencode-remote config set` for individual JSON config keys and `opencode-remote cache clear` for generated voice files.
 - Publishable npm package output is built to `dist/` with `tsdown`.
 - Public CLI bin is `opencode-remote`.

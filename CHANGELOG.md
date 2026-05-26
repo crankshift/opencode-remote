@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.4.2] - 2026-05-26
+
+### Changed
+
+- Changed `/voice list` to require a short country or language code and accept only an optional page argument.
+
 ## [0.4.1] - 2026-05-26
 
 ### Changed

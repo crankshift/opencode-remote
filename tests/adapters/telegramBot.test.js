@@ -195,7 +195,7 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith("Voice mode set to all.")
   })
 
-  test("voice list command supports locale gender and page filters", async () => {
+  test("voice list command supports country code and optional page", async () => {
     const voiceService = {
       listVoices: vi.fn(async () => ({
         voices: [
@@ -221,11 +221,10 @@ describe("createTelegramBot", () => {
     })
     const reply = vi.fn(async () => undefined)
 
-    await bot.commands.get("voice")({ message: { text: "/voice list en male 2" }, reply })
+    await bot.commands.get("voice")({ message: { text: "/voice list en 2" }, reply })
 
     expect(voiceService.listVoices).toHaveBeenCalledWith({
       locale: "en",
-      gender: "male",
       page: 2,
       pageSize: 20,
     })
@@ -235,6 +234,66 @@ describe("createTelegramBot", () => {
         "en-US-AndrewNeural - en-US, Male - Microsoft Andrew Online",
       ].join("\n"),
     )
+  })
+
+  test("voice list command requires a country code", async () => {
+    const voiceService = {
+      listVoices: vi.fn(async () => ({ voices: [], page: 1, totalPages: 1, total: 0 })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice list" }, reply })
+
+    expect(voiceService.listVoices).not.toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode> [page].")
+  })
+
+  test("voice list command rejects unsupported filters", async () => {
+    const voiceService = {
+      listVoices: vi.fn(async () => ({ voices: [], page: 1, totalPages: 1, total: 0 })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice list en male 2" }, reply })
+
+    expect(voiceService.listVoices).not.toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode> [page].")
+  })
+
+  test("voice list command rejects full locale codes", async () => {
+    const voiceService = {
+      listVoices: vi.fn(async () => ({ voices: [], page: 1, totalPages: 1, total: 0 })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("voice")({ message: { text: "/voice list en-US" }, reply })
+
+    expect(voiceService.listVoices).not.toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith("Use /voice list <countryCode> [page].")
   })
 
   test("voice set validates and persists selected voice", async () => {

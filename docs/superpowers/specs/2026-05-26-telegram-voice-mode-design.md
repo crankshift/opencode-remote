@@ -61,7 +61,7 @@ Telegram wiring depends on a small voice service interface. Groq, Edge TTS, and 
 /voice on
 /voice off
 /voice all
-/voice list [locale] [gender] [page]
+/voice list <countryCode> [page]
 /voice set <voiceShortName>
 /voice test
 ```
@@ -70,7 +70,7 @@ Telegram wiring depends on a small voice service interface. Groq, Edge TTS, and 
 - `/voice on` enables voice mode and speaks only after voice prompts.
 - `/voice all` enables voice mode and speaks after all prompts.
 - `/voice off` disables voice input and spoken replies.
-- `/voice list` pages Edge TTS voices and supports filters such as `en`, `en male`, and `uk`.
+- `/voice list` pages Edge TTS voices and requires a short country or language code such as `en` or `uk`; page is optional.
 - `/voice set` validates and persists a selected Edge TTS voice short name.
 - `/voice test` sends a short sample using the selected voice.
 
