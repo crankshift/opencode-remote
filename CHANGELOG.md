@@ -4,6 +4,10 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Changed interactive setup choices to show all options in a highlighted arrow-key list.
+
 ## [0.3.1] - 2026-05-25
 
 ### Changed

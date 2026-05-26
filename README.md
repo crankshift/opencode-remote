@@ -45,7 +45,7 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, and log level. Choice prompts support arrow-key selection with Enter to confirm.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, and log level. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
 
 Config discovery order:
 

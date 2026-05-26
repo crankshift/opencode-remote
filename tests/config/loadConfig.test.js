@@ -262,6 +262,46 @@ describe("promptForConfig", () => {
     expect(output.text()).not.toMatch(/OpenCode workdir/)
     expect(output.text()).not.toMatch(/Settings path/)
   })
+
+  test("interactive choice prompts render all options and highlight the active option", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = fakeTtyInput()
+    const output = fakeTtyOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+
+    await pressKey(input, "\x1b[B")
+    await pressKey(input, "\r")
+    await pressKey(input, "token\n")
+    await pressKey(input, "123\n")
+    await pressKey(input, "\x1b[A")
+    await pressKey(input, "\r")
+    await pressKey(input, "\r")
+
+    const answers = await prompt
+
+    expect(answers.scope).toBe("global")
+    expect(answers.config.progressVerbosity).toBe("all")
+    expect(answers.config.logLevel).toBe("info")
+    expect(output.text()).toContain("Create config where?")
+    expect(output.text()).toContain("local")
+    expect(output.text()).toContain("global")
+    expect(output.text()).toContain("Progress verbosity")
+    expect(output.text()).toContain("off")
+    expect(output.text()).toContain("new")
+    expect(output.text()).toContain("all")
+    expect(output.text()).toContain("verbose")
+    expect(output.text()).toContain("\x1b[7m> global\x1b[0m")
+    expect(output.text()).toContain("\x1b[7m> all\x1b[0m")
+    expect(input.setRawMode).toHaveBeenCalledWith(true)
+    expect(input.setRawMode).toHaveBeenCalledWith(false)
+  })
 })
 
 async function tempWorkspace() {
@@ -293,6 +333,27 @@ function captureOutput() {
   })
   stream.text = () => text
   return stream
+}
+
+function fakeTtyInput() {
+  const input = new PassThrough()
+  input.isTTY = true
+  input.isRaw = false
+  input.setRawMode = vi.fn((enabled) => {
+    input.isRaw = enabled
+  })
+  return input
+}
+
+function fakeTtyOutput() {
+  const output = captureOutput()
+  output.isTTY = true
+  return output
+}
+
+async function pressKey(input, sequence) {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  input.write(sequence)
 }
 
 async function writeAnswers(input, answers) {

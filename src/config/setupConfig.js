@@ -194,6 +194,7 @@ async function askInteractiveChoice({ input, output, label, choices, defaultValu
   const defaultIndex = Math.max(choices.indexOf(defaultValue), 0)
   let selected = defaultIndex
   let rawWasEnabled = false
+  let renderedLines = 0
 
   emitKeypressEvents(input)
   if (input.isRaw !== true) {
@@ -202,8 +203,26 @@ async function askInteractiveChoice({ input, output, label, choices, defaultValu
   }
   input.resume()
 
+  function clearRenderedLines() {
+    if (renderedLines === 0) {
+      return
+    }
+    output.write(`\x1b[${renderedLines}F`)
+    output.write("\x1b[J")
+  }
+
   function render() {
-    output.write(`\r${label}: ${choices[selected]}${" ".repeat(20)}`)
+    clearRenderedLines()
+    const lines = [
+      `${label}:`,
+      ...choices.map((choice, index) => {
+        const prefix = index === selected ? ">" : " "
+        const line = `${prefix} ${choice}`
+        return index === selected ? `\x1b[7m${line}\x1b[0m` : line
+      }),
+    ]
+    output.write(`${lines.join("\n")}\n`)
+    renderedLines = lines.length
   }
 
   render()
@@ -213,7 +232,6 @@ async function askInteractiveChoice({ input, output, label, choices, defaultValu
       if (rawWasEnabled) {
         input.setRawMode(false)
       }
-      output.write("\n")
     }
 
     function onKeypress(_str, key = {}) {
