@@ -34,7 +34,7 @@ Run in watch mode during development:
 pnpm dev
 ```
 
-`pnpm setup` executes `src/bin/opencode-remote.js setup` and replaces any existing gateway config. `pnpm start` executes `src/bin/opencode-remote.js run` and uses the normal app-state database. `pnpm dev` runs the same gateway in watch mode with `--state-suffix dev`, so development state is stored in `opencode-remote-dev.db` instead of the production `opencode-remote.db`. If no config exists, `pnpm dev` starts the same interactive setup flow before starting the gateway.
+`pnpm setup` executes `src/bin/opencode-remote.js setup` and rewrites the selected gateway config. When a config already exists at that selected local or global path, blank prompt input keeps the current value. `pnpm start` executes `src/bin/opencode-remote.js run` and uses the normal app-state database. `pnpm dev` runs the same gateway in watch mode with `--state-suffix dev`, so development state is stored in `opencode-remote-dev.db` instead of the production `opencode-remote.db`. If no config exists, `pnpm dev` starts the same interactive setup flow before starting the gateway.
 
 ## App State Storage
 

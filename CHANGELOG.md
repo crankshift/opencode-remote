@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.4.1] - 2026-05-26
+
+### Changed
+
+- Changed setup to reuse current values from the selected local or global config when prompts are left blank.
+
 ## [0.4.0] - 2026-05-26
 
 ### Added

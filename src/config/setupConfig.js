@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { stdin as defaultInput, stdout as defaultOutput } from "node:process"
@@ -52,7 +53,7 @@ async function writePromptedConfig({ answers, paths, cwd }) {
 }
 
 export async function promptForConfig(
-  _paths,
+  paths,
   {
     input = defaultInput,
     output = defaultOutput,
@@ -72,29 +73,47 @@ export async function promptForConfig(
       "local",
       { input, output },
     )
-    const botToken = await askRequired(rl, "Telegram bot token")
-    const allowedUserId = Number(await askInteger(rl, "Telegram allowed user ID"))
+    const currentConfig = loadCurrentConfigForScope(paths, scope)
+    if (currentConfig) {
+      output.write(
+        `Current config found at ${currentConfig.configPath}. Press Enter with no value to keep current prompt values.\n`,
+      )
+    }
+
+    const botToken = await askRequired(rl, "Telegram bot token", currentConfig?.telegram.botToken, {
+      secret: true,
+    })
+    const allowedUserId = Number(
+      await askInteger(rl, "Telegram allowed user ID", currentConfig?.telegram.allowedUserId),
+    )
     const progressVerbosity = await askChoice(
       rl,
       "Progress verbosity",
       ["off", "new", "all", "verbose"],
-      defaultPromptConfig.progressVerbosity,
+      currentConfig?.progressVerbosity ?? defaultPromptConfig.progressVerbosity,
       { input, output },
     )
     const logLevel = await askChoice(
       rl,
       "Log level",
       ["fatal", "error", "warn", "info", "debug", "trace", "silent"],
-      defaultPromptConfig.logLevel,
+      currentConfig?.logLevel ?? defaultPromptConfig.logLevel,
       { input, output },
     )
-    const enableVoice = await askChoice(rl, "Enable voice mode now? no/yes", ["no", "yes"], "no", {
-      input,
-      output,
-    })
+    const enableVoice = await askChoice(
+      rl,
+      "Enable voice mode now? no/yes",
+      ["no", "yes"],
+      currentConfig?.voice.enabled ? "yes" : "no",
+      {
+        input,
+        output,
+      },
+    )
     const voice = await promptForVoiceConfig({
       rl,
       enableVoice,
+      currentVoice: currentConfig?.voice.enabled ? currentConfig.voice : null,
       checkFfmpeg,
       detectFfmpegInstaller,
       installFfmpeg,
@@ -119,9 +138,26 @@ export async function promptForConfig(
   }
 }
 
+function loadCurrentConfigForScope(paths, scope) {
+  const configPath = scope === "global" ? paths.globalConfigPath : paths.localConfigPath
+
+  let raw
+  try {
+    raw = JSON.parse(readFileSync(configPath, "utf8"))
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return null
+    }
+    throw error
+  }
+
+  return loadConfigFromObject(raw, { configPath })
+}
+
 async function promptForVoiceConfig({
   rl,
   enableVoice,
+  currentVoice,
   checkFfmpeg,
   detectFfmpegInstaller,
   installFfmpeg,
@@ -144,8 +180,12 @@ async function promptForVoiceConfig({
     return null
   }
 
-  const groqApiKey = await askRequired(rl, "Groq API key")
-  const voice = await askWithDefault(rl, "Edge TTS voice", "en-US-AndrewNeural")
+  const groqApiKey = await askRequired(rl, "Groq API key", currentVoice?.groqApiKey, {
+    secret: true,
+  })
+  const voice = currentVoice?.voice
+    ? await askRequired(rl, "Edge TTS voice", currentVoice.voice)
+    : await askWithDefault(rl, "Edge TTS voice", "en-US-AndrewNeural")
   return {
     enabled: true,
     mode: "on",
@@ -220,19 +260,24 @@ async function runWithReadlinePaused(rl, action) {
   }
 }
 
-async function askRequired(rl, label) {
+async function askRequired(rl, label, currentValue, options = {}) {
   while (true) {
-    const value = (await rl.question(`${label}: `)).trim()
+    const value = (
+      await rl.question(`${label}${formatCurrentHint(currentValue, options)}: `)
+    ).trim()
     if (value) {
       return value
+    }
+    if (hasCurrentValue(currentValue)) {
+      return currentValue
     }
     rl.output.write(`${label} is required.\n`)
   }
 }
 
-async function askInteger(rl, label) {
+async function askInteger(rl, label, currentValue) {
   while (true) {
-    const value = await askRequired(rl, label)
+    const value = await askRequired(rl, label, currentValue)
     const parsed = Number(value)
     if (Number.isInteger(parsed) && parsed > 0) {
       return value
@@ -266,6 +311,17 @@ async function askChoice(
 async function askWithDefault(rl, label, defaultValue) {
   const value = (await rl.question(`${label} (${defaultValue}): `)).trim()
   return value || defaultValue
+}
+
+function formatCurrentHint(value, { secret = false } = {}) {
+  if (!hasCurrentValue(value)) {
+    return ""
+  }
+  return ` (current: ${secret ? "set" : value}; press Enter to keep)`
+}
+
+function hasCurrentValue(value) {
+  return value !== undefined && value !== null && value !== ""
 }
 
 async function askOptional(rl, label) {

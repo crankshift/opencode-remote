@@ -46,7 +46,7 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, and optional voice mode. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. If a config already exists at the chosen location, setup replaces it. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, and optional voice mode. If a config already exists at the chosen location, setup shows current values and pressing Enter with no input keeps them; secret values are shown only as set. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
 
 Config discovery order:
 

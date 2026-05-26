@@ -29,7 +29,7 @@ Implemented now:
 - OpenCode session create/list/select, prompt sending, and active-session abort.
 - Auto-create an OpenCode session before the first prompt when no active session is selected.
 - JSON config discovery from project-local `.opencode-remote/config.json`, then global `~/.opencode-remote/config.json`.
-- Interactive CLI config setup when no JSON config exists, with highlighted arrow-key lists for choice prompts and `ffmpeg` install/retry handling for voice setup.
+- Interactive CLI config setup when no JSON config exists, with selected-scope current defaults, highlighted arrow-key lists for choice prompts, and `ffmpeg` install/retry handling for voice setup.
 - SQLite app-state persistence for `activeSessionId` and `/progress` preference in the platform app-data directory, scoped by OpenCode-style project identity.
 - Telegram-safe text chunking below message limits.
 - Telegram typing action while prompts are running.

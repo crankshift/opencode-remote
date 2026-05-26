@@ -276,6 +276,95 @@ describe("promptForConfig", () => {
     expect(output.text()).not.toMatch(/Settings path/)
   })
 
+  test("uses existing local config values when local setup input is blank", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const localConfigPath = join(cwd, ".opencode-remote", "config.json")
+    await writeConfig(localConfigPath, {
+      telegram: { botToken: "existing-token", allowedUserId: 321 },
+      progressVerbosity: "all",
+      logLevel: "debug",
+    })
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath,
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["", "", "", "", "", ""])
+    const answers = await prompt
+
+    expect(answers).toEqual({
+      scope: "local",
+      config: {
+        telegram: { botToken: "existing-token", allowedUserId: 321 },
+        progressVerbosity: "all",
+        logLevel: "debug",
+      },
+    })
+    expect(output.text()).toContain("Current config found")
+    expect(output.text()).toContain("Telegram bot token (current: set; press Enter to keep)")
+    expect(output.text()).toContain("Telegram allowed user ID (current: 321; press Enter to keep)")
+  })
+
+  test("uses existing global config values when global setup input is blank", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const globalConfigPath = join(homeDir, ".opencode-remote", "config.json")
+    await writeConfig(globalConfigPath, {
+      telegram: { botToken: "global-token", allowedUserId: 654 },
+      progressVerbosity: "new",
+      logLevel: "warn",
+    })
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath,
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["global", "", "", "", "", ""])
+    const answers = await prompt
+
+    expect(answers).toEqual({
+      scope: "global",
+      config: {
+        telegram: { botToken: "global-token", allowedUserId: 654 },
+        progressVerbosity: "new",
+        logLevel: "warn",
+      },
+    })
+  })
+
+  test("does not use global config values when local setup is selected", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    await writeConfig(join(homeDir, ".opencode-remote", "config.json"), {
+      telegram: { botToken: "global-token", allowedUserId: 654 },
+      progressVerbosity: "new",
+      logLevel: "warn",
+    })
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["", "local-token", "111", "", "", ""])
+    const answers = await prompt
+
+    expect(answers.config.telegram).toEqual({ botToken: "local-token", allowedUserId: 111 })
+    expect(output.text()).not.toContain("Current config found")
+  })
+
   test("collects voice setup answers when enabled", async () => {
     const { cwd, homeDir } = await tempWorkspace()
     const input = new PassThrough()
@@ -301,6 +390,48 @@ describe("promptForConfig", () => {
       groqApiKey: "gsk_test",
       voice: "uk-UA-OstapNeural",
     })
+  })
+
+  test("uses existing voice config values when voice setup input is blank", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const localConfigPath = join(cwd, ".opencode-remote", "config.json")
+    await writeConfig(localConfigPath, {
+      telegram: { botToken: "token", allowedUserId: 123 },
+      voice: {
+        enabled: true,
+        mode: "on",
+        voice: "uk-UA-OstapNeural",
+        groqApiKey: "existing-groq-key",
+        sttModel: "whisper-large-v3-turbo",
+      },
+    })
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath,
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      {
+        input,
+        output,
+        checkFfmpeg: vi.fn(async () => ({ available: true })),
+      },
+    )
+    await writeAnswers(input, ["", "", "", "", "", "", "", ""])
+    const answers = await prompt
+
+    expect(answers.config.voice).toEqual({
+      enabled: true,
+      mode: "on",
+      groqApiKey: "existing-groq-key",
+      voice: "uk-UA-OstapNeural",
+    })
+    expect(output.text()).toContain("Groq API key (current: set; press Enter to keep)")
+    expect(output.text()).toContain(
+      "Edge TTS voice (current: uk-UA-OstapNeural; press Enter to keep)",
+    )
   })
 
   test("installs ffmpeg automatically before collecting voice setup answers", async () => {
