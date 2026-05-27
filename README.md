@@ -66,7 +66,7 @@ cd /path/to/your/project
 opencode-remote run
 ```
 
-Run foreground and background commands from the target OpenCode project folder. By default, the gateway starts `opencode serve` from that folder and uses it as the project identity for persisted state.
+Run foreground and background commands from the target OpenCode project folder. By default, the gateway starts `opencode serve` from that folder and uses it as the project identity for persisted state. For local `opencode.apiUrl` values with a configured port, auto-start passes that port to `opencode serve`; if OpenCode is still unreachable after about 60 seconds, the command exits with an error.
 
 Stop the foreground gateway with `Ctrl+C`.
 
@@ -130,6 +130,8 @@ The config file is JSON:
 `telegram.botToken` is required. It is the token for the bot that receives Telegram messages.
 
 `telegram.allowedUserId` is required. Updates from other Telegram users are ignored.
+
+`opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or `127.0.0.1` with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
 
 `progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime.
 
@@ -195,7 +197,7 @@ If startup fails with a configuration error, check the selected `.opencode-remot
 
 If Telegram messages appear to be ignored, confirm that `telegram.allowedUserId` matches your Telegram user ID, not the bot ID or chat ID.
 
-If startup fails because OpenCode is unreachable, make sure the OpenCode CLI is installed and available in `PATH`.
+If startup fails because OpenCode is unreachable, make sure the OpenCode CLI is installed and available in `PATH`. With auto-start enabled, the gateway waits about 60 seconds for the configured OpenCode URL before exiting.
 
 If background mode does not start, run `opencode-remote status`.
 

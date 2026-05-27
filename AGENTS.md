@@ -19,6 +19,7 @@ AI operating guide for `opencode-remote`. Keep this file short: preserve critica
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
 - Runtime: Node.js `>=22.18.0`; Node.js 24 LTS recommended.
 - Package manager: pnpm 11.3.0.
+- Never add `minimumReleaseAgeExclude` to pnpm config; it bypasses pnpm's release-age supply-chain guardrail.
 - Language: JavaScript ESM.
 - Tests: Vitest.
 - Lint/format: Biome. Do not add ESLint or Prettier without a concrete need.
@@ -136,9 +137,9 @@ pnpm run check
 
 - Canonical repository skills live in `skills/<name>/SKILL.md`.
 - OpenCode loads canonical skills through `opencode.jsonc` with `skills.paths: ["./skills"]`; do not duplicate canonical skills under `.opencode/skills/`.
-- Claude Code gets zero-setup project skills from `.claude/skills/<name>/SKILL.md` and plugin metadata from `.claude-plugin/plugin.json`.
+- Claude Code plugin metadata lives in `.claude-plugin/plugin.json` and loads canonical skills from `skills/`; do not duplicate canonical skills under `.claude/skills/`.
 - Codex plugin metadata lives in `.codex-plugin/plugin.json`, with the repo-local marketplace at `.agents/plugins/marketplace.json` pointing to this repository as the local plugin source.
-- Keep copied skill files byte-for-byte identical to the canonical file. `tests/runtime/aiSkillRegistration.test.js` verifies the registration layout and copied Claude project skill.
+- `tests/runtime/aiSkillRegistration.test.js` verifies the registration layout.
 
 ## GitHub Issue Task Workflow
 

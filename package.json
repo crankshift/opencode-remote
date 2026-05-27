@@ -48,7 +48,7 @@
     "check": "pnpm run lint && pnpm run coverage && pnpm run smoke:package && pnpm run smoke:workflows"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.15.10",
+    "@opencode-ai/sdk": "^1.15.7",
     "commander": "^14.0.3",
     "edge-tts-universal": "^1.4.0",
     "execa": "^9.6.1",
