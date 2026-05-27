@@ -81,6 +81,15 @@ https://github.com/crankshift/software-design
 
 It is recommended if you plan to do ongoing development in this repository, especially larger design or refactoring work. It is not required for one-off contributions or pull requests.
 
+This repository also ships AI-agent workflow skills for contributors:
+
+- Canonical skills live in `skills/`.
+- OpenCode reads `skills/` through `opencode.jsonc`.
+- Claude Code can use `.claude/skills/` for project skills or `.claude-plugin/plugin.json` for plugin-based loading.
+- Codex-compatible plugin metadata lives in `.codex-plugin/plugin.json`, and `.agents/plugins/marketplace.json` points to this repository as a local plugin source.
+
+These files are public repo configuration. They should not require maintainer-private home-directory config or board access.
+
 ## Pull Request Checklist
 
 - The change is scoped to one bug, feature, or documentation improvement.

@@ -1,0 +1,31 @@
+{
+  "name": "opencode-remote",
+  "version": "0.5.5",
+  "description": "Repository-local development workflow skills for OpenCode Remote.",
+  "author": {
+    "name": "crankshift"
+  },
+  "homepage": "https://github.com/crankshift/opencode-remote",
+  "repository": "https://github.com/crankshift/opencode-remote",
+  "license": "MIT",
+  "keywords": ["opencode", "telegram", "gateway", "workflow"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "OpenCode Remote",
+    "shortDescription": "Development workflow skills for OpenCode Remote",
+    "longDescription": "OpenCode Remote provides repository-local workflow guidance for GitHub issues, task branches, and contributor-friendly development in this project.",
+    "developerName": "crankshift",
+    "category": "Coding",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://github.com/crankshift/opencode-remote",
+    "privacyPolicyURL": "https://github.com/crankshift/opencode-remote",
+    "termsOfServiceURL": "https://github.com/crankshift/opencode-remote",
+    "defaultPrompt": [
+      "Create a task branch for an issue.",
+      "Start work on a GitHub issue.",
+      "Finish and verify this task."
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

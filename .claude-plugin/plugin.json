@@ -1,0 +1,14 @@
+{
+  "name": "opencode-remote",
+  "displayName": "OpenCode Remote",
+  "version": "0.5.5",
+  "description": "Repository-local development workflow skills for OpenCode Remote.",
+  "author": {
+    "name": "crankshift"
+  },
+  "homepage": "https://github.com/crankshift/opencode-remote",
+  "repository": "https://github.com/crankshift/opencode-remote",
+  "license": "MIT",
+  "keywords": ["opencode", "telegram", "gateway", "workflow"],
+  "skills": "./skills/"
+}
