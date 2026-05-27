@@ -40,11 +40,12 @@
     "prepack": "pnpm run build",
     "prepare": "lefthook install",
     "smoke:package": "pnpm run build && node tests/smoke/packageSmoke.js",
+    "smoke:workflows": "node tests/smoke/workflowSmoke.js",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "check": "pnpm run lint && pnpm run coverage && pnpm run smoke:package"
+    "check": "pnpm run lint && pnpm run coverage && pnpm run smoke:package && pnpm run smoke:workflows"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.15.10",

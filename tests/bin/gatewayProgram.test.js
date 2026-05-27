@@ -91,13 +91,13 @@ describe("opencode-remote CLI program", () => {
     expect(packageJson.scripts.coverage).toBe("vitest run --coverage")
   })
 
-  test("check script gates coverage before package smoke checks", async () => {
+  test("check script gates coverage before smoke checks", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),
     )
 
     expect(packageJson.scripts.check).toBe(
-      "pnpm run lint && pnpm run coverage && pnpm run smoke:package",
+      "pnpm run lint && pnpm run coverage && pnpm run smoke:package && pnpm run smoke:workflows",
     )
   })
 

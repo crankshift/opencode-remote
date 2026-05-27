@@ -2,16 +2,44 @@ name: Publish to npm
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run checks
+        run: pnpm run check
+
   publish:
     runs-on: ubuntu-latest
+    needs: check
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -40,8 +68,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run checks
-        run: pnpm run check
+      - name: Verify release tag matches package version
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs"
+
+          const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
+          const tag = process.env.GITHUB_REF_NAME
+          const expectedTag = `v${packageJson.version}`
+
+          if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+            throw new Error(`Release tag must look like vX.Y.Z, got ${tag}`)
+          }
+
+          if (tag !== expectedTag) {
+            throw new Error(`Release tag ${tag} does not match package version ${packageJson.version}`)
+          }
+          NODE
 
       - name: Publish package
-        run: npm publish --access public
+        run: npm publish --provenance --access public

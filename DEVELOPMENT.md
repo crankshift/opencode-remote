@@ -113,21 +113,29 @@ Run the full local check:
 pnpm run check
 ```
 
+`pnpm run check` runs linting, coverage thresholds, package smoke checks, and workflow smoke checks.
+
 Default tests mock external systems. They do not require live Telegram, live OpenCode, Groq, Edge TTS, or `ffmpeg`.
+
+## CI
+
+GitHub Actions runs the `Check` workflow on pull requests and pushes to `main`. It installs dependencies with `pnpm install --frozen-lockfile` on Node.js 24 and runs `pnpm run check`.
+
+Maintainers should configure branch protection for `main` to require the `Check` workflow before merging. Dependabot checks GitHub Actions and npm dependencies weekly.
 
 ## Release
 
 Releases publish to npm from GitHub Actions using npm trusted publishing. The repository does not need an `NPM_TOKEN` secret.
 
-Before using tag-triggered releases, configure a trusted publisher for `@crankshift/opencode-remote` on npmjs.com. It must match the GitHub repository and workflow filename `publish.yml`.
+Before publishing, configure a trusted publisher for `@crankshift/opencode-remote` on npmjs.com. It must match the GitHub repository and workflow filename `publish.yml`.
 
 To publish a release:
 
 1. Update `package.json` version and `CHANGELOG.md`.
 2. Run `pnpm run check`.
 3. Commit the release changes.
-4. Tag the commit with `vX.Y.Z`, matching the package version.
+4. Tag the commit with `vX.Y.Z`, matching the package version exactly.
 5. Push the commit and tag.
 6. Verify the `Publish to npm` GitHub Actions workflow completes and the package appears on npm.
 
-The workflow runs `pnpm run check` before `npm publish --access public`.
+The publish workflow runs only for pushed `v*` tags. Its `publish` job depends on a successful `check` job, validates that the tag matches `package.json` version, and then runs `npm publish --provenance --access public`. Only the publish job requests `id-token: write` for npm trusted publishing.

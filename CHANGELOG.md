@@ -2,6 +2,17 @@
 
 This project follows Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- Added a pull request and `main` branch `Check` workflow plus workflow smoke checks for CI/CD guardrails.
+- Added Dependabot maintenance for GitHub Actions and npm dependencies.
+
+### Changed
+
+- Changed npm publishing to run only from `vX.Y.Z` tags after the release check job succeeds, with provenance enabled.
+
 ## [0.5.5] - 2026-05-27
 
 ### Changed
