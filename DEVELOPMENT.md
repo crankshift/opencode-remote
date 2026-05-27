@@ -85,6 +85,14 @@ Run tests:
 pnpm test
 ```
 
+Run tests with coverage:
+
+```bash
+pnpm run coverage
+```
+
+Coverage uses Vitest's V8 provider over `src/**/*.js` and writes text, HTML, and LCOV reports to `coverage/`. The full local check runs coverage thresholds before the package smoke check.
+
 Run the package smoke check:
 
 ```bash

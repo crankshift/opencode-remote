@@ -83,6 +83,24 @@ describe("opencode-remote CLI program", () => {
     expect(packageJson.scripts.setup).toBe("node src/bin/opencode-remote.js setup")
   })
 
+  test("coverage script runs Vitest coverage", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    )
+
+    expect(packageJson.scripts.coverage).toBe("vitest run --coverage")
+  })
+
+  test("check script gates coverage before package smoke checks", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    )
+
+    expect(packageJson.scripts.check).toBe(
+      "pnpm run lint && pnpm run coverage && pnpm run smoke:package",
+    )
+  })
+
   test("package manager version supports setup script shorthand", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),

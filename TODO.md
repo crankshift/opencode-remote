@@ -56,7 +56,7 @@
    - Do not silently auto-start OpenCode by default.
    - Add a non-interactive flag or env option for explicit auto-start behavior.
 
-9. [ ] Add modern Vitest coverage reporting.
+9. [x] Add modern Vitest coverage reporting.
    - Add `@vitest/coverage-v8` and a `pnpm run coverage` script using `vitest run --coverage`.
    - Configure V8 coverage for `src/**/*.js` with `text`, `html`, and `lcov` reporters.
    - Start with realistic global thresholds: 80% lines, statements, and functions; 70% branches.
