@@ -33,9 +33,20 @@ jobs:
           VERSION=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; const { version } = JSON.parse(readFileSync("package.json", "utf8")); if (!/^\d+\.\d+\.\d+$/.test(version)) { throw new Error(`package.json version must be X.Y.Z, got ${version}`); } console.log(version)')
           TAG="v$VERSION"
 
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists"
-            exit 0
+          EXISTING_TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG" --jq ".object.sha" 2>/dev/null || true)
+          if [ -n "$EXISTING_TAG_SHA" ]; then
+            EXISTING_TAG_TYPE=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/$TAG" --jq ".object.type")
+            if [ "$EXISTING_TAG_TYPE" = "tag" ]; then
+              EXISTING_TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/$EXISTING_TAG_SHA" --jq ".object.sha")
+            fi
+
+            if [ "$EXISTING_TAG_SHA" = "$RELEASE_SHA" ]; then
+              echo "Tag $TAG already exists at $RELEASE_SHA"
+              exit 0
+            fi
+
+            echo "::error::Tag $TAG already exists at $EXISTING_TAG_SHA, expected $RELEASE_SHA. Bump package.json version for a new release."
+            exit 1
           fi
 
           gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
