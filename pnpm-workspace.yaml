@@ -1,3 +1,5 @@
+allowBuilds:
+  lefthook: true
 minimumReleaseAgeExclude:
   - '@babel/helper-string-parser@8.0.0-rc.6'
   - '@babel/helper-validator-identifier@8.0.0-rc.6'

@@ -14,6 +14,14 @@ Development notes for `@crankshift/opencode-remote`.
 pnpm install
 ```
 
+`pnpm install` installs Lefthook Git hooks for local development. The pre-commit hook runs `pnpm run lint`, and the commit-msg hook runs commitlint to enforce Conventional Commit messages.
+
+If hooks need to be reinstalled manually, run:
+
+```bash
+pnpm exec lefthook install
+```
+
 ## Run From Source
 
 Create the config interactively:

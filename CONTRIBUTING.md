@@ -32,6 +32,31 @@ If you are changing architecture, OpenCode integration, Telegram behavior, confi
 
 See `DEVELOPMENT.md` for install, run, lint, test, build, and package-check commands.
 
+## Commit And Branch Naming
+
+Use Conventional Commit messages. Common types for this repository are:
+
+```text
+feat: add a user-visible capability
+fix: correct a bug
+docs: update documentation only
+test: add or update tests
+chore: update maintenance tooling
+ci: update GitHub Actions or release automation
+refactor: restructure code without changing behavior
+```
+
+Use short branch names with the same kind of prefix:
+
+```text
+feat/telegram-voice-cache
+fix/album-cleanup
+docs/contributing-hooks
+chore/update-tooling
+```
+
+Local Git hooks enforce linting and commit messages after dependencies are installed with `pnpm install`.
+
 ## Privacy And Security
 
 Do not include secrets or private local details in issues, pull requests, tests, fixtures, screenshots, or logs.
