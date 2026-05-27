@@ -4,6 +4,8 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.5.6] - 2026-05-27
+
 ### Added
 
 - Added a pull request and `main` branch `Check` workflow plus workflow smoke checks for CI/CD guardrails.
@@ -13,6 +15,10 @@ This project follows Semantic Versioning.
 ### Changed
 
 - Changed npm publishing to run only from `vX.Y.Z` tags after the release check job succeeds, with provenance enabled.
+
+### Fixed
+
+- Fixed release tag creation to fail with a version-bump message when the package version tag already exists at a different commit.
 
 ## [0.5.5] - 2026-05-27
 

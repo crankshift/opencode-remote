@@ -1,7 +1,7 @@
 {
   "name": "opencode-remote",
   "displayName": "OpenCode Remote",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Repository-local development workflow skills for OpenCode Remote.",
   "author": {
     "name": "crankshift"
