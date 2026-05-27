@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@opencode-ai/sdk':
         specifier: ^1.15.10
-        version: 1.15.10
+        version: 1.15.11
       commander:
         specifier: ^14.0.3
         version: 14.0.3
@@ -284,8 +284,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@opencode-ai/sdk@1.15.10':
-    resolution: {integrity: sha512-CUhpmMGGOqzvPnNNjjWmEIodAfP6Qnuki2ChIUKWYF7UImZ4zUcMZnzO5BtUxu/Ni1P8qzWxDioXs+7aIZQEhA==}
+  '@opencode-ai/sdk@1.15.11':
+    resolution: {integrity: sha512-IyYyDVsO8SKbKbkSadHpDuYnYC+2vmEeLU+rW+rH2M54Sigq6l3gDHno16+U6SRut+lowbph7v/ry3WbV67V3w==}
 
   '@oxc-project/types@0.132.0':
     resolution: {integrity: sha512-FESMOxil5Se014ui/Eq8fT5uHJo6nIRwH0PfJrZJXs6Gek3ZVFOrpUv3YIZT20m+extU98Hg1Ym72U58rlsxUQ==}
@@ -1717,7 +1717,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
-  '@opencode-ai/sdk@1.15.10':
+  '@opencode-ai/sdk@1.15.11':
     dependencies:
       cross-spawn: 7.0.6
 
