@@ -19,6 +19,7 @@ AI operating guide for `opencode-remote`. Keep this file short: preserve critica
 - Direction: keep OpenCode/session logic messenger-neutral so Signal or other messengers can reuse the core later.
 - Runtime: Node.js `>=22.18.0`; Node.js 24 LTS recommended.
 - Package manager: pnpm 11.3.0.
+- Never add `minimumReleaseAgeExclude` to pnpm config; it bypasses pnpm's release-age supply-chain guardrail.
 - Language: JavaScript ESM.
 - Tests: Vitest.
 - Lint/format: Biome. Do not add ESLint or Prettier without a concrete need.
