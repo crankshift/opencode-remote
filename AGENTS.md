@@ -326,6 +326,15 @@ Current test priorities:
 5. Update README/FEATURES/CHANGELOG/TODO when public behavior, release notes, or roadmap change.
 6. Run available verification before claiming completion.
 
+## GitHub Project Task Workflow
+
+- Repo-local skill: `.opencode/skills/github-project-task-workflow/SKILL.md`.
+- Use it when the user asks to start, select, or finish work from `https://github.com/users/crankshift/projects/3/views/1`.
+- Board task branches must use `github-login/taskid-free-task-name`, for example `crankshift/42-fix-telegram-album-cleanup`.
+- `taskid` is the GitHub issue or PR number; draft-only project items must be linked to an issue/PR before branch creation.
+- If the user requests a worktree, still create the separate task branch.
+- Move board items to `In Progress` only after the branch/worktree exists, and to `Done` only after verification passes unless the user explicitly accepts an unverified board state.
+
 ## Roadmap Guardrails
 
 - Do not add Hono, Express, or another HTTP framework unless webhooks, health checks, metrics, or admin APIs are explicitly requested.
