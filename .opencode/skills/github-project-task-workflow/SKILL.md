@@ -1,6 +1,6 @@
 ---
 name: github-project-task-workflow
-description: Use when starting, selecting, or finishing work from this repository's GitHub Projects board, especially "let's do a task", project item, task branch, or worktree requests.
+description: Use when creating, starting, selecting, or finishing work from this repository's GitHub Projects board, especially "let's create a task", "let's do a task", project item, task branch, or worktree requests.
 ---
 
 # GitHub Project Task Workflow
@@ -8,6 +8,8 @@ description: Use when starting, selecting, or finishing work from this repositor
 ## Core Rule
 
 Board work starts from the GitHub Projects board and must use a task branch named `github-login/taskid-free-task-name` before coding.
+
+When the user says "let's create a task", create a GitHub Project draft item in `Todo` using the public task template structure from `.github/ISSUE_TEMPLATE/task.md`. Do not create a GitHub issue unless the user explicitly asks for an issue.
 
 Board: `https://github.com/users/crankshift/projects/3/views/1`, owner `crankshift`, project `3`, status options `Todo`, `In Progress`, `Done`.
 
@@ -20,6 +22,19 @@ gh auth refresh -s read:project -s project
 ```
 
 Continue only after `gh project` reads succeed.
+
+## Create Workflow
+
+1. Derive a clear title from the request; ask only if the title is ambiguous.
+2. Build the body with the same sections as `.github/ISSUE_TEMPLATE/task.md`: Summary, Context, Acceptance Criteria, Notes. Write it to a temp file and remove the temp file after creation.
+3. Create a Project draft item with `gh project item-create 3 --owner crankshift --title "Task title" --body "$(< /tmp/task-body.md)" --format json`.
+4. Resolve project ID, `Status` field ID, and `Todo` option ID live with `gh project view` and `gh project field-list`.
+5. Set the new item to `Todo` with `gh project item-edit`.
+6. Summarize the created draft item title, project item ID or URL, and `Todo` status.
+
+Draft items do not automatically use GitHub issue templates. The template file is for public repository issues; this workflow mirrors its structure manually for Project draft items.
+
+If the user explicitly asks for a GitHub issue, create the issue using `.github/ISSUE_TEMPLATE/task.md`, add it to project `3`, then set `Status` to `Todo`.
 
 ## Start Workflow
 
@@ -64,6 +79,7 @@ If the user asks to skip tests, do not mark `Done` based on optimism. Leave the 
 
 ```bash
 gh auth status
+gh project item-create 3 --owner crankshift --title "Task title" --body "$(< /tmp/task-body.md)" --format json
 gh project item-list 3 --owner crankshift --query "status:Todo" --limit 100 --format json
 gh project view 3 --owner crankshift --format json --jq .id
 gh project field-list 3 --owner crankshift --format json
@@ -84,10 +100,13 @@ Use `gh project item-list` for `ITEM_ID`; do not pass an issue number or issue n
 | Moving `In Progress` before branch creation | Create branch/worktree first. |
 | Moving `Done` before verification | Verify first or leave `In Progress`. |
 | Using a draft project item ID as `taskid` | Ask to create/link an issue or PR. |
+| Creating a GitHub issue for "let's create a task" | Create a Project draft item unless the user asks for an issue. |
+| Assuming draft items use issue templates | Mirror `.github/ISSUE_TEMPLATE/task.md` manually in the draft body. |
 
 ## Red Flags
 
 - User said "let's do a task" and you have not read the board.
+- User said "let's create a task" and you are creating an issue instead of a Project draft item.
 - You are about to edit code without a task branch.
 - Branch does not start with the current GitHub login.
 - Branch task ID is not a GitHub issue or PR number.

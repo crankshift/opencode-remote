@@ -329,7 +329,8 @@ Current test priorities:
 ## GitHub Project Task Workflow
 
 - Repo-local skill: `.opencode/skills/github-project-task-workflow/SKILL.md`.
-- Use it when the user asks to start, select, or finish work from `https://github.com/users/crankshift/projects/3/views/1`.
+- Use it when the user asks to create, start, select, or finish work from `https://github.com/users/crankshift/projects/3/views/1`.
+- "Let's create a task" means create a GitHub Project draft item in `Todo` using the public task template structure from `.github/ISSUE_TEMPLATE/task.md`; only create a GitHub issue if the user explicitly asks for an issue.
 - Board task branches must use `github-login/taskid-free-task-name`, for example `crankshift/42-fix-telegram-album-cleanup`.
 - `taskid` is the GitHub issue or PR number; draft-only project items must be linked to an issue/PR before branch creation.
 - If the user requests a worktree, still create the separate task branch.
