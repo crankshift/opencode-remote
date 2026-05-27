@@ -57,6 +57,22 @@ export function createOpenCodeClient({
       }
     },
 
+    async sendContext(sessionId, context) {
+      try {
+        return toData(
+          await client.session.prompt({
+            path: { id: sessionId },
+            body: {
+              noReply: true,
+              parts: toPromptParts(context),
+            },
+          }),
+        )
+      } catch (error) {
+        throw new GatewayOpenCodeError("Could not send OpenCode context", error)
+      }
+    },
+
     async respondToPermission(sessionId, permissionId, decision) {
       const body = toPermissionResponseBody(decision)
       try {

@@ -4,6 +4,7 @@ import {
 } from "../adapters/telegram/bot.js"
 import { loadConfig } from "../config/loadConfig.js"
 import { setConfigValuesAtPath as defaultSetConfigValuesAtPath } from "../config/writeConfig.js"
+import { createGatewayContext } from "../core/gateway/context.js"
 import { createGatewayController as defaultCreateGatewayController } from "../core/gateway/controller.js"
 import { createOpenCodeClient as defaultCreateOpenCodeClient } from "../core/opencode/client.js"
 import { ensureOpenCodeServer as defaultEnsureOpenCodeServer } from "../core/opencode/serverManager.js"
@@ -50,6 +51,10 @@ export async function runGateway({
     opencode,
     store,
     defaultProgressVerbosity: resolvedConfig.progressVerbosity,
+    gatewayContext: createGatewayContext({
+      voiceRepliesEnabled: resolvedConfig.voice.enabled && resolvedConfig.voice.mode !== "off",
+    }),
+    logger: resolvedLogger,
   })
   const voiceService = createVoiceService({
     config: resolvedConfig.voice,

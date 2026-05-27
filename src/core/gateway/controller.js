@@ -1,6 +1,12 @@
 import { PROGRESS_VERBOSITIES } from "../formatting/progressText.js"
 
-export function createGatewayController({ opencode, store, defaultProgressVerbosity = "all" }) {
+export function createGatewayController({
+  opencode,
+  store,
+  defaultProgressVerbosity = "all",
+  gatewayContext = null,
+  logger = null,
+}) {
   const configuredProgressVerbosity = normalizeProgressVerbosity(defaultProgressVerbosity)
 
   async function getActiveSessionId() {
@@ -15,7 +21,19 @@ export function createGatewayController({ opencode, store, defaultProgressVerbos
   async function createSession() {
     const session = await opencode.createSession()
     await store.write({ activeSessionId: session.id })
+    await primeSession(session.id)
     return session
+  }
+
+  async function primeSession(sessionId) {
+    if (!gatewayContext || typeof opencode.sendContext !== "function") {
+      return
+    }
+    try {
+      await opencode.sendContext(sessionId, gatewayContext)
+    } catch (error) {
+      logger?.warn?.({ error, sessionId }, "Could not send OpenCode gateway context")
+    }
   }
 
   async function getProgressVerbosity() {

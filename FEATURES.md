@@ -43,6 +43,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 ## OpenCode Sessions
 
 - If no active session is selected, the gateway creates one before sending a prompt.
+- New sessions receive hidden gateway context with no assistant reply so OpenCode understands messenger, voice, activity, and permission behavior without showing a setup response to the user.
 - Selected session state is stored in `opencode-remote.db` under the platform app-data directory and scoped by project identity.
 - Stopping a task uses OpenCode's session abort API for the active session.
 - Session state is messenger-neutral in the gateway core, so future adapters can reuse it.

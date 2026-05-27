@@ -2,6 +2,12 @@
 
 This project follows Semantic Versioning.
 
+## [0.5.4] - 2026-05-27
+
+### Added
+
+- Added hidden gateway context for new OpenCode sessions so agents understand messenger, voice, activity, and permission behavior without showing a setup response to the user.
+
 ## [0.5.3] - 2026-05-26
 
 ### Added
