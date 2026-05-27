@@ -1,9 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises"
 import { execa } from "execa"
 
-export async function defaultReachabilityCheck(apiUrl) {
+export async function defaultReachabilityCheck(apiUrl, { timeoutMs = 100 } = {}) {
   try {
-    const response = await fetch(apiUrl, { method: "GET" })
+    const signal = createTimeoutSignal(timeoutMs)
+    const response = await fetch(apiUrl, { method: "GET", ...(signal ? { signal } : {}) })
     return response.ok || response.status === 404
   } catch {
     return false
@@ -19,8 +20,9 @@ export async function ensureOpenCodeServer({
   processFactory = execa,
   waitMs = 500,
   maxAttempts = 120,
+  reachabilityTimeoutMs = Math.max(1, Math.min(waitMs, 100)),
 }) {
-  if (await isReachable(apiUrl)) {
+  if (await checkReachability(apiUrl, isReachable, reachabilityTimeoutMs)) {
     return { started: false, stop: async () => {} }
   }
 
@@ -36,7 +38,7 @@ export async function ensureOpenCodeServer({
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await delay(waitMs)
-    if (await isReachable(apiUrl)) {
+    if (await checkReachability(apiUrl, isReachable, reachabilityTimeoutMs)) {
       return {
         started: true,
         stop: async () => {
@@ -71,4 +73,20 @@ function buildServeArgs(apiUrl) {
 
 function isLocalHostname(hostname) {
   return ["localhost", "127.0.0.1"].includes(hostname)
+}
+
+function checkReachability(apiUrl, isReachable, timeoutMs) {
+  return Promise.race([isReachable(apiUrl, { timeoutMs }), delay(timeoutMs, false)])
+}
+
+function createTimeoutSignal(timeoutMs) {
+  if (
+    timeoutMs <= 0 ||
+    typeof AbortSignal === "undefined" ||
+    typeof AbortSignal.timeout !== "function"
+  ) {
+    return undefined
+  }
+
+  return AbortSignal.timeout(timeoutMs)
 }

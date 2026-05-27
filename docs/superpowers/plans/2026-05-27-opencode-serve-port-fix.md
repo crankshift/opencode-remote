@@ -4,7 +4,7 @@
 
 **Goal:** Make auto-started OpenCode bind to the gateway's configured local API port and fail after a bounded 60-second wait if it never becomes reachable.
 
-**Architecture:** Keep the behavior inside `src/core/opencode/serverManager.js`, because that module already owns OpenCode child-process startup and readiness polling. Parse `opencode.apiUrl` only for `localhost` and `127.0.0.1` hosts and pass `--port <port>` to `opencode serve`; leave remote-looking and IPv6 URLs unchanged so explicit user configuration remains authoritative.
+**Architecture:** Keep the behavior inside `src/core/opencode/serverManager.js`, because that module already owns OpenCode child-process startup and readiness polling. Parse `opencode.apiUrl` only for `localhost` and `127.0.0.1` hosts and pass `--port <port>` to `opencode serve`; leave remote-looking and IPv6 URLs unchanged so explicit user configuration remains authoritative. Bound each reachability check so a hung fetch cannot stall CLI startup forever.
 
 **Tech Stack:** Node.js ESM, execa, Vitest, Biome.
 
