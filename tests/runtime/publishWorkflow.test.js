@@ -45,6 +45,10 @@ describe("release tag workflow", () => {
     expect(workflow).toContain("github.event.workflow_run.head_sha")
     expect(workflow).toContain("refs/tags/v$VERSION")
     expect(workflow).toContain("git/refs")
+    expect(workflow).toContain(
+      `if EXISTING_TAG_SHA=$(gh api "repos/\${GITHUB_REPOSITORY}/git/ref/tags/$TAG"`,
+    )
+    expect(workflow).not.toContain("2>/dev/null || true)")
     expect(workflow).toContain("EXISTING_TAG_SHA")
     expect(workflow).toContain("expected $RELEASE_SHA")
     expect(workflow).toContain("Bump package.json version for a new release")
