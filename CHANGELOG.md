@@ -2,6 +2,12 @@
 
 This project follows Semantic Versioning.
 
+## [0.5.5] - 2026-05-27
+
+### Changed
+
+- Changed npm publishing to run only after commits land on `main`, including pull request merges, instead of manual dispatches or version tag pushes.
+
 ## [0.5.4] - 2026-05-27
 
 ### Added
