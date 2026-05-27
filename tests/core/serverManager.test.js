@@ -43,6 +43,25 @@ describe("ensureOpenCodeServer", () => {
     expect(processFactory).not.toHaveBeenCalled()
   })
 
+  test("does not start a child process when a reachable server responds after 100ms", async () => {
+    const processFactory = vi.fn()
+    const isReachable = vi.fn(() => new Promise((resolve) => setTimeout(() => resolve(true), 150)))
+
+    const manager = await ensureOpenCodeServer({
+      apiUrl: "http://localhost:4096",
+      command: "opencode",
+      autoStart: true,
+      workdir: process.cwd(),
+      isReachable,
+      processFactory,
+      waitMs: 200,
+      maxAttempts: 1,
+    })
+
+    expect(manager.started).toBe(false)
+    expect(processFactory).not.toHaveBeenCalled()
+  })
+
   test("starts opencode serve on the configured localhost port", async () => {
     const child = { kill: vi.fn(), stdout: null, stderr: null }
     const processFactory = vi.fn().mockReturnValue(child)
@@ -55,8 +74,8 @@ describe("ensureOpenCodeServer", () => {
       workdir: "/tmp/project",
       isReachable,
       processFactory,
-      waitMs: 0,
-      maxAttempts: 2,
+      waitMs: 5,
+      maxAttempts: 5,
     })
 
     expect(manager.started).toBe(true)
@@ -82,8 +101,8 @@ describe("ensureOpenCodeServer", () => {
       workdir: "/tmp/project",
       isReachable,
       processFactory,
-      waitMs: 0,
-      maxAttempts: 2,
+      waitMs: 5,
+      maxAttempts: 5,
     })
 
     expect(processFactory).toHaveBeenCalledWith("opencode", ["serve", "--port", "7777"], {
@@ -105,8 +124,8 @@ describe("ensureOpenCodeServer", () => {
       workdir: "/tmp/project",
       isReachable,
       processFactory,
-      waitMs: 0,
-      maxAttempts: 2,
+      waitMs: 5,
+      maxAttempts: 5,
     })
 
     expect(processFactory).toHaveBeenCalledWith("opencode", ["serve"], {
@@ -128,8 +147,8 @@ describe("ensureOpenCodeServer", () => {
       workdir: "/tmp/project",
       isReachable,
       processFactory,
-      waitMs: 0,
-      maxAttempts: 2,
+      waitMs: 5,
+      maxAttempts: 5,
     })
 
     expect(processFactory).toHaveBeenCalledWith("opencode", ["serve"], {
@@ -140,23 +159,27 @@ describe("ensureOpenCodeServer", () => {
   })
 
   test("waits up to 60 seconds by default before failing", async () => {
+    vi.useFakeTimers()
     const child = { kill: vi.fn(), stdout: null, stderr: null }
     const processFactory = vi.fn().mockReturnValue(child)
     const isReachable = vi.fn().mockResolvedValue(false)
 
-    await expect(
-      ensureOpenCodeServer({
+    try {
+      const result = ensureOpenCodeServer({
         apiUrl: "http://localhost:4096",
         command: "opencode",
         autoStart: true,
         workdir: "/tmp/project",
         isReachable,
         processFactory,
-        waitMs: 0,
-      }),
-    ).rejects.toThrow(/OpenCode server did not become reachable/)
+      })
 
-    expect(isReachable).toHaveBeenCalledTimes(121)
+      await vi.advanceTimersByTimeAsync(60_000)
+      await expect(result).rejects.toThrow(/OpenCode server did not become reachable/)
+    } finally {
+      vi.useRealTimers()
+    }
+
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
   })
 
@@ -173,8 +196,9 @@ describe("ensureOpenCodeServer", () => {
         workdir: "/tmp/project",
         isReachable,
         processFactory,
-        waitMs: 1,
+        waitMs: 5,
         maxAttempts: 2,
+        reachabilityTimeoutMs: 1,
       }).catch((error) => error),
       new Promise((resolve) => setTimeout(() => resolve("still waiting"), 50)),
     ])

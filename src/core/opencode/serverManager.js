@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises"
 import { execa } from "execa"
 
-export async function defaultReachabilityCheck(apiUrl, { timeoutMs = 100 } = {}) {
+export async function defaultReachabilityCheck(apiUrl, { timeoutMs = 5000 } = {}) {
   try {
     const signal = createTimeoutSignal(timeoutMs)
     const response = await fetch(apiUrl, { method: "GET", ...(signal ? { signal } : {}) })
@@ -20,7 +20,7 @@ export async function ensureOpenCodeServer({
   processFactory = execa,
   waitMs = 500,
   maxAttempts = 120,
-  reachabilityTimeoutMs = Math.max(1, Math.min(waitMs, 100)),
+  reachabilityTimeoutMs = 5000,
 }) {
   if (await checkReachability(apiUrl, isReachable, reachabilityTimeoutMs)) {
     return { started: false, stop: async () => {} }
@@ -36,9 +36,17 @@ export async function ensureOpenCodeServer({
     stdio: "pipe",
   })
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    await delay(waitMs)
-    if (await checkReachability(apiUrl, isReachable, reachabilityTimeoutMs)) {
+  const startupDeadline = Date.now() + waitMs * maxAttempts
+  while (Date.now() < startupDeadline) {
+    await delay(Math.min(waitMs, startupDeadline - Date.now()))
+    const remainingMs = startupDeadline - Date.now()
+    if (remainingMs <= 0) {
+      break
+    }
+
+    if (
+      await checkReachability(apiUrl, isReachable, Math.min(reachabilityTimeoutMs, remainingMs))
+    ) {
       return {
         started: true,
         stop: async () => {
