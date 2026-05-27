@@ -6,6 +6,7 @@ AI operating guide for `opencode-remote`. Keep this file short: preserve critica
 
 - Current user-facing features: `FEATURES.md`.
 - Install, setup, config, and usage: `README.md`.
+- External contributor guidance: `CONTRIBUTING.md`.
 - Development, app state, build, checks, and release workflow: `DEVELOPMENT.md`.
 - Roadmap and backlog: `TODO.md`.
 - Historical specs and implementation plans: `docs/superpowers/`.
@@ -112,6 +113,7 @@ pnpm run check
 ## Docs And Packaging
 
 - `README.md` is the public install and usage guide.
+- `CONTRIBUTING.md` is the public guide for external contributors; keep it focused on contribution expectations and link to `DEVELOPMENT.md` for local workflow details.
 - `DEVELOPMENT.md` contains source, test, build, app-state, runtime, and release workflow notes.
 - `FEATURES.md` is the public current-capability inventory.
 - `CHANGELOG.md` is public release history.

@@ -4,7 +4,7 @@ OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, co
 
 This is a Telegram MVP with text prompts, photo prompts, OpenCode permission approvals, and opt-in voice input/replies. Model switching and multi-messenger support are not implemented yet.
 
-See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
+See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Contributing](https://github.com/crankshift/opencode-remote/blob/main/CONTRIBUTING.md) for contribution guidance, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
 
 ## Prerequisites
 
