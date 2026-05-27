@@ -137,9 +137,9 @@ pnpm run check
 
 - Canonical repository skills live in `skills/<name>/SKILL.md`.
 - OpenCode loads canonical skills through `opencode.jsonc` with `skills.paths: ["./skills"]`; do not duplicate canonical skills under `.opencode/skills/`.
-- Claude Code gets zero-setup project skills from `.claude/skills/<name>/SKILL.md` and plugin metadata from `.claude-plugin/plugin.json`.
+- Claude Code plugin metadata lives in `.claude-plugin/plugin.json` and loads canonical skills from `skills/`; do not duplicate canonical skills under `.claude/skills/`.
 - Codex plugin metadata lives in `.codex-plugin/plugin.json`, with the repo-local marketplace at `.agents/plugins/marketplace.json` pointing to this repository as the local plugin source.
-- Keep copied skill files byte-for-byte identical to the canonical file. `tests/runtime/aiSkillRegistration.test.js` verifies the registration layout and copied Claude project skill.
+- `tests/runtime/aiSkillRegistration.test.js` verifies the registration layout.
 
 ## GitHub Issue Task Workflow
 

@@ -27,14 +27,14 @@ describe("repository AI skill registration", () => {
     expect(config.skills).toEqual({ paths: ["./skills"] })
   })
 
-  test("exposes the skill to Claude Code project and plugin loading", async () => {
-    const canonicalSkill = await readRepoFile(canonicalSkillPath)
-    const projectSkill = await readRepoFile(".claude/skills/github-project-task-workflow/SKILL.md")
+  test("exposes the skill to Claude Code plugin loading without duplicate project skills", async () => {
     const pluginManifest = await readRepoJson(".claude-plugin/plugin.json")
 
-    expect(projectSkill).toBe(canonicalSkill)
     expect(pluginManifest.name).toBe("opencode-remote")
     expect(pluginManifest.skills).toBe("./skills/")
+    await expect(
+      readRepoFile(".claude/skills/github-project-task-workflow/SKILL.md"),
+    ).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   test("registers the repository as a Codex plugin with canonical skills", async () => {
