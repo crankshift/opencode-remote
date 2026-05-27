@@ -229,6 +229,46 @@ describe("runGateway", () => {
     expect(createTelegramBot).toHaveBeenCalledWith(expect.objectContaining({ voiceService }))
   })
 
+  test("passes voice-aware gateway context to the controller", async () => {
+    const logger = testLogger()
+    const createGatewayController = vi.fn(() => ({}))
+    const config = {
+      ...testConfig(),
+      voice: { ...testConfig().voice, enabled: true, mode: "all" },
+    }
+
+    await runGateway({
+      config,
+      logger,
+      dependencies: {
+        assertFfmpegAvailable: vi.fn(async () => undefined),
+        ensureOpenCodeServer: vi.fn(async () => ({ stop: vi.fn() })),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController,
+        createVoiceService: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => ({
+          api: { setMyCommands: vi.fn(async () => undefined) },
+          start: vi.fn(async () => undefined),
+          stop: vi.fn(async () => undefined),
+        })),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(createGatewayController).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gatewayContext: expect.stringContaining("spoken voice note"),
+        logger,
+      }),
+    )
+  })
+
   test("requires ffmpeg before startup when voice is enabled", async () => {
     const assertFfmpegAvailable = vi.fn(async () => undefined)
     const config = {

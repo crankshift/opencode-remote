@@ -19,6 +19,25 @@ describe("createOpenCodeClient", () => {
     })
   })
 
+  test("sends context prompts without requesting an assistant reply", async () => {
+    const sdkClient = {
+      session: {
+        prompt: vi.fn(async () => ({ id: "msg_1" })),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(client.sendContext("ses_1", "gateway context")).resolves.toEqual({ id: "msg_1" })
+
+    expect(sdkClient.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: {
+        noReply: true,
+        parts: [{ type: "text", text: "gateway context" }],
+      },
+    })
+  })
+
   test("sends prompt attachments as file parts before the text part", async () => {
     const sdkClient = {
       session: {

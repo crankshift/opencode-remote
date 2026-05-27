@@ -169,6 +169,8 @@ The bot currently supports:
 
 Any non-command text message from the authorized Telegram user is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
 
+When a new OpenCode session starts, OpenCode Remote sends hidden gateway context with no assistant reply. This helps the agent understand that voice input may arrive as transcripts and that final text can be delivered as voice notes when voice mode is enabled.
+
 When OpenCode requests permission during a prompt, the bot sends a text message with `Allow once`, `Always allow`, and `Deny` buttons. Permission prompts are always text, including when `/voice on` or `/voice all` would make normal assistant replies voice-only.
 
 Telegram photo albums are handled as one OpenCode prompt when Telegram provides a shared `media_group_id`. The album caption becomes the prompt text. Separate text messages sent after an album are treated as separate prompts.

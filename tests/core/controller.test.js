@@ -119,6 +119,79 @@ describe("gatewayController", () => {
     expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello")
   })
 
+  test("primes newly created sessions with gateway context before the first prompt", async () => {
+    const calls = []
+    const store = createStore()
+    const opencode = {
+      createSession: vi.fn(async () => {
+        calls.push("create")
+        return { id: "ses_2", title: "Auto" }
+      }),
+      sendContext: vi.fn(async () => {
+        calls.push("context")
+      }),
+      sendPrompt: vi.fn(async () => {
+        calls.push("prompt")
+        return "answer"
+      }),
+    }
+    const controller = createGatewayController({
+      opencode,
+      store,
+      gatewayContext: "gateway context",
+    })
+
+    await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
+
+    expect(opencode.sendContext).toHaveBeenCalledWith("ses_2", "gateway context")
+    expect(calls).toEqual(["create", "context", "prompt"])
+  })
+
+  test("does not prime existing selected sessions", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    const opencode = {
+      sendContext: vi.fn(),
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const controller = createGatewayController({
+      opencode,
+      store,
+      gatewayContext: "gateway context",
+    })
+
+    await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
+
+    expect(opencode.sendContext).not.toHaveBeenCalled()
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello")
+  })
+
+  test("continues sending the prompt when gateway context fails", async () => {
+    const error = new Error("context failed")
+    const logger = { warn: vi.fn() }
+    const store = createStore()
+    const opencode = {
+      createSession: vi.fn(async () => ({ id: "ses_2", title: "Auto" })),
+      sendContext: vi.fn(async () => {
+        throw error
+      }),
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const controller = createGatewayController({
+      opencode,
+      store,
+      gatewayContext: "gateway context",
+      logger,
+    })
+
+    await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
+
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello")
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error, sessionId: "ses_2" },
+      "Could not send OpenCode gateway context",
+    )
+  })
+
   test("does not create a session when stopping without an active session", async () => {
     const store = createStore()
     const opencode = {
