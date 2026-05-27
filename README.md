@@ -131,7 +131,7 @@ The config file is JSON:
 
 `telegram.allowedUserId` is required. Updates from other Telegram users are ignored.
 
-`opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or a loopback IP with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
+`opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or `127.0.0.1` with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
 
 `progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime.
 

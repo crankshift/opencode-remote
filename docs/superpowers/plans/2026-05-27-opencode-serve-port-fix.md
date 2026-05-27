@@ -4,7 +4,7 @@
 
 **Goal:** Make auto-started OpenCode bind to the gateway's configured local API port and fail after a bounded 60-second wait if it never becomes reachable.
 
-**Architecture:** Keep the behavior inside `src/core/opencode/serverManager.js`, because that module already owns OpenCode child-process startup and readiness polling. Parse `opencode.apiUrl` only for local loopback hosts and pass `--port <port>` to `opencode serve`; leave remote-looking URLs unchanged so explicit user configuration remains authoritative.
+**Architecture:** Keep the behavior inside `src/core/opencode/serverManager.js`, because that module already owns OpenCode child-process startup and readiness polling. Parse `opencode.apiUrl` only for `localhost` and `127.0.0.1` hosts and pass `--port <port>` to `opencode serve`; leave remote-looking and IPv6 URLs unchanged so explicit user configuration remains authoritative.
 
 **Tech Stack:** Node.js ESM, execa, Vitest, Biome.
 
@@ -20,7 +20,7 @@
 
 - [ ] **Step 1: Write failing tests for local port args and 60-second wait**
 
-Add tests that expect `http://localhost:4096` to spawn `opencode serve --port 4096`, `http://127.0.0.1:7777` to spawn `opencode serve --port 7777`, remote URLs to keep `opencode serve`, and the default timeout configuration to represent 60 seconds.
+Add tests that expect `http://localhost:4096` to spawn `opencode serve --port 4096`, `http://127.0.0.1:7777` to spawn `opencode serve --port 7777`, remote and IPv6 URLs to keep `opencode serve`, and the default timeout configuration to represent 60 seconds.
 
 - [ ] **Step 2: Run focused tests to verify they fail**
 
@@ -49,7 +49,7 @@ function buildServeArgs(apiUrl) {
 }
 
 function isLocalHostname(hostname) {
-  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname)
+  return ["localhost", "127.0.0.1"].includes(hostname)
 }
 ```
 

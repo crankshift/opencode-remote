@@ -91,6 +91,29 @@ describe("ensureOpenCodeServer", () => {
     })
   })
 
+  test("keeps default serve args for IPv6 loopback API URLs", async () => {
+    const child = { kill: vi.fn(), stdout: null, stderr: null }
+    const processFactory = vi.fn().mockReturnValue(child)
+    const isReachable = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+    await ensureOpenCodeServer({
+      apiUrl: "http://[::1]:4096",
+      command: "opencode",
+      autoStart: true,
+      workdir: "/tmp/project",
+      isReachable,
+      processFactory,
+      waitMs: 0,
+      maxAttempts: 2,
+    })
+
+    expect(processFactory).toHaveBeenCalledWith("opencode", ["serve"], {
+      cwd: "/tmp/project",
+      reject: false,
+      stdio: "pipe",
+    })
+  })
+
   test("waits up to 60 seconds by default before failing", async () => {
     const child = { kill: vi.fn(), stdout: null, stderr: null }
     const processFactory = vi.fn().mockReturnValue(child)
