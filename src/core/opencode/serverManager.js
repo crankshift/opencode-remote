@@ -18,7 +18,7 @@ export async function ensureOpenCodeServer({
   isReachable = defaultReachabilityCheck,
   processFactory = execa,
   waitMs = 500,
-  maxAttempts = 30,
+  maxAttempts = 120,
 }) {
   if (await isReachable(apiUrl)) {
     return { started: false, stop: async () => {} }
@@ -28,7 +28,7 @@ export async function ensureOpenCodeServer({
     throw new Error(`OpenCode server is not reachable at ${apiUrl}`)
   }
 
-  const child = processFactory(command, ["serve"], {
+  const child = processFactory(command, buildServeArgs(apiUrl), {
     cwd: workdir,
     reject: false,
     stdio: "pipe",
@@ -52,4 +52,23 @@ export async function ensureOpenCodeServer({
     child.kill("SIGTERM")
   }
   throw new Error(`OpenCode server did not become reachable at ${apiUrl}`)
+}
+
+function buildServeArgs(apiUrl) {
+  let parsed
+  try {
+    parsed = new URL(apiUrl)
+  } catch {
+    return ["serve"]
+  }
+
+  if (!parsed.port || !isLocalHostname(parsed.hostname)) {
+    return ["serve"]
+  }
+
+  return ["serve", "--port", parsed.port]
+}
+
+function isLocalHostname(hostname) {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname)
 }

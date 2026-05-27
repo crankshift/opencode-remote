@@ -18,7 +18,7 @@ describe("ensureOpenCodeServer", () => {
     expect(processFactory).not.toHaveBeenCalled()
   })
 
-  test("starts opencode serve when unreachable and auto-start is enabled", async () => {
+  test("starts opencode serve on the configured localhost port", async () => {
     const child = { kill: vi.fn(), stdout: null, stderr: null }
     const processFactory = vi.fn().mockReturnValue(child)
     const isReachable = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
@@ -35,13 +35,80 @@ describe("ensureOpenCodeServer", () => {
     })
 
     expect(manager.started).toBe(true)
-    expect(processFactory).toHaveBeenCalledWith("opencode", ["serve"], {
+    expect(processFactory).toHaveBeenCalledWith("opencode", ["serve", "--port", "4096"], {
       cwd: "/tmp/project",
       reject: false,
       stdio: "pipe",
     })
 
     await manager.stop()
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM")
+  })
+
+  test("starts opencode serve on the configured loopback IP port", async () => {
+    const child = { kill: vi.fn(), stdout: null, stderr: null }
+    const processFactory = vi.fn().mockReturnValue(child)
+    const isReachable = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+    await ensureOpenCodeServer({
+      apiUrl: "http://127.0.0.1:7777",
+      command: "opencode",
+      autoStart: true,
+      workdir: "/tmp/project",
+      isReachable,
+      processFactory,
+      waitMs: 0,
+      maxAttempts: 2,
+    })
+
+    expect(processFactory).toHaveBeenCalledWith("opencode", ["serve", "--port", "7777"], {
+      cwd: "/tmp/project",
+      reject: false,
+      stdio: "pipe",
+    })
+  })
+
+  test("keeps default serve args for remote API URLs", async () => {
+    const child = { kill: vi.fn(), stdout: null, stderr: null }
+    const processFactory = vi.fn().mockReturnValue(child)
+    const isReachable = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+    await ensureOpenCodeServer({
+      apiUrl: "http://192.168.1.10:4096",
+      command: "opencode",
+      autoStart: true,
+      workdir: "/tmp/project",
+      isReachable,
+      processFactory,
+      waitMs: 0,
+      maxAttempts: 2,
+    })
+
+    expect(processFactory).toHaveBeenCalledWith("opencode", ["serve"], {
+      cwd: "/tmp/project",
+      reject: false,
+      stdio: "pipe",
+    })
+  })
+
+  test("waits up to 60 seconds by default before failing", async () => {
+    const child = { kill: vi.fn(), stdout: null, stderr: null }
+    const processFactory = vi.fn().mockReturnValue(child)
+    const isReachable = vi.fn().mockResolvedValue(false)
+
+    await expect(
+      ensureOpenCodeServer({
+        apiUrl: "http://localhost:4096",
+        command: "opencode",
+        autoStart: true,
+        workdir: "/tmp/project",
+        isReachable,
+        processFactory,
+        waitMs: 0,
+      }),
+    ).rejects.toThrow(/OpenCode server did not become reachable/)
+
+    expect(isReachable).toHaveBeenCalledTimes(121)
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
   })
 
