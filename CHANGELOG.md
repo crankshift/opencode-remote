@@ -8,6 +8,7 @@ This project follows Semantic Versioning.
 
 - Added a pull request and `main` branch `Check` workflow plus workflow smoke checks for CI/CD guardrails.
 - Added Dependabot maintenance for GitHub Actions and npm dependencies.
+- Added automatic `vX.Y.Z` tag creation after successful `Check` runs on pushed `main` commits, then dispatching npm publishing at the created tag ref.
 
 ### Changed
 

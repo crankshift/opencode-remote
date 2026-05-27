@@ -134,8 +134,8 @@ To publish a release:
 1. Update `package.json` version and `CHANGELOG.md`.
 2. Run `pnpm run check`.
 3. Commit the release changes.
-4. Tag the commit with `vX.Y.Z`, matching the package version exactly.
-5. Push the commit and tag.
+4. Merge or push the release commit to `main`.
+5. Verify the `Create release tag` GitHub Actions workflow creates `vX.Y.Z`, matching the package version exactly.
 6. Verify the `Publish to npm` GitHub Actions workflow completes and the package appears on npm.
 
-The publish workflow runs only for pushed `v*` tags. Its `publish` job depends on a successful `check` job, validates that the tag matches `package.json` version, and then runs `npm publish --provenance --access public`. Only the publish job requests `id-token: write` for npm trusted publishing.
+The release tag workflow runs after successful `Check` workflow runs for pushed `main` commits. It reads `package.json`, creates the matching `vX.Y.Z` tag only if it is missing, and exits without changes when that tag already exists. Tags created with the default GitHub Actions token do not trigger tag-push workflows, so the release tag workflow explicitly dispatches `publish.yml` at the created tag ref. The publish workflow also runs for manually pushed `v*` tags. Its `publish` job depends on a successful `check` job, validates that the ref is a tag matching `package.json` version, and then runs `npm publish --provenance --access public`. Only the publish job requests `id-token: write` for npm trusted publishing.
