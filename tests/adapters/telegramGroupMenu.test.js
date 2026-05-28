@@ -4,6 +4,69 @@ import { createTelegramGroupMenu } from "../../src/adapters/telegram/groupMenu.j
 import { createMemoryGroupStore } from "../../src/adapters/telegram/groupStore.js"
 
 describe("createTelegramGroupMenu", () => {
+  test("prunes stale known groups before rendering the DM group menu", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001, -1002] })
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+    await store.upsertKnownGroup({ chatId: -1002, title: "Build Room", type: "supergroup" })
+    await store.updateSettings(-1001, { customTriggers: ["oldbot"] })
+    const menu = createTelegramGroupMenu({
+      store,
+      memory: createGroupMemory(),
+      allowedChatIds: [-1002],
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await menu.handleCommand({
+      from: { id: 123 },
+      chat: { id: 123, type: "private" },
+      message: { chat: { id: 123, type: "private" } },
+      reply,
+    })
+
+    expect(reply.mock.calls[0][0]).toBe("Select a Telegram group to configure:")
+    expect(
+      reply.mock.calls[0][1].reply_markup.inline_keyboard.flat().map((button) => button.text),
+    ).toEqual(["Build Room"])
+    expect(await store.listGroups()).toEqual([
+      {
+        chatId: -1002,
+        title: "Build Room",
+        username: null,
+        type: "supergroup",
+        status: "active",
+      },
+    ])
+  })
+
+  test("hides groups without deleting them when no allowed chat IDs are configured", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+    const menu = createTelegramGroupMenu({
+      store,
+      memory: createGroupMemory(),
+      allowedChatIds: [],
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await menu.handleCommand({
+      from: { id: 123 },
+      chat: { id: 123, type: "private" },
+      message: { chat: { id: 123, type: "private" } },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("No known Telegram groups are configured for this gateway.")
+    expect(await store.listGroups()).toEqual([
+      {
+        chatId: -1001,
+        title: "Old Room",
+        username: null,
+        type: "supergroup",
+        status: "active",
+      },
+    ])
+  })
+
   test("selects a group and updates reply policy through callback buttons", async () => {
     const store = createMemoryGroupStore({ allowedChatIds: [-1001] })
     await store.upsertKnownGroup({ chatId: -1001, title: "Build Room", type: "supergroup" })

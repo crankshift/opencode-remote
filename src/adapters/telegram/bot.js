@@ -86,6 +86,7 @@ export function createTelegramBot({
   const groupMenu = createTelegramGroupMenu({
     store: groupStore,
     memory: groupMemory,
+    allowedChatIds: telegram.allowedChatIds,
     noticeCooldownMs: groupNoticeCooldownMs,
   })
   const groupPrompts = createTelegramGroupPromptHelper({

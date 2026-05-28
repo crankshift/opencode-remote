@@ -74,6 +74,47 @@ describe("openTelegramGroupStore", () => {
     expect(await store.getSettings(-1002)).toEqual(DEFAULT_GROUP_CONFIG)
     store.close()
   })
+
+  test("prunes known groups outside the allowed chat IDs", async () => {
+    const store = openTelegramGroupStore(await tempDbPath())
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+    await store.upsertKnownGroup({ chatId: -1002, title: "Build Room", type: "supergroup" })
+    await store.updateSettings(-1001, { replyPolicy: "bots", customTriggers: ["oldbot"] })
+
+    await store.pruneUnallowedGroups([-1002])
+
+    expect(await store.listGroups()).toEqual([
+      {
+        chatId: -1002,
+        title: "Build Room",
+        username: null,
+        type: "supergroup",
+        status: "active",
+      },
+    ])
+
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+    expect(await store.getSettings(-1001)).toEqual(DEFAULT_GROUP_CONFIG)
+    store.close()
+  })
+
+  test("does not prune groups when no allowed chat IDs are configured", async () => {
+    const store = openTelegramGroupStore(await tempDbPath())
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+
+    await store.pruneUnallowedGroups([])
+
+    expect(await store.listGroups()).toEqual([
+      {
+        chatId: -1001,
+        title: "Old Room",
+        username: null,
+        type: "supergroup",
+        status: "active",
+      },
+    ])
+    store.close()
+  })
 })
 
 describe("createMemoryGroupStore", () => {
@@ -114,6 +155,45 @@ describe("createMemoryGroupStore", () => {
     expect(settings.customTriggers).toHaveLength(20)
     expect(settings.customTriggers[0]).toBe("alpha trigger")
     expect(settings.customTriggers).not.toContain("x".repeat(65))
+  })
+
+  test("prunes stale groups and their settings", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001, -1002] })
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+    await store.upsertKnownGroup({ chatId: -1002, title: "Build Room", type: "supergroup" })
+    await store.updateSettings(-1001, { replyPolicy: "bots", customTriggers: ["oldbot"] })
+
+    await store.pruneUnallowedGroups([-1002])
+
+    expect(await store.listGroups()).toEqual([
+      {
+        chatId: -1002,
+        title: "Build Room",
+        username: null,
+        type: "supergroup",
+        status: "active",
+      },
+    ])
+
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+    expect(await store.getSettings(-1001)).toEqual(DEFAULT_GROUP_CONFIG)
+  })
+
+  test("does not prune groups when no allowed chat IDs are configured", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    await store.upsertKnownGroup({ chatId: -1001, title: "Old Room", type: "supergroup" })
+
+    await store.pruneUnallowedGroups([])
+
+    expect(await store.listGroups()).toEqual([
+      {
+        chatId: -1001,
+        title: "Old Room",
+        username: null,
+        type: "supergroup",
+        status: "active",
+      },
+    ])
   })
 })
 
