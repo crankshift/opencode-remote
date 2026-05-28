@@ -75,11 +75,12 @@ Never use an issue number unless a real GitHub issue exists. Never use `task/42-
 
 ## Finish Workflow
 
-Before calling work complete:
+Before creating a pull request or calling work complete:
 
 1. Inspect `git status --short` and `git diff`.
-2. Run normal verification: `pnpm run lint`, `pnpm test`, `pnpm run check`.
-3. If work was issue-scoped, mention the issue number in the summary.
+2. Bump `package.json` version and update `CHANGELOG.md` so merging the pull request triggers the next release tag build.
+3. Run normal verification: `pnpm run lint`, `pnpm test`, `pnpm run check`.
+4. If work was issue-scoped, mention the issue number in the summary.
 
 Do not move GitHub Project board status. The maintainer handles board management manually.
 
@@ -107,6 +108,7 @@ Manual issue creation URL: `https://github.com/crankshift/opencode-remote/issues
 | Requiring GitHub CLI installation | Offer manual issue creation and ask for the issue number/URL or GitHub login when needed. |
 | Assuming issue templates fill CLI bodies | Mirror `.github/ISSUE_TEMPLATE/task.md` manually in the issue body. |
 | Requiring labels from contributors | Let maintainers manage labels manually. |
+| Creating a pull request without release metadata | Before PR creation, bump `package.json` version and update `CHANGELOG.md`. |
 
 ## Red Flags
 
@@ -117,4 +119,5 @@ Manual issue creation URL: `https://github.com/crankshift/opencode-remote/issues
 - Branch includes an issue number that does not map to a real GitHub issue.
 - You are telling a contributor to install `gh` instead of offering manual issue creation or free-branch fallback.
 - Worktree exists without the required branch.
+- You are about to create a pull request without an updated `package.json` version and `CHANGELOG.md` entry.
 - You are about to claim completion without verification output.

@@ -8,6 +8,12 @@ This project follows Semantic Versioning.
 
 - Removed Dependabot configuration to stop automated dependency update pull requests.
 
+## [0.5.7] - 2026-05-28
+
+### Fixed
+
+- Fixed forwarded Telegram messages to include safe original author context in OpenCode prompts, falling back to the authorized Telegram user when forwarded author data is unavailable. (#19)
+
 ## [0.5.6] - 2026-05-27
 
 ### Added

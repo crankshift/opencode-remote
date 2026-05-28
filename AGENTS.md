@@ -148,6 +148,7 @@ pnpm run check
 - "Let's create a task" means create a GitHub issue using `.github/ISSUE_TEMPLATE/task.md` as the body structure; do not create or edit GitHub Project items.
 - Issue-scoped task branches must use `github-login/issue-number-title-slug`, for example `crankshift/42-fix-telegram-album-cleanup`.
 - Work without an issue is allowed when the user chooses it; use `github-login/free-task-name` and never invent issue numbers.
+- Before creating a pull request, bump `package.json` version and update `CHANGELOG.md`; merged PRs trigger the release tag build from the package version.
 - GitHub Project board management is maintainer-owned and manual. Do not require board access or run `gh project` commands in the repo-local workflow.
 
 ## Roadmap Guardrails

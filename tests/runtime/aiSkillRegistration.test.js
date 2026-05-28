@@ -18,6 +18,7 @@ describe("repository AI skill registration", () => {
     expect(skill).toContain("# GitHub Issue Task Workflow")
     expect(skill).toContain("GitHub CLI is optional for contributors")
     expect(skill).toContain("Issue format: `github-login/issue-number-title-slug`")
+    expect(skill).toContain("bump `package.json` version and update `CHANGELOG.md`")
   })
 
   test("registers the canonical skill folder with OpenCode", async () => {
