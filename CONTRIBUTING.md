@@ -93,6 +93,7 @@ These files are public repo configuration. They should not require maintainer-pr
 ## Pull Request Checklist
 
 - The change is scoped to one bug, feature, or documentation improvement.
+- The `package.json` version and `CHANGELOG.md` were updated so merging the pull request triggers the next release tag build.
 - Tests were added or updated when behavior changed.
 - Public docs were updated when user-visible behavior changed.
 - `pnpm run lint`, `pnpm test`, or `pnpm run check` was run when practical.
