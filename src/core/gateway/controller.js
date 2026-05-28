@@ -26,7 +26,7 @@ export function createGatewayController({
   }
 
   async function primeSession(sessionId, additionalContext) {
-    if (!gatewayContext || typeof opencode.sendContext !== "function") {
+    if ((!gatewayContext && !additionalContext) || typeof opencode.sendContext !== "function") {
       return
     }
     const context = [gatewayContext, additionalContext].filter(Boolean).join("\n\n")
