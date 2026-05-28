@@ -1,6 +1,6 @@
 # Features
 
-OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, and opt-in voice support.
+OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, sticker, and opt-in voice support.
 
 ## Available Now
 
@@ -18,6 +18,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - Interactive JSON config setup with project-local and global config discovery, selected-scope current defaults, highlighted arrow-key lists, and `ffmpeg` install/retry handling for voice setup.
 - SQLite app-state persistence for selected OpenCode sessions and progress preferences, scoped by OpenCode project identity.
 - Optional Telegram voice mode using Groq Whisper transcription, Edge TTS speech generation, and `ffmpeg` OGG Opus conversion.
+- Telegram sticker understanding with static WebP sticker attachments, generated or fallback visual context for non-static stickers, saved sticker packs, and sticker replies.
 - CLI config updates with `opencode-remote config set` and voice cache clearing with `opencode-remote cache clear`.
 
 ## Telegram Chat Behavior
@@ -28,6 +29,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - `/stop` requests abort for the active OpenCode session.
 - `/progress` shows or sets prompt activity visibility: `off`, `new`, `all`, or `verbose`.
 - `/voice` shows and controls voice mode, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
+- `/stickers` saves, lists, and forgets sticker packs for future sticker replies.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
 - Non-command text from the authorized user is sent to OpenCode as a prompt.
@@ -37,6 +39,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - OpenCode permission requests are sent as text with `Allow once`, `Always allow`, and `Deny` buttons, even when voice replies are enabled.
 - Incoming text prompts get a temporary eye reaction while processing.
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
+- When saved sticker packs are available, eligible hidden reaction markers may be answered with a saved sticker reply instead of an emoji reaction.
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
 - Telegram voice messages are transcribed and sent to OpenCode when voice mode is enabled.
 - Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with text fallback if speech generation or sending fails.
@@ -56,6 +59,9 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - Album captions become the prompt text when present.
 - Photos without captions use a default short reaction prompt.
 - Temporary downloaded photo files are cleaned up after handling.
+- Telegram sticker messages are sent to OpenCode with visual attachment context and safe sticker metadata.
+- Static stickers use direct WebP image attachments. Video stickers use sampled preview sheets. Animated `.tgs` stickers use `lottie_convert.py` when available, with source-file fallback.
+- Sticker visuals are cached under app-data cache storage and validated with `file_unique_id`, kind, dimensions, file size, and converter version.
 
 ## Voice Mode
 
@@ -71,6 +77,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, a
 - The bot ignores Telegram users outside the configured allowlist.
 - Secrets are configured through private `.opencode-remote/config.json` files, not persisted settings.
 - The selected active session is persisted as non-secret JSON state.
+- Saved sticker packs persist only non-secret sticker identifiers and metadata.
 - Telegram reaction API failures are best-effort warnings and do not block prompt delivery.
 - Default tests mock Telegram and OpenCode; no live services are required for normal verification.
 

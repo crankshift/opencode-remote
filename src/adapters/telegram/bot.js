@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises"
 import { Bot, InlineKeyboard } from "grammy"
 import { botCommands, renderHelpText } from "../../core/commands/commands.js"
 import { chunkText } from "../../core/formatting/chunkText.js"
@@ -15,6 +16,10 @@ import {
   selectLargestPhoto,
 } from "./media.js"
 import { createMediaGroupBuffer } from "./mediaGroupBuffer.js"
+import {
+  createStickerPrompt as defaultCreateStickerPrompt,
+  stickerToStoreMetadata,
+} from "./stickers.js"
 import {
   downloadTelegramVoice as defaultDownloadVoice,
   sendTelegramVoice as defaultSendVoice,
@@ -51,11 +56,16 @@ export function createTelegramBot({
   sendVoice = defaultSendVoice,
   cleanupMediaAttachments = defaultCleanupMediaAttachments,
   voiceService = null,
+  stickerStore = null,
+  createStickerPrompt = defaultCreateStickerPrompt,
+  cleanupStickerFiles = defaultCleanupStickerFiles,
+  random = Math.random,
 }) {
   const bot = new botFactory(token)
   let fallbackProgressVerbosity = progressVerbosity
   const sessionSelectionTokens = new Map()
   const permissionResponseTokens = createBoundedTokenStore(200)
+  const stickerSaveTokens = createBoundedTokenStore(200)
   const botMessageMemory = createBotMessageMemory(200)
   const mediaGroupBuffer = createMediaGroupBuffer({
     waitMs: mediaGroupWaitMs,
@@ -157,6 +167,21 @@ export function createTelegramBot({
     }
   })
 
+  bot.callbackQuery(/^sticker_save:(.+)$/u, async (ctx) => {
+    const sticker = stickerSaveTokens.get(ctx.match[1])
+    if (!sticker) {
+      await ctx.answerCallbackQuery({ text: "Sticker save request expired" })
+      return
+    }
+
+    stickerSaveTokens.delete(ctx.match[1])
+    const result = await saveStickerPackFromSticker(ctx, sticker)
+    await ctx.answerCallbackQuery({ text: "Sticker pack saved" })
+    if (ctx.reply) {
+      await replyAndRemember(ctx, formatStickerSaveResult(result), botMessageMemory)
+    }
+  })
+
   bot.command("stop", async (ctx) => {
     const result = await controller.stop()
     if (!result.stopped) {
@@ -238,6 +263,10 @@ export function createTelegramBot({
     await replyAndRemember(ctx, voiceUsageText(), botMessageMemory)
   })
 
+  bot.command("stickers", async (ctx) => {
+    await handleStickersCommand(ctx)
+  })
+
   bot.on("message_reaction", async (ctx) => {
     const update = ctx.messageReaction
     const botMessage = botMessageMemory.get(update.chat.id, update.message_id)
@@ -293,7 +322,7 @@ export function createTelegramBot({
       stopTyping()
     }
     if (requestedReaction) {
-      await setEmojiReaction(ctx, chatId, messageId, requestedReaction, logger)
+      await handleRequestedReaction(ctx, chatId, messageId, requestedReaction)
     }
   })
 
@@ -308,6 +337,10 @@ export function createTelegramBot({
 
   bot.on("message:voice", async (ctx) => {
     await handleVoiceMessage(ctx)
+  })
+
+  bot.on("message:sticker", async (ctx) => {
+    await handleStickerMessage(ctx)
   })
 
   return bot
@@ -351,12 +384,11 @@ export function createTelegramBot({
       const parsedResponse = parseTelegramReactionMarker(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "photo")
       if (parsedResponse.requestedReaction) {
-        await setEmojiReaction(
+        await handleRequestedReaction(
           ctx,
           messages[0]?.chat?.id,
           messages[0]?.message_id,
           parsedResponse.requestedReaction,
-          logger,
         )
       }
     } finally {
@@ -419,6 +451,46 @@ export function createTelegramBot({
     }
   }
 
+  async function handleStickerMessage(ctx) {
+    let cleanupFiles = []
+    const stopTyping = startTypingIndicator(ctx, logger)
+    try {
+      const result = await createStickerPrompt({
+        api: ctx.api,
+        token,
+        sticker: ctx.message.sticker,
+        store: stickerStore,
+        logger,
+      })
+      cleanupFiles = result.cleanupFiles ?? []
+
+      const progress = await createPromptProgressRenderer(ctx)
+      const response = await sendPromptWithProgress(
+        formatPromptWithTelegramReactionInstruction({
+          ...result.prompt,
+          author: authorContextFromTelegramMessage(ctx.message),
+        }),
+        progress,
+        ctx,
+      )
+      await progress.flush()
+      const parsedResponse = parseTelegramReactionMarker(response, progress)
+      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "sticker")
+      if (parsedResponse.requestedReaction) {
+        await handleRequestedReaction(
+          ctx,
+          ctx.message?.chat?.id,
+          ctx.message?.message_id,
+          parsedResponse.requestedReaction,
+        )
+      }
+      await offerSaveStickerPack(ctx, ctx.message.sticker, result.packName)
+    } finally {
+      stopTyping()
+      await cleanupStickerFiles(cleanupFiles, logger)
+    }
+  }
+
   async function replyWithPreferredMode(ctx, text, source) {
     if (!voiceService?.shouldSpeak?.({ source })) {
       await sendTextReply(ctx, text)
@@ -440,6 +512,136 @@ export function createTelegramBot({
     for (const chunk of chunkText(text)) {
       await replyAndRemember(ctx, chunk, botMessageMemory)
     }
+  }
+
+  async function handleRequestedReaction(ctx, chatId, messageId, emoji) {
+    if (await maybeSendStickerReaction(ctx, emoji)) {
+      return
+    }
+    await setEmojiReaction(ctx, chatId, messageId, emoji, logger)
+  }
+
+  async function maybeSendStickerReaction(ctx, emoji) {
+    if (!stickerStore || random() >= 0.5) {
+      return false
+    }
+    const sticker = await stickerStore.findStickerForEmoji(emoji, { random })
+    if (!sticker?.fileId) {
+      return false
+    }
+
+    try {
+      if (typeof ctx.replyWithSticker === "function") {
+        await ctx.replyWithSticker(sticker.fileId)
+      } else {
+        const chatId = ctx.chat?.id ?? ctx.message?.chat?.id
+        if (!chatId || typeof ctx.api?.sendSticker !== "function") {
+          return false
+        }
+        await ctx.api.sendSticker(chatId, sticker.fileId)
+      }
+      return true
+    } catch (error) {
+      logger.warn({ error }, "Could not send Telegram sticker reaction")
+      return false
+    }
+  }
+
+  async function handleStickersCommand(ctx) {
+    if (!stickerStore) {
+      await replyAndRemember(ctx, "Sticker support is not configured.", botMessageMemory)
+      return
+    }
+
+    const request = parseStickersCommand(ctx.message?.text)
+    if (request.action === "save") {
+      const sticker = ctx.message?.reply_to_message?.sticker
+      if (!sticker) {
+        await replyAndRemember(ctx, "Reply to a sticker with /stickers save.", botMessageMemory)
+        return
+      }
+      if (!sticker.set_name) {
+        await replyAndRemember(
+          ctx,
+          "That sticker does not belong to a saveable sticker pack.",
+          botMessageMemory,
+        )
+        return
+      }
+      const result = await saveStickerPackFromSticker(ctx, sticker)
+      await replyAndRemember(ctx, formatStickerSaveResult(result), botMessageMemory)
+      return
+    }
+
+    if (request.action === "list") {
+      await replyAndRemember(
+        ctx,
+        formatSavedStickerPacks(await stickerStore.listPacks()),
+        botMessageMemory,
+      )
+      return
+    }
+
+    if (request.action === "forget") {
+      if (!request.packName) {
+        await replyAndRemember(ctx, "Use /stickers forget <pack_name>.", botMessageMemory)
+        return
+      }
+      const result = await stickerStore.forgetPack(request.packName)
+      await cleanupStickerFiles(
+        result.cacheRecords.map((record) => record.filePath),
+        logger,
+      )
+      await replyAndRemember(
+        ctx,
+        result.deleted
+          ? `Forgot sticker pack ${request.packName}.`
+          : `No saved sticker pack named ${request.packName}.`,
+        botMessageMemory,
+      )
+      return
+    }
+
+    await replyAndRemember(ctx, stickersUsageText(), botMessageMemory)
+  }
+
+  async function saveStickerPackFromSticker(ctx, sticker) {
+    if (!sticker?.set_name) {
+      throw new Error("Sticker does not belong to a saveable sticker pack")
+    }
+
+    let packName = sticker.set_name
+    let stickers = [sticker]
+    try {
+      const stickerSet = await ctx.api?.getStickerSet?.(sticker.set_name)
+      packName = stickerSet?.name ?? packName
+      if (Array.isArray(stickerSet?.stickers) && stickerSet.stickers.length > 0) {
+        stickers = stickerSet.stickers
+      }
+    } catch (error) {
+      logger.warn({ error, packName }, "Could not fetch Telegram sticker set")
+    }
+
+    await stickerStore.savePack({
+      name: packName,
+      stickers: stickers.map(stickerToStoreMetadata),
+    })
+    return { packName, stickerCount: stickers.length }
+  }
+
+  async function offerSaveStickerPack(ctx, sticker, packName) {
+    if (!stickerStore || !packName || (await stickerStore.hasSavedPack(packName))) {
+      return
+    }
+
+    const token = stickerSaveTokens.add(sticker)
+    const keyboard = new InlineKeyboard().text("Save pack", `sticker_save:${token}`)
+    await replyAndRemember(
+      ctx,
+      `Sticker pack ${packName} is not saved. Save it for future sticker replies?`,
+      botMessageMemory,
+      { reply_markup: keyboard },
+    )
   }
 
   async function createPromptProgressRenderer(ctx) {
@@ -558,6 +760,40 @@ function parseVoiceCommand(text) {
     return { action, voice: parts[2] }
   }
   return { action }
+}
+
+function parseStickersCommand(text) {
+  const parts = String(text ?? "")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
+  const action = parts[1] ?? "list"
+  if (action === "forget") {
+    return { action, packName: parts[2] }
+  }
+  return { action }
+}
+
+function formatStickerSaveResult(result) {
+  const stickerWord = result.stickerCount === 1 ? "sticker" : "stickers"
+  return `Saved sticker pack ${result.packName} (${result.stickerCount} ${stickerWord}).`
+}
+
+function formatSavedStickerPacks(packs) {
+  if (!packs.length) {
+    return "No sticker packs saved. Reply to a sticker with /stickers save."
+  }
+  return ["Saved sticker packs:", ...packs.map(formatSavedStickerPack)].join("\n")
+}
+
+function formatSavedStickerPack(pack) {
+  const stickerWord = pack.stickerCount === 1 ? "sticker" : "stickers"
+  const emojiSummary = pack.emojis.length > 0 ? `, ${pack.emojis.join(" ")}` : ""
+  return `- ${pack.name} (${pack.stickerCount} ${stickerWord}${emojiSummary})`
+}
+
+function stickersUsageText() {
+  return "Use /stickers save, /stickers list, or /stickers forget <pack_name>."
 }
 
 function parseVoiceListFilters(parts) {
@@ -888,6 +1124,19 @@ const TOOLING_ANNOUNCEMENT_CONTEXT_PATTERNS = [
   /^i\s+am\s+using\s+[a-z][a-z0-9-]*(?:\s+(?:skill|tool))?\s+to\b.*$/iu,
   /^використовую\s+.+(?:skill|навичк|інструмент|для\b).*$/iu,
 ]
+
+async function defaultCleanupStickerFiles(filePaths = [], logger) {
+  for (const filePath of filePaths) {
+    if (!filePath) {
+      continue
+    }
+    try {
+      await rm(filePath, { force: true })
+    } catch (error) {
+      logger?.warn?.({ error, filePath }, "Could not clean up Telegram sticker file")
+    }
+  }
+}
 
 async function setEmojiReaction(ctx, chatId, messageId, emoji, logger) {
   if (!chatId || !messageId || !ctx.api?.setMessageReaction) {
