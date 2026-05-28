@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises"
 const checkWorkflow = await readRequiredFile(".github/workflows/check.yml")
 const publishWorkflow = await readRequiredFile(".github/workflows/publish.yml")
 const releaseTagWorkflow = await readRequiredFile(".github/workflows/release-tag.yml")
-const dependabotConfig = await readRequiredFile(".github/dependabot.yml")
 
 assertMatches(checkWorkflow, /^name:\s*Check$/m, "check workflow is named Check")
 assertIncludes(checkWorkflow, "pull_request:", "check workflow runs on pull requests")
@@ -122,9 +121,6 @@ assertDoesNotMatch(
   /npm publish|NPM_TOKEN|NODE_AUTH_TOKEN/,
   "release tag workflow does not publish npm packages directly",
 )
-
-assertIncludes(dependabotConfig, "package-ecosystem: github-actions", "Dependabot updates actions")
-assertIncludes(dependabotConfig, "package-ecosystem: npm", "Dependabot updates npm dependencies")
 
 async function readRequiredFile(path) {
   try {

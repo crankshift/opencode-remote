@@ -4,6 +4,10 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+### Removed
+
+- Removed Dependabot configuration to stop automated dependency update pull requests.
+
 ## [0.5.6] - 2026-05-27
 
 ### Added

@@ -121,7 +121,7 @@ Default tests mock external systems. They do not require live Telegram, live Ope
 
 GitHub Actions runs the `Check` workflow on pull requests and pushes to `main`. It installs dependencies with `pnpm install --frozen-lockfile` on Node.js 24 and runs `pnpm run check`.
 
-Maintainers should configure branch protection for `main` to require the `Check` workflow before merging. Dependabot checks GitHub Actions and npm dependencies weekly.
+Maintainers should configure branch protection for `main` to require the `Check` workflow before merging.
 
 ## Release
 
