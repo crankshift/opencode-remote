@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.8.1] - 2026-05-28
+
+### Added
+
+- Added targeted safe debug logging for Telegram update authorization, group memory decisions, group memory clears, and message reaction set/clear diagnostics. (#31)
+
 ## [0.8.0] - 2026-05-28
 
 ### Added

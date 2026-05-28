@@ -110,11 +110,15 @@ export function createTelegramBot({
   bot.use(async (ctx, next) => {
     if (!isAuthorizedTelegramUser(ctx, telegram)) {
       logger.warn(
-        { userId: ctx.from?.id, chatId: ctx.chat?.id ?? ctx.message?.chat?.id },
+        telegramUpdateLogContext(ctx, { authorized: false }),
         "Ignoring unauthorized Telegram update",
       )
       return
     }
+    logger.debug?.(
+      telegramUpdateLogContext(ctx, { authorized: true }),
+      "Received authorized Telegram update",
+    )
     await next()
   })
 
@@ -148,7 +152,7 @@ export function createTelegramBot({
     const session = await controller.createSession({
       context: await formatPromptForTelegramGateway(""),
     })
-    groupMemory.clearAll?.()
+    clearGroupMemory("new_session")
     await replyAndRemember(ctx, `Created session ${session.title ?? session.id}`, botMessageMemory)
   })
 
@@ -181,7 +185,7 @@ export function createTelegramBot({
       return
     }
     await controller.selectSession(sessionId)
-    groupMemory.clearAll?.()
+    clearGroupMemory("select_session")
     await ctx.answerCallbackQuery({ text: "Session selected" })
     await replyAndRemember(ctx, `Selected session ${sessionId}`, botMessageMemory)
   })
@@ -651,6 +655,11 @@ export function createTelegramBot({
       logger?.warn?.({ error, chatId }, "Could not read Telegram group reaction settings")
       return false
     }
+  }
+
+  function clearGroupMemory(reason) {
+    groupMemory.clearAll?.()
+    logger.debug?.({ reason }, "Telegram group memory cleared")
   }
 
   async function replyWithPreferredMode(ctx, text, source) {
@@ -1175,6 +1184,60 @@ function isPrivateTelegramChat(ctx) {
   return chatType !== "group" && chatType !== "supergroup" && chatType !== "channel"
 }
 
+function telegramUpdateLogContext(ctx, { authorized }) {
+  return {
+    authorized,
+    chatType: telegramChatType(ctx),
+    senderKind: telegramSenderKind(ctx),
+    updateKind: telegramUpdateKind(ctx),
+  }
+}
+
+function telegramChatType(ctx) {
+  return (
+    ctx?.chat?.type ??
+    ctx?.message?.chat?.type ??
+    ctx?.callbackQuery?.message?.chat?.type ??
+    ctx?.messageReaction?.chat?.type ??
+    ctx?.myChatMember?.chat?.type ??
+    ctx?.update?.my_chat_member?.chat?.type ??
+    "unknown"
+  )
+}
+
+function telegramSenderKind(ctx) {
+  const sender = ctx?.from ?? ctx?.message?.from ?? ctx?.callbackQuery?.from
+  if (sender?.is_bot === true) {
+    return "bot"
+  }
+  if (sender?.is_bot === false) {
+    return "human"
+  }
+  if (ctx?.message?.sender_chat) {
+    return "chat"
+  }
+  return "unknown"
+}
+
+function telegramUpdateKind(ctx) {
+  if (ctx?.message) {
+    return "message"
+  }
+  if (ctx?.callbackQuery) {
+    return "callback_query"
+  }
+  if (ctx?.messageReaction) {
+    return "message_reaction"
+  }
+  if (ctx?.myChatMember ?? ctx?.update?.my_chat_member) {
+    return "my_chat_member"
+  }
+  if (ctx?.chat && ctx?.from) {
+    return "message"
+  }
+  return "unknown"
+}
+
 function rememberToolingTerms(toolingTerms, event) {
   if (event?.type !== "tool.updated") {
     return
@@ -1485,26 +1548,89 @@ async function defaultCleanupStickerFiles(filePaths = [], logger) {
 
 async function setEmojiReaction(ctx, chatId, messageId, emoji, logger) {
   if (!chatId || !messageId || !ctx.api?.setMessageReaction) {
+    logger?.debug?.(
+      telegramReactionLogContext(ctx, {
+        action: "set",
+        emoji,
+        ok: false,
+        skippedReason: "missing_api_or_target",
+      }),
+      "Telegram message reaction skipped",
+    )
     return
   }
 
   try {
     await ctx.api.setMessageReaction(chatId, messageId, [{ type: "emoji", emoji }])
+    logger?.debug?.(
+      telegramReactionLogContext(ctx, { action: "set", emoji, ok: true }),
+      "Telegram message reaction updated",
+    )
   } catch (error) {
-    logger.warn({ error }, "Could not set Telegram message reaction")
+    logger.warn(
+      { error, ...telegramReactionLogContext(ctx, { action: "set", emoji, ok: false }) },
+      "Could not set Telegram message reaction",
+    )
   }
 }
 
 async function clearMessageReaction(ctx, chatId, messageId, logger) {
   if (!chatId || !messageId || !ctx.api?.setMessageReaction) {
+    logger?.debug?.(
+      telegramReactionLogContext(ctx, {
+        action: "clear",
+        emoji: null,
+        ok: false,
+        skippedReason: "missing_api_or_target",
+      }),
+      "Telegram message reaction skipped",
+    )
     return
   }
 
   try {
     await ctx.api.setMessageReaction(chatId, messageId, [])
+    logger?.debug?.(
+      telegramReactionLogContext(ctx, { action: "clear", emoji: null, ok: true }),
+      "Telegram message reaction updated",
+    )
   } catch (error) {
-    logger.warn({ error }, "Could not clear Telegram message reaction")
+    logger.warn(
+      { error, ...telegramReactionLogContext(ctx, { action: "clear", emoji: null, ok: false }) },
+      "Could not clear Telegram message reaction",
+    )
   }
+}
+
+function telegramReactionLogContext(ctx, { action, emoji, ok, skippedReason }) {
+  return {
+    chatType: telegramChatType(ctx),
+    hasThread: Number.isInteger(ctx?.message?.message_thread_id),
+    messageKind: telegramMessageKind(ctx),
+    ok,
+    reactionAction: action,
+    reactionEmoji: emoji ?? null,
+    reactionKind: emoji === "👀" || action === "clear" ? "temporary_eye" : "requested",
+    senderKind: telegramSenderKind(ctx),
+    ...(skippedReason ? { skippedReason } : {}),
+  }
+}
+
+function telegramMessageKind(ctx) {
+  const message = ctx?.message
+  if (message?.text) {
+    return "text"
+  }
+  if (message?.photo) {
+    return "photo"
+  }
+  if (message?.voice) {
+    return "voice"
+  }
+  if (message?.sticker) {
+    return "sticker"
+  }
+  return telegramUpdateKind(ctx)
 }
 
 function getAddedEmojiReactions(oldReactions = [], newReactions = []) {
