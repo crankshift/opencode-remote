@@ -1,3 +1,6 @@
+export const CUSTOM_TRIGGER_MAX_COUNT = 20
+export const CUSTOM_TRIGGER_MAX_LENGTH = 64
+
 export const DEFAULT_GROUP_SETTINGS = {
   replyPolicy: "humans",
   triggers: {
@@ -7,6 +10,7 @@ export const DEFAULT_GROUP_SETTINGS = {
     nameAnywhere: false,
     voiceName: false,
   },
+  customTriggers: [],
 }
 
 export function evaluateGroupMessageRouting({ message, settings, botIdentity } = {}) {
@@ -37,6 +41,9 @@ export function evaluateGroupMessageRouting({ message, settings, botIdentity } =
   if (normalizedSettings.triggers.nameAnywhere && containsBotName(text, normalizedIdentity.names)) {
     return { route: true, trigger: "name_anywhere" }
   }
+  if (matchesCustomTrigger(text, normalizedSettings.customTriggers)) {
+    return { route: true, trigger: "custom" }
+  }
 
   return { route: false, reason: "not_addressed" }
 }
@@ -47,7 +54,36 @@ export function normalizeGroupSettings(settings = {}) {
     ...DEFAULT_GROUP_SETTINGS,
     ...settings,
     triggers,
+    customTriggers: normalizeCustomTriggers(settings.customTriggers),
   }
+}
+
+export function normalizeCustomTriggerPhrase(value) {
+  const phrase = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+  if (!phrase || phrase.length > CUSTOM_TRIGGER_MAX_LENGTH) {
+    return null
+  }
+  return phrase
+}
+
+export function normalizeCustomTriggers(values) {
+  const result = []
+  const seen = new Set()
+  for (const value of Array.isArray(values) ? values : []) {
+    const phrase = normalizeCustomTriggerPhrase(value)
+    const key = phrase?.toLocaleLowerCase("en-US")
+    if (!phrase || seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    result.push(phrase)
+    if (result.length >= CUSTOM_TRIGGER_MAX_COUNT) {
+      break
+    }
+  }
+  return result
 }
 
 function senderAllowed(message, replyPolicy) {
@@ -100,6 +136,21 @@ function containsBotName(text, names) {
     )
     return pattern.test(text)
   })
+}
+
+function matchesCustomTrigger(text, triggers) {
+  const candidate = normalizeComparableText(text)
+  if (!candidate) {
+    return false
+  }
+  return triggers.some((trigger) => candidate.includes(normalizeComparableText(trigger)))
+}
+
+function normalizeComparableText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("en-US")
 }
 
 function normalizeBotIdentity(identity = {}) {

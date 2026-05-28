@@ -2,7 +2,11 @@ import { mkdirSync } from "node:fs"
 import { dirname, posix, win32 } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { getAppDataDir } from "../../core/state/appDataPath.js"
-import { DEFAULT_GROUP_SETTINGS, normalizeGroupSettings } from "./groupRouting.js"
+import {
+  DEFAULT_GROUP_SETTINGS,
+  normalizeCustomTriggers,
+  normalizeGroupSettings,
+} from "./groupRouting.js"
 
 const GROUP_DB_FILE_NAME = "telegram-groups.db"
 
@@ -288,6 +292,9 @@ function mergeGroupConfig(base, patch = {}) {
       ...(base?.triggers ?? {}),
       ...(patch?.triggers ?? {}),
     },
+    customTriggers: normalizeCustomTriggers(
+      patch?.customTriggers ?? base?.customTriggers ?? DEFAULT_GROUP_CONFIG.customTriggers,
+    ),
     memory: {
       ...DEFAULT_GROUP_CONFIG.memory,
       ...(base?.memory ?? {}),

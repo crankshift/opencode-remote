@@ -30,6 +30,7 @@ describe("openTelegramGroupStore", () => {
       replyPolicy: "all",
       triggers: { nameAnywhere: true },
       context: { messages: 50 },
+      customTriggers: ["  Codex    please  ", "codex please", "shipbot"],
     })
     store.close()
 
@@ -48,6 +49,7 @@ describe("openTelegramGroupStore", () => {
       replyPolicy: "all",
       triggers: { ...DEFAULT_GROUP_CONFIG.triggers, nameAnywhere: true },
       context: { ...DEFAULT_GROUP_CONFIG.context, messages: 50 },
+      customTriggers: ["Codex please", "shipbot"],
     })
     reopened.close()
   })
@@ -94,6 +96,24 @@ describe("createMemoryGroupStore", () => {
         status: "configured",
       },
     ])
+  })
+
+  test("normalizes missing and oversized custom triggers", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    await store.updateSettings(-1001, {
+      customTriggers: [
+        " alpha  trigger ",
+        "ALPHA trigger",
+        "x".repeat(65),
+        ...Array.from({ length: 25 }, (_, index) => `trigger ${index}`),
+      ],
+    })
+
+    const settings = await store.getSettings(-1001)
+
+    expect(settings.customTriggers).toHaveLength(20)
+    expect(settings.customTriggers[0]).toBe("alpha trigger")
+    expect(settings.customTriggers).not.toContain("x".repeat(65))
   })
 })
 

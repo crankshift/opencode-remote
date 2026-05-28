@@ -109,4 +109,42 @@ describe("evaluateGroupMessageRouting", () => {
       }),
     ).toEqual({ route: true, trigger: "name_anywhere" })
   })
+
+  test("routes custom triggers anywhere case-insensitively", () => {
+    const settings = {
+      ...DEFAULT_GROUP_SETTINGS,
+      customTriggers: ["codex please"],
+    }
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "Can CODEX    please check this?" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: true, trigger: "custom" })
+  })
+
+  test("treats custom trigger phrases as plain text", () => {
+    const settings = {
+      ...DEFAULT_GROUP_SETTINGS,
+      customTriggers: ["ship.bot"],
+    }
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "shipXbot should not match" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: false, reason: "not_addressed" })
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "please ask ship.bot for help" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: true, trigger: "custom" })
+  })
 })
