@@ -510,18 +510,141 @@ describe("createTelegramBot", () => {
     const setMessageReaction = vi.fn(async () => true)
 
     await bot.messageHandlers.get("message:text")({
-      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      message: {
+        message_id: 10,
+        text: "hello",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+      },
       api: { sendChatAction, setMessageReaction },
       reply,
     })
 
     expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
     expect(controller.sendPrompt).toHaveBeenCalledWith(
-      expect.stringContaining("hello"),
+      expect.objectContaining({
+        text: expect.stringContaining("hello"),
+        author: { name: "Authorized User", source: "sender" },
+      }),
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(reply).toHaveBeenCalledWith("answer")
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+  })
+
+  test("forwarded text prompts include forwarded author context", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "please summarize this",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Forwarder" },
+        forward_origin: {
+          type: "user",
+          sender_user: {
+            id: 999,
+            is_bot: false,
+            first_name: "Ada",
+            last_name: "Lovelace",
+          },
+        },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("please summarize this"),
+        author: { name: "Ada Lovelace", source: "forwarded" },
+      }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
+  })
+
+  test("forwarded text prompts without author data fall back to the sender", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "please summarize this",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+        forward_origin: { type: "hidden_user", sender_user_name: " " },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("please summarize this"),
+        author: { name: "Authorized User", source: "sender" },
+      }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
+  })
+
+  test("normal text prompts include the sender as author context", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "hello",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("hello"),
+        author: { name: "Authorized User", source: "sender" },
+      }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
   })
 
   test("text prompts in voice all mode send voice replies without text", async () => {
@@ -545,7 +668,12 @@ describe("createTelegramBot", () => {
     const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
 
     await bot.messageHandlers.get("message:text")({
-      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      message: {
+        message_id: 10,
+        text: "hello",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+      },
       api: {
         sendChatAction: vi.fn(async () => undefined),
         setMessageReaction: vi.fn(async () => true),
@@ -600,7 +728,12 @@ describe("createTelegramBot", () => {
     }))
 
     await bot.messageHandlers.get("message:text")({
-      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      message: {
+        message_id: 10,
+        text: "hello",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+      },
       api: {
         sendChatAction: vi.fn(async () => undefined),
         setMessageReaction: vi.fn(async () => true),
@@ -997,7 +1130,12 @@ describe("createTelegramBot", () => {
     })
 
     await bot.messageHandlers.get("message:text")({
-      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      message: {
+        message_id: 10,
+        text: "hello",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+      },
       api: {
         sendChatAction: vi.fn(async () => undefined),
         setMessageReaction: vi.fn(async () => true),
@@ -1006,15 +1144,18 @@ describe("createTelegramBot", () => {
     })
 
     expect(controller.sendPrompt).toHaveBeenCalledWith(
-      [
-        "hello",
-        "",
-        "Telegram gateway note:",
-        "The gateway shows tool and skill usage separately in an Activity message. Do not include tool or skill usage announcements in your final response.",
-        "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
-        "[telegram_reaction: 👍]",
-        "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
-      ].join("\n"),
+      {
+        text: [
+          "hello",
+          "",
+          "Telegram gateway note:",
+          "The gateway shows tool and skill usage separately in an Activity message. Do not include tool or skill usage announcements in your final response.",
+          "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
+          "[telegram_reaction: 👍]",
+          "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
+        ].join("\n"),
+        author: { name: "Authorized User", source: "sender" },
+      },
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
   })
@@ -1076,6 +1217,11 @@ describe("createTelegramBot", () => {
         message_id: 10,
         chat: { id: 456 },
         caption: "What changed?",
+        from: { id: 123, is_bot: false, first_name: "Forwarder" },
+        forward_origin: {
+          type: "hidden_user",
+          sender_user_name: "Screenshot Author",
+        },
         photo: [small, large],
       },
       api: { sendChatAction: vi.fn(async () => undefined) },
@@ -1093,6 +1239,7 @@ describe("createTelegramBot", () => {
         text: expect.stringContaining(
           "The gateway shows tool and skill usage separately in an Activity message.",
         ),
+        author: { name: "Screenshot Author", source: "forwarded" },
         attachments: [attachment],
       },
       expect.objectContaining({ onProgress: expect.any(Function) }),
@@ -1181,7 +1328,12 @@ describe("createTelegramBot", () => {
     const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
 
     await bot.messageHandlers.get("message:voice")({
-      message: { message_id: 10, chat: { id: 456 }, voice: { file_id: "voice-1" } },
+      message: {
+        message_id: 10,
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+        voice: { file_id: "voice-1" },
+      },
       api: { sendChatAction: vi.fn(async () => undefined) },
       reply,
     })
@@ -1194,7 +1346,10 @@ describe("createTelegramBot", () => {
     })
     expect(voiceService.transcribe).toHaveBeenCalledWith("/tmp/voice.ogg")
     expect(controller.sendPrompt).toHaveBeenCalledWith(
-      expect.stringContaining("transcribed prompt"),
+      expect.objectContaining({
+        text: expect.stringContaining("transcribed prompt"),
+        author: { name: "Authorized User", source: "sender" },
+      }),
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(reply).not.toHaveBeenCalled()
@@ -1252,6 +1407,7 @@ describe("createTelegramBot", () => {
         text: expect.stringContaining(
           "The gateway shows tool and skill usage separately in an Activity message.",
         ),
+        author: { name: "Authorized User", source: "sender" },
         attachments: [
           { mime: "image/jpeg", url: "file:///tmp/photo-10.jpg", filePath: "/tmp/photo-10.jpg" },
           { mime: "image/jpeg", url: "file:///tmp/photo-11.jpg", filePath: "/tmp/photo-11.jpg" },
@@ -1309,7 +1465,7 @@ describe("createTelegramBot", () => {
   test("user reaction to a known bot message sends a feedback prompt and reply", async () => {
     const controller = {
       sendPrompt: vi.fn(async (prompt) => {
-        if (prompt.startsWith("hello")) {
+        if (String(prompt?.text ?? prompt).startsWith("hello")) {
           return "answer"
         }
         return "feedback response"
@@ -1431,6 +1587,7 @@ function photoContext({ messageId, fileId, caption = "", reply }) {
     message: {
       message_id: messageId,
       chat: { id: 456 },
+      from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
       media_group_id: "album-1",
       caption,
       photo: [{ file_id: fileId, width: 1280, height: 720, file_size: 3000 }],

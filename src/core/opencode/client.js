@@ -368,8 +368,43 @@ function toPromptParts(prompt) {
       mime: attachment.mime,
       url: attachment.url,
     })),
-    { type: "text", text: String(prompt?.text ?? "") },
+    { type: "text", text: formatPromptText(prompt) },
   ]
+}
+
+function formatPromptText(prompt) {
+  const text = String(prompt?.text ?? "")
+  const author = normalizePromptAuthor(prompt?.author)
+  if (!author) {
+    return text
+  }
+
+  return [
+    "Message author context:",
+    `- Author: ${author.name}`,
+    `- Attribution: ${formatAuthorAttribution(author.source)}`,
+    "",
+    "Message:",
+    text,
+  ].join("\n")
+}
+
+function normalizePromptAuthor(author) {
+  if (!author || typeof author !== "object") {
+    return null
+  }
+  const name = firstString(author.name)
+  if (!name) {
+    return null
+  }
+  return { name, source: firstString(author.source) ?? "sender" }
+}
+
+function formatAuthorAttribution(source) {
+  if (source === "forwarded") {
+    return "forwarded original author"
+  }
+  return "message sender"
 }
 
 function toData(result) {

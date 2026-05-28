@@ -68,6 +68,78 @@ describe("createOpenCodeClient", () => {
     })
   })
 
+  test("adds messenger-neutral author context to object prompts", async () => {
+    const sdkClient = {
+      session: {
+        prompt: vi.fn(async () => ({ parts: [{ type: "text", text: "answer" }] })),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_1", {
+        text: "please summarize this",
+        author: { name: "Ada Lovelace", source: "forwarded" },
+      }),
+    ).resolves.toBe("answer")
+
+    expect(sdkClient.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: {
+        parts: [
+          {
+            type: "text",
+            text: [
+              "Message author context:",
+              "- Author: Ada Lovelace",
+              "- Attribution: forwarded original author",
+              "",
+              "Message:",
+              "please summarize this",
+            ].join("\n"),
+          },
+        ],
+      },
+    })
+  })
+
+  test("keeps attachments before author-context text prompts", async () => {
+    const sdkClient = {
+      session: {
+        prompt: vi.fn(async () => ({ parts: [{ type: "text", text: "answer" }] })),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_1", {
+        text: "What changed?",
+        author: { name: "Grace Hopper", source: "sender" },
+        attachments: [{ mime: "image/jpeg", url: "file:///tmp/photo.jpg" }],
+      }),
+    ).resolves.toBe("answer")
+
+    expect(sdkClient.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: {
+        parts: [
+          { type: "file", mime: "image/jpeg", url: "file:///tmp/photo.jpg" },
+          {
+            type: "text",
+            text: [
+              "Message author context:",
+              "- Author: Grace Hopper",
+              "- Attribution: message sender",
+              "",
+              "Message:",
+              "What changed?",
+            ].join("\n"),
+          },
+        ],
+      },
+    })
+  })
+
   test("streams normalized skill progress while a prompt is running", async () => {
     const stream = createEventStream([
       {
