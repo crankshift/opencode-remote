@@ -1,4 +1,9 @@
 import { InlineKeyboard } from "grammy"
+import {
+  CUSTOM_TRIGGER_MAX_COUNT,
+  CUSTOM_TRIGGER_MAX_LENGTH,
+  normalizeCustomTriggerPhrase,
+} from "./groupRouting.js"
 
 const GROUP_NOTICE_TEXT = "Group settings are managed in DM. Message me and run /group."
 
@@ -10,6 +15,7 @@ export function createTelegramGroupMenu({
 } = {}) {
   const noticeTimes = new Map()
   const groupTokens = createTokenStore(200)
+  const pendingCustomTriggerAdds = new Map()
 
   return {
     async handleCommand(ctx) {
@@ -34,6 +40,10 @@ export function createTelegramGroupMenu({
         keyboard.text(group.title, `group:${token}`).row()
       }
       await ctx.reply("Select a Telegram group to configure:", { reply_markup: keyboard })
+    },
+
+    async handlePendingText(ctx) {
+      return handlePendingCustomTriggerText(ctx)
     },
 
     async handleCallback(ctx) {
@@ -85,6 +95,37 @@ export function createTelegramGroupMenu({
         await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
         return
       }
+      if (selection.action === "add_custom_trigger") {
+        pendingCustomTriggerAdds.set(selection.userId, { chatId: selection.chatId })
+        await ctx.answerCallbackQuery({ text: "Send trigger phrase" })
+        await ctx.reply(
+          `Send the custom trigger phrase for this group. It can be up to ${CUSTOM_TRIGGER_MAX_LENGTH} characters. Send /cancel to stop.`,
+        )
+        return
+      }
+      if (selection.action === "remove_custom_trigger") {
+        await ctx.answerCallbackQuery({ text: "Select trigger" })
+        await replyWithCustomTriggerRemoveMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "remove_custom_trigger_phrase") {
+        const settings = await store.getSettings(selection.chatId)
+        const key = customTriggerKey(selection.phrase)
+        await store.updateSettings(selection.chatId, {
+          customTriggers: settings.customTriggers.filter(
+            (phrase) => customTriggerKey(phrase) !== key,
+          ),
+        })
+        await ctx.answerCallbackQuery({ text: "Custom trigger removed" })
+        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "clear_custom_triggers") {
+        await store.updateSettings(selection.chatId, { customTriggers: [] })
+        await ctx.answerCallbackQuery({ text: "Custom triggers cleared" })
+        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
 
       await ctx.answerCallbackQuery({ text: "Group selected" })
       await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
@@ -109,6 +150,22 @@ export function createTelegramGroupMenu({
         )
         .row()
     }
+    const addTriggerToken = groupTokens.add({ action: "add_custom_trigger", chatId, userId })
+    keyboard.text("Add custom trigger", `group:${addTriggerToken}`).row()
+    if (settings.customTriggers.length > 0) {
+      const removeTriggerToken = groupTokens.add({
+        action: "remove_custom_trigger",
+        chatId,
+        userId,
+      })
+      keyboard.text("Remove custom trigger", `group:${removeTriggerToken}`).row()
+      const clearTriggerToken = groupTokens.add({
+        action: "clear_custom_triggers",
+        chatId,
+        userId,
+      })
+      keyboard.text("Clear custom triggers", `group:${clearTriggerToken}`).row()
+    }
     const memoryToken = groupTokens.add({ action: "toggle_memory", chatId, userId })
     keyboard.text(`Memory: ${settings.memory.enabled ? "off" : "on"}`, `group:${memoryToken}`).row()
     for (const messages of [10, 30, 50]) {
@@ -124,6 +181,73 @@ export function createTelegramGroupMenu({
     await ctx.reply(formatGroupSettings(group?.title ?? `Group ${chatId}`, settings), {
       reply_markup: keyboard,
     })
+  }
+
+  async function replyWithCustomTriggerRemoveMenu(ctx, chatId, userId) {
+    const settings = await store.getSettings(chatId)
+    if (settings.customTriggers.length === 0) {
+      await ctx.reply("No custom triggers are configured for this group.")
+      return
+    }
+    const keyboard = new InlineKeyboard()
+    for (const phrase of settings.customTriggers) {
+      const token = groupTokens.add({
+        action: "remove_custom_trigger_phrase",
+        chatId,
+        userId,
+        phrase,
+      })
+      keyboard.text(phrase, `group:${token}`).row()
+    }
+    await ctx.reply("Select a custom trigger to remove:", { reply_markup: keyboard })
+  }
+
+  async function handlePendingCustomTriggerText(ctx) {
+    if (!isPrivateChat(ctx)) {
+      return false
+    }
+    const userId = ctx.from?.id
+    const pending = pendingCustomTriggerAdds.get(userId)
+    if (!pending) {
+      return false
+    }
+    const text = String(ctx.message?.text ?? "")
+    if (text.trim() === "/cancel") {
+      pendingCustomTriggerAdds.delete(userId)
+      await ctx.reply("Custom trigger setup cancelled.")
+      return true
+    }
+    const rawPhrase = text.trim().replace(/\s+/g, " ")
+    if (!rawPhrase) {
+      await ctx.reply("Custom trigger cannot be empty. Send another phrase or /cancel.")
+      return true
+    }
+    if (rawPhrase.length > CUSTOM_TRIGGER_MAX_LENGTH) {
+      await ctx.reply(`Custom trigger must be ${CUSTOM_TRIGGER_MAX_LENGTH} characters or fewer.`)
+      return true
+    }
+    const settings = await store.getSettings(pending.chatId)
+    if (settings.customTriggers.length >= CUSTOM_TRIGGER_MAX_COUNT) {
+      pendingCustomTriggerAdds.delete(userId)
+      await ctx.reply(`This group already has ${CUSTOM_TRIGGER_MAX_COUNT} custom triggers.`)
+      return true
+    }
+    const phrase = normalizeCustomTriggerPhrase(rawPhrase)
+    if (
+      settings.customTriggers.some(
+        (existing) => customTriggerKey(existing) === customTriggerKey(phrase),
+      )
+    ) {
+      await ctx.reply("That custom trigger is already configured.")
+      return true
+    }
+    pendingCustomTriggerAdds.delete(userId)
+    await store.updateSettings(pending.chatId, {
+      customTriggers: [...settings.customTriggers, phrase],
+    })
+    await ctx.reply(`Added custom trigger: ${phrase}`)
+    await replyWithSettingsMenu(ctx, pending.chatId, userId)
+    return true
   }
 
   async function maybeSendGroupNotice(ctx) {
@@ -147,9 +271,18 @@ function formatGroupSettings(groupTitle, settings) {
     `${groupTitle} settings:`,
     `Reply policy: ${settings.replyPolicy}`,
     `Triggers: ${formatEnabledTriggers(settings.triggers)}`,
+    `Custom triggers: ${formatCustomTriggers(settings.customTriggers)}`,
     `Memory: ${settings.memory.enabled ? "on" : "off"}`,
     `Context: ${settings.context.messages} messages, ${settings.context.chars} chars, ${settings.context.overlap} overlap`,
   ].join("\n")
+}
+
+function formatCustomTriggers(customTriggers = []) {
+  return customTriggers.length === 0 ? "none" : customTriggers.join(", ")
+}
+
+function customTriggerKey(value) {
+  return String(value ?? "").toLocaleLowerCase("en-US")
 }
 
 function formatEnabledTriggers(triggers) {

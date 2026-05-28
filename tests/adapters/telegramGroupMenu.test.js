@@ -104,4 +104,137 @@ describe("createTelegramGroupMenu", () => {
     expect(answerCallbackQuery).toHaveBeenCalledWith({ text: "Group menu expired" })
     expect(reply).toHaveBeenCalledTimes(1)
   })
+
+  test("adds, removes, and clears custom triggers through DM menu", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    const menu = createTelegramGroupMenu({ store, memory: createGroupMemory() })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await menu.handleCommand({
+      from: { id: 123 },
+      chat: { id: 123, type: "private" },
+      message: { chat: { id: 123, type: "private" } },
+      reply,
+    })
+    const selectData = reply.mock.calls[0][1].reply_markup.inline_keyboard[0][0].callback_data
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [selectData, selectData.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    const addButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Add custom trigger")
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [addButton.callback_data, addButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    expect(reply.mock.calls.at(-1)[0]).toContain("Send the custom trigger phrase")
+
+    expect(
+      await menu.handlePendingText({
+        from: { id: 123 },
+        chat: { id: 123, type: "private" },
+        message: { text: "  Codex    please  " },
+        reply,
+      }),
+    ).toBe(true)
+    expect((await store.getSettings(-1001)).customTriggers).toEqual(["Codex please"])
+
+    const removeButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Remove custom trigger")
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [removeButton.callback_data, removeButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    const phraseButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Codex please")
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [phraseButton.callback_data, phraseButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    expect((await store.getSettings(-1001)).customTriggers).toEqual([])
+
+    await store.updateSettings(-1001, { customTriggers: ["shipbot"] })
+    await menu.handleCommand({
+      from: { id: 123 },
+      chat: { id: 123, type: "private" },
+      message: { chat: { id: 123, type: "private" } },
+      reply,
+    })
+    const selectAgain = reply.mock.calls.at(-1)[1].reply_markup.inline_keyboard[0][0].callback_data
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [selectAgain, selectAgain.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    const clearButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Clear custom triggers")
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [clearButton.callback_data, clearButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    expect((await store.getSettings(-1001)).customTriggers).toEqual([])
+  })
+
+  test("rejects invalid custom trigger phrases", async () => {
+    const store = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    await store.updateSettings(-1001, { customTriggers: ["shipbot"] })
+    const menu = createTelegramGroupMenu({ store, memory: createGroupMemory() })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await menu.handleCommand({
+      from: { id: 123 },
+      chat: { id: 123, type: "private" },
+      message: { chat: { id: 123, type: "private" } },
+      reply,
+    })
+    const selectData = reply.mock.calls[0][1].reply_markup.inline_keyboard[0][0].callback_data
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [selectData, selectData.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    const addButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Add custom trigger")
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [addButton.callback_data, addButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(
+      await menu.handlePendingText({
+        from: { id: 123 },
+        chat: { id: 123, type: "private" },
+        message: { text: "SHIPBOT" },
+        reply,
+      }),
+    ).toBe(true)
+
+    expect(reply).toHaveBeenCalledWith("That custom trigger is already configured.")
+    expect((await store.getSettings(-1001)).customTriggers).toEqual(["shipbot"])
+  })
 })
