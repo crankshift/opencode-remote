@@ -1,6 +1,6 @@
 # OpenCode Remote
 
-OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, connects to your local or remote OpenCode server, and forwards messages from one authorized Telegram user to OpenCode sessions.
+OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, connects to your local or remote OpenCode server, and forwards messages from authorized private users or allowed Telegram groups to OpenCode sessions.
 
 This is a Telegram MVP with text prompts, photo prompts, sticker prompts/replies, OpenCode permission approvals, and opt-in voice input/replies. Model switching and multi-messenger support are not implemented yet.
 
@@ -11,7 +11,7 @@ See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.
 - Node.js 22.18.0 or newer. Node.js 24 LTS is recommended.
 - OpenCode CLI available on the machine running the gateway.
 - A Telegram bot token from BotFather.
-- Your Telegram numeric user ID for the allowlist.
+- One or more Telegram numeric user IDs for private-chat access, or one or more Telegram group chat IDs for group access.
 - Optional voice mode: a free Groq API key for Whisper transcription and `ffmpeg` installed locally for Telegram voice-note conversion.
 
 ## Install
@@ -46,7 +46,9 @@ Create the config interactively:
 opencode-remote setup
 ```
 
-The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, allowed Telegram user ID, progress verbosity, log level, optional voice mode, and optional user-level login startup from the current project folder. If a config already exists at the chosen location, setup shows current values and pressing Enter with no input keeps them; secret values are shown only as set. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
+The setup flow asks whether to write a project-local or global config, then prompts for the Telegram token, optional comma-separated allowed direct user IDs, optional comma-separated allowed group chat IDs, progress verbosity, log level, optional voice mode, and optional user-level login startup from the current project folder. At least one direct user ID or group chat ID is required. If a config already exists at the chosen location, setup shows current values and pressing Enter with no input keeps them; secret values are shown only as set. If voice mode is enabled and `ffmpeg` is missing, setup can try a detected installer and then waits while you install `ffmpeg` in another terminal before continuing. Choice prompts show all options in a highlighted list with arrow-key selection and Enter to confirm.
+
+Allowed chat IDs authorize all messages in those groups, including messages from other bots. To receive all group messages, make this bot a group admin or disable Group Privacy Mode in BotFather. To receive messages from other bots in groups, also enable Bot-to-Bot Communication Mode. Direct private messages are accepted only from configured `allowedUserIds`.
 
 Config discovery order:
 
@@ -111,9 +113,11 @@ The config file is JSON:
 
 ```json
 {
+  "schemaVersion": 2,
   "telegram": {
     "botToken": "123456:telegram-bot-token",
-    "allowedUserId": 123456789
+    "allowedUserIds": [123456789],
+    "allowedChatIds": [-1001234567890]
   },
   "voice": {
     "enabled": false,
@@ -129,11 +133,13 @@ The config file is JSON:
 
 `telegram.botToken` is required. It is the token for the bot that receives Telegram messages.
 
-`telegram.allowedUserId` is required. Updates from other Telegram users are ignored.
+`telegram.allowedUserIds` is optional when `telegram.allowedChatIds` is configured. It is an array of trusted human Telegram user IDs that may use the bot in private direct chats. Setup accepts values such as `123456789` or `123456789, 222333444`. Direct messages from other users and all private bot-to-bot messages are ignored.
+
+`telegram.allowedChatIds` is optional when `telegram.allowedUserIds` is configured. It authorizes every sender in those group chats, including humans and other bots. Telegram group and supergroup IDs are usually negative, for example `-1001234567890`. Do not configure group IDs for groups whose members or admins you do not trust.
 
 `opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or `127.0.0.1` with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
 
-`progressVerbosity` controls the startup default for the prompt activity message. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime.
+`progressVerbosity` controls the startup default for the prompt activity message in private chats. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime in private chats. Group chats always suppress the `Activity` message.
 
 `voice` controls optional Telegram voice input and spoken replies. `mode="on"` sends voice-note replies only after voice prompts, `mode="all"` sends voice-note replies after text, photo, and voice prompts, and `mode="off"` disables voice. When a voice-note reply succeeds, the bot does not also send the text reply; if speech generation or sending fails, it falls back to text. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
 
@@ -170,7 +176,7 @@ The bot currently supports:
 /help      Show available commands
 ```
 
-Any non-command text message from the authorized Telegram user is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
+Any non-command text message from an authorized private Telegram user, or from any sender in an allowed group chat, is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
 
 Forwarded Telegram text, photo, album, and voice prompts include safe author context for OpenCode when Telegram provides the original author. If Telegram hides or omits the forwarded author, the prompt falls back to the authorized Telegram user without exposing raw Telegram payloads or numeric user IDs.
 
@@ -208,9 +214,11 @@ Voice commands:
 
 ## Troubleshooting
 
-If startup fails with a configuration error, check the selected `.opencode-remote/config.json` and make sure `telegram.botToken` is non-empty and `telegram.allowedUserId` is numeric.
+If startup fails with a configuration error, check the selected `.opencode-remote/config.json` and make sure `telegram.botToken` is non-empty and at least one of `telegram.allowedUserIds` or `telegram.allowedChatIds` contains a numeric ID.
 
-If Telegram messages appear to be ignored, confirm that `telegram.allowedUserId` matches your Telegram user ID, not the bot ID or chat ID.
+If Telegram private messages from a human user appear to be ignored, confirm that `telegram.allowedUserIds` contains your Telegram user ID, not the bot ID or chat ID.
+
+If group messages appear to be ignored, confirm that `telegram.allowedChatIds` contains the group chat ID. To receive all messages in groups, this bot must be a group admin or Group Privacy Mode must be disabled in BotFather. To receive messages from other bots in groups, also enable Bot-to-Bot Communication Mode.
 
 If startup fails because OpenCode is unreachable, make sure the OpenCode CLI is installed and available in `PATH`. With auto-start enabled, the gateway waits about 60 seconds for the configured OpenCode URL before exiting.
 

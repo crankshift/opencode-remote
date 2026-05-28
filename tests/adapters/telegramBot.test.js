@@ -34,6 +34,15 @@ class FakeBot {
   }
 }
 
+function testTelegram(overrides = {}) {
+  return {
+    botToken: "token",
+    allowedUserIds: [123],
+    allowedChatIds: [],
+    ...overrides,
+  }
+}
+
 describe("createTelegramBot", () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -42,7 +51,7 @@ describe("createTelegramBot", () => {
   test("registers v1 command handlers and message handlers", () => {
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       logger: { warn: vi.fn() },
       botFactory: FakeBot,
@@ -71,7 +80,7 @@ describe("createTelegramBot", () => {
   test("status command reports progress verbosity", async () => {
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {
         status: vi.fn(async () => ({ activeSessionId: "ses_1", progressVerbosity: "verbose" })),
       },
@@ -90,7 +99,7 @@ describe("createTelegramBot", () => {
   test("progress command reports current verbosity", async () => {
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {
         getProgressVerbosity: vi.fn(async () => "all"),
       },
@@ -112,7 +121,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -125,13 +134,36 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith("Tool progress set to verbose.")
   })
 
+  test("progress command is private-chat only", async () => {
+    const controller = {
+      setProgressVerbosity: vi.fn(),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("progress")({
+      message: { text: "/progress verbose", chat: { id: -1001, type: "supergroup" } },
+      chat: { id: -1001, type: "supergroup" },
+      reply,
+    })
+
+    expect(controller.setProgressVerbosity).not.toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith("Tool progress is only available in private chats.")
+  })
+
   test("progress command rejects unknown verbosity", async () => {
     const controller = {
       setProgressVerbosity: vi.fn(),
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -158,7 +190,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -184,7 +216,7 @@ describe("createTelegramBot", () => {
     const voiceService = { setMode: vi.fn(async () => ({ enabled: true, mode: "all" })) }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -216,7 +248,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -245,7 +277,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -265,7 +297,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -297,7 +329,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -326,7 +358,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -347,7 +379,7 @@ describe("createTelegramBot", () => {
     const sendVoice = vi.fn(async () => ({ message_id: 10, chat: { id: 456 } }))
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       voiceService,
       sendVoice,
@@ -367,7 +399,7 @@ describe("createTelegramBot", () => {
     const logger = { warn: vi.fn() }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       logger,
       botFactory: FakeBot,
@@ -380,11 +412,105 @@ describe("createTelegramBot", () => {
     expect(logger.warn).toHaveBeenCalled()
   })
 
+  test("authorization middleware allows configured human users in private chats", async () => {
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [123, 456] }),
+      controller: {},
+      logger: { warn: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const next = vi.fn()
+
+    await bot.middlewares[0](
+      { from: { id: 456, is_bot: false }, chat: { id: 456, type: "private" } },
+      next,
+    )
+
+    expect(next).toHaveBeenCalled()
+  })
+
+  test("authorization middleware rejects configured human users in unallowed groups", async () => {
+    const logger = { warn: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [456], allowedChatIds: [] }),
+      controller: {},
+      logger,
+      botFactory: FakeBot,
+    })
+    const next = vi.fn()
+
+    await bot.middlewares[0](
+      { from: { id: 456, is_bot: false }, chat: { id: -1001, type: "supergroup" } },
+      next,
+    )
+
+    expect(next).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalled()
+  })
+
+  test("authorization middleware allows humans in allowed group chats", async () => {
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [], allowedChatIds: [-1001] }),
+      controller: {},
+      logger: { warn: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const next = vi.fn()
+
+    await bot.middlewares[0](
+      { from: { id: 777, is_bot: false }, chat: { id: -1001, type: "supergroup" } },
+      next,
+    )
+
+    expect(next).toHaveBeenCalled()
+  })
+
+  test("authorization middleware allows bots in allowed group chats", async () => {
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [], allowedChatIds: [-1001] }),
+      controller: {},
+      logger: { warn: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const next = vi.fn()
+
+    await bot.middlewares[0](
+      { from: { id: 777, is_bot: true }, chat: { id: -1001, type: "supergroup" } },
+      next,
+    )
+
+    expect(next).toHaveBeenCalled()
+  })
+
+  test("authorization middleware rejects messages in unallowed groups", async () => {
+    const logger = { warn: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [], allowedChatIds: [-1001] }),
+      controller: {},
+      logger,
+      botFactory: FakeBot,
+    })
+    const next = vi.fn()
+
+    await bot.middlewares[0](
+      { from: { id: 777, is_bot: true }, chat: { id: -2002, type: "supergroup" } },
+      next,
+    )
+
+    expect(next).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalled()
+  })
+
   test("error handler logs and sends a safe reply", async () => {
     const logger = { warn: vi.fn(), error: vi.fn() }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       logger,
       botFactory: FakeBot,
@@ -402,7 +528,7 @@ describe("createTelegramBot", () => {
     const longId = "ses_".padEnd(120, "x")
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {
         listSessions: vi.fn(async () => [{ id: longId, title: longTitle }]),
       },
@@ -427,7 +553,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -446,7 +572,7 @@ describe("createTelegramBot", () => {
   test("stop command reports when there is no active session", async () => {
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {
         stop: vi.fn(async () => ({ stopped: false, reason: "no_active_session" })),
       },
@@ -472,7 +598,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -503,7 +629,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -541,7 +667,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -585,7 +711,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -621,7 +747,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -661,7 +787,7 @@ describe("createTelegramBot", () => {
     const sendVoice = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       voiceService,
       sendVoice,
@@ -716,7 +842,7 @@ describe("createTelegramBot", () => {
     const sendVoice = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       voiceService,
       sendVoice,
@@ -792,7 +918,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -837,7 +963,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       voiceService,
       logger,
@@ -881,7 +1007,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -914,6 +1040,46 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith("answer")
   })
 
+  test("text prompts do not render tool progress in group chats", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        expect(options).not.toHaveProperty("onProgress")
+        return "answer"
+      }),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      progressVerbosity: "all",
+      progressEditThrottleMs: 0,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 21, chat: { id: -1001 }, text }))
+    const editMessageText = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "hello",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Group" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+        editMessageText,
+      },
+      reply,
+    })
+
+    expect(reply).not.toHaveBeenCalledWith(expect.stringContaining("Activity"))
+    expect(editMessageText).not.toHaveBeenCalled()
+    expect(reply).toHaveBeenCalledWith("answer")
+  })
+
   test("text prompts strip tool usage announcements from the final answer", async () => {
     const controller = {
       sendPrompt: vi.fn(async (_prompt, options) => {
@@ -928,7 +1094,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -964,7 +1130,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -1000,7 +1166,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -1038,7 +1204,7 @@ describe("createTelegramBot", () => {
     const logger = { warn: vi.fn(), error: vi.fn() }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger,
       botFactory: FakeBot,
@@ -1087,7 +1253,7 @@ describe("createTelegramBot", () => {
     const logger = { warn: vi.fn(), error: vi.fn() }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger,
       botFactory: FakeBot,
@@ -1126,7 +1292,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -1183,7 +1349,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -1220,7 +1386,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -1267,7 +1433,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       random: vi.fn(() => 0),
@@ -1311,7 +1477,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       random: vi.fn(() => 0),
@@ -1363,7 +1529,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       random: vi.fn(() => 0),
@@ -1403,7 +1569,7 @@ describe("createTelegramBot", () => {
     const cleanupStickerFiles = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       createStickerPrompt,
@@ -1450,7 +1616,7 @@ describe("createTelegramBot", () => {
     const stickerStore = createMemoryStickerStore()
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       stickerStore,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -1482,7 +1648,7 @@ describe("createTelegramBot", () => {
     const stickerStore = createMemoryStickerStore()
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       stickerStore,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -1520,7 +1686,7 @@ describe("createTelegramBot", () => {
     const cleanupStickerFiles = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller: {},
       stickerStore,
       cleanupStickerFiles,
@@ -1556,7 +1722,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       random: vi.fn(() => 0),
@@ -1600,7 +1766,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       stickerStore,
       random: vi.fn(() => 0),
@@ -1633,7 +1799,7 @@ describe("createTelegramBot", () => {
     const cleanupMediaAttachments = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger,
       botFactory: FakeBot,
@@ -1699,7 +1865,7 @@ describe("createTelegramBot", () => {
     const cleanupMediaAttachments = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -1748,7 +1914,7 @@ describe("createTelegramBot", () => {
     const cleanupMediaAttachments = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       voiceService,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -1807,7 +1973,7 @@ describe("createTelegramBot", () => {
     const cleanupMediaAttachments = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger,
       botFactory: FakeBot,
@@ -1869,7 +2035,7 @@ describe("createTelegramBot", () => {
     const cleanupMediaAttachments = vi.fn(async () => undefined)
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger,
       botFactory: FakeBot,
@@ -1905,7 +2071,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -1956,7 +2122,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
@@ -1981,7 +2147,7 @@ describe("createTelegramBot", () => {
     }
     const bot = createTelegramBot({
       token: "token",
-      allowedUserId: 123,
+      telegram: testTelegram(),
       controller,
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,

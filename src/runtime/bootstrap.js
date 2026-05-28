@@ -75,7 +75,7 @@ export async function runGateway({
   const stickerStore = openTelegramStickerStore()
   const bot = createTelegramBot({
     token: resolvedConfig.telegram.botToken,
-    allowedUserId: resolvedConfig.telegram.allowedUserId,
+    telegram: resolvedConfig.telegram,
     controller,
     logger: resolvedLogger,
     progressVerbosity: resolvedConfig.progressVerbosity,

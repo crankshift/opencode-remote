@@ -99,6 +99,7 @@ describe("runGateway", () => {
     expect(ensureOpenCodeServer).toHaveBeenCalledWith(testConfig().opencode)
     expect(createBot).toHaveBeenCalledWith(
       expect.objectContaining({
+        telegram: testConfig().telegram,
         progressVerbosity: "all",
       }),
     )
@@ -405,7 +406,8 @@ describe("runGateway", () => {
 
 function testConfig() {
   return {
-    telegram: { botToken: "token", allowedUserId: 123 },
+    schemaVersion: 2,
+    telegram: { botToken: "token", allowedUserIds: [123], allowedChatIds: [] },
     opencode: {
       apiUrl: "http://localhost:4096",
       command: "opencode",

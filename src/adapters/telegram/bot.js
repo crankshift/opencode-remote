@@ -43,7 +43,7 @@ export async function registerTelegramBotCommands(bot, logger) {
 
 export function createTelegramBot({
   token,
-  allowedUserId,
+  telegram,
   controller,
   logger,
   botFactory = Bot,
@@ -79,8 +79,11 @@ export function createTelegramBot({
   })
 
   bot.use(async (ctx, next) => {
-    if (!isAuthorizedTelegramUser(ctx, allowedUserId)) {
-      logger.warn({ userId: ctx.from?.id }, "Ignoring unauthorized Telegram update")
+    if (!isAuthorizedTelegramUser(ctx, telegram)) {
+      logger.warn(
+        { userId: ctx.from?.id, chatId: ctx.chat?.id ?? ctx.message?.chat?.id },
+        "Ignoring unauthorized Telegram update",
+      )
       return
     }
     await next()
@@ -192,6 +195,15 @@ export function createTelegramBot({
   })
 
   bot.command("progress", async (ctx) => {
+    if (!isPrivateTelegramChat(ctx)) {
+      await replyAndRemember(
+        ctx,
+        "Tool progress is only available in private chats.",
+        botMessageMemory,
+      )
+      return
+    }
+
     const requestedVerbosity = parseProgressVerbosity(ctx.message?.text)
     if (!requestedVerbosity) {
       const activeProgressVerbosity = await getActiveProgressVerbosity()
@@ -682,7 +694,7 @@ export function createTelegramBot({
     return createTelegramProgressRenderer({
       ctx,
       logger,
-      verbosity: await getActiveProgressVerbosity(),
+      verbosity: isPrivateTelegramChat(ctx) ? await getActiveProgressVerbosity() : "off",
       editThrottleMs: progressEditThrottleMs,
     })
   }
@@ -974,6 +986,12 @@ function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs
       logger.warn({ error }, "Could not edit Telegram progress message")
     }
   }
+}
+
+function isPrivateTelegramChat(ctx) {
+  const chatType =
+    ctx?.chat?.type ?? ctx?.message?.chat?.type ?? ctx?.callbackQuery?.message?.chat?.type
+  return chatType !== "group" && chatType !== "supergroup" && chatType !== "channel"
 }
 
 function rememberToolingTerms(toolingTerms, event) {

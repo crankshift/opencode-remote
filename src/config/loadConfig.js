@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { z } from "zod"
+import { CURRENT_CONFIG_SCHEMA_VERSION, migrateConfig } from "./configMigration.js"
 
 export const CONFIG_DIR_NAME = ".opencode-remote"
 export const CONFIG_FILE_NAME = "config.json"
@@ -10,6 +11,22 @@ export const SETTINGS_FILE_NAME = "settings.json"
 const progressVerbositySchema = z.enum(["off", "new", "all", "verbose"])
 const voiceModeSchema = z.enum(["off", "on", "all"])
 const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+const positiveTelegramIdSchema = z.coerce
+  .number()
+  .int()
+  .positive("Telegram ID must be a positive integer")
+const telegramChatIdSchema = z.coerce.number().int("Telegram chat ID must be an integer")
+
+const telegramConfigSchema = z
+  .object({
+    botToken: z.string().min(1, "Telegram bot token is required"),
+    allowedUserIds: z.array(positiveTelegramIdSchema).default([]),
+    allowedChatIds: z.array(telegramChatIdSchema).default([]),
+  })
+  .refine((telegram) => telegram.allowedUserIds.length > 0 || telegram.allowedChatIds.length > 0, {
+    message: "Configure at least one Telegram allowed user ID or allowed chat ID",
+    path: ["allowedChatIds"],
+  })
 
 const defaultVoiceConfig = {
   enabled: false,
@@ -20,10 +37,8 @@ const defaultVoiceConfig = {
 }
 
 const configSchema = z.object({
-  telegram: z.object({
-    botToken: z.string().min(1, "Telegram bot token is required"),
-    allowedUserId: z.coerce.number().int().positive("Telegram allowed user ID must be positive"),
-  }),
+  schemaVersion: z.literal(CURRENT_CONFIG_SCHEMA_VERSION).default(CURRENT_CONFIG_SCHEMA_VERSION),
+  telegram: telegramConfigSchema,
   opencode: z
     .object({
       apiUrl: z.string().url().default("http://localhost:4096"),
@@ -103,7 +118,7 @@ export async function loadConfig({ cwd = process.cwd(), homeDir = homedir() } = 
 }
 
 export function loadConfigFromObject(rawConfig, { configPath, cwd = process.cwd() } = {}) {
-  const parsed = configSchema.safeParse(rawConfig)
+  const parsed = configSchema.safeParse(migrateConfig(rawConfig))
 
   if (!parsed.success) {
     throw new GatewayConfigError(
@@ -115,10 +130,12 @@ export function loadConfigFromObject(rawConfig, { configPath, cwd = process.cwd(
   const configDirectory = configPath ? dirname(configPath) : join(cwd, CONFIG_DIR_NAME)
 
   return {
+    schemaVersion: parsed.data.schemaVersion,
     configPath,
     telegram: {
       botToken: parsed.data.telegram.botToken,
-      allowedUserId: parsed.data.telegram.allowedUserId,
+      allowedUserIds: parsed.data.telegram.allowedUserIds,
+      allowedChatIds: parsed.data.telegram.allowedChatIds,
     },
     opencode: {
       apiUrl: parsed.data.opencode.apiUrl ?? defaultOpencodeConfig.apiUrl,

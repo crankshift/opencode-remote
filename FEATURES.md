@@ -4,8 +4,9 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 
 ## Available Now
 
-- Telegram private-chat gateway using grammY long polling.
-- Single authorized Telegram user configured in `.opencode-remote/config.json`.
+- Telegram private-chat and configured group gateway using grammY long polling.
+- Optional authorized Telegram users for private-chat access configured in `.opencode-remote/config.json`.
+- Optional allowed Telegram group chat IDs that authorize every sender in those groups, including other bots.
 - Local or remote OpenCode server connection configured with `opencode.apiUrl`.
 - Optional local OpenCode startup with `opencode.autoStart=true`.
 - OpenCode session creation, listing, switching, prompt sending, and stop requests.
@@ -27,15 +28,15 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/new` creates and selects a new OpenCode session.
 - `/sessions` lists recent OpenCode sessions and lets the user switch with inline buttons.
 - `/stop` requests abort for the active OpenCode session.
-- `/progress` shows or sets prompt activity visibility: `off`, `new`, `all`, or `verbose`.
+- `/progress` shows or sets private-chat prompt activity visibility: `off`, `new`, `all`, or `verbose`.
 - `/voice` shows and controls voice mode, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
 - `/stickers` saves, lists, and forgets sticker packs for future sticker replies.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
-- Non-command text from the authorized user is sent to OpenCode as a prompt.
+- Non-command text from an authorized private user, or from any sender in an allowed group chat, is sent to OpenCode as a prompt.
 - Forwarded Telegram text, photo, album, and voice prompts include safe original-author context when Telegram provides it, with a safe fallback to the authorized user.
 - The bot shows Telegram typing activity while a prompt is running.
-- The bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt.
+- In private chats, the bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt. Group chats always suppress this activity message.
 - OpenCode permission requests are sent as text with `Allow once`, `Always allow`, and `Deny` buttons, even when voice replies are enabled.
 - Incoming text prompts get a temporary eye reaction while processing.
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
@@ -76,7 +77,8 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 
 ## State And Security
 
-- The bot ignores Telegram users outside the configured allowlist.
+- The bot ignores private Telegram users outside the configured user allowlist.
+- The bot ignores group chats outside the configured chat allowlist. Allowed groups authorize all senders in that group, so configure only groups whose members and admins you trust.
 - Secrets are configured through private `.opencode-remote/config.json` files, not persisted settings.
 - The selected active session is persisted as non-secret JSON state.
 - Saved sticker packs persist only non-secret sticker identifiers and metadata.

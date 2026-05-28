@@ -86,7 +86,8 @@ Add modules only when they reduce real complexity. Prefer the smallest correct c
 ## Config And State
 
 - Runtime config is discovered from project-local `.opencode-remote/config.json`, then global `~/.opencode-remote/config.json`.
-- `telegram.botToken` and `telegram.allowedUserId` are required and must stay private.
+- `telegram.botToken` is required and must stay private.
+- At least one of `telegram.allowedUserIds` or `telegram.allowedChatIds` is required. `allowedUserIds` authorizes private human DMs; `allowedChatIds` authorizes every sender in those group chats, including bots.
 - Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.
 - App state is non-secret SQLite data in the platform app-data directory; see `DEVELOPMENT.md` for exact paths.
 - Telegram sticker pack state is non-secret adapter state in `telegram-stickers.db`; reusable visuals are disposable cache under `cache/stickers`.

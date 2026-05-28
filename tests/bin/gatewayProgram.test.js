@@ -338,7 +338,7 @@ describe("opencode-remote CLI program", () => {
 function testConfig() {
   return {
     configPath: ".opencode-remote/config.json",
-    telegram: { botToken: "token", allowedUserId: 123 },
+    telegram: { botToken: "token", allowedUserIds: [123], allowedChatIds: [] },
     opencode: {
       apiUrl: "http://localhost:4096",
       command: "opencode",

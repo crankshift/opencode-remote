@@ -29,7 +29,8 @@ describe("setConfigValue", () => {
     expect(result.configPath).toBe(configPath)
     expect(result.config.voice.enabled).toBe(true)
     await expect(readJson(configPath)).resolves.toMatchObject({
-      telegram: { botToken: "token", allowedUserId: 123 },
+      schemaVersion: 2,
+      telegram: { botToken: "token", allowedUserIds: [123] },
       voice: { enabled: true },
     })
   })
@@ -51,6 +52,8 @@ describe("setConfigValue", () => {
 
     expect(result.configPath).toBe(configPath)
     await expect(readJson(configPath)).resolves.toMatchObject({
+      schemaVersion: 2,
+      telegram: { botToken: "token", allowedUserIds: [123] },
       voice: { mode: "all" },
     })
   })
@@ -71,6 +74,8 @@ describe("setConfigValue", () => {
 
     expect(result.configPath).toBe(configPath)
     await expect(readJson(configPath)).resolves.toMatchObject({
+      schemaVersion: 2,
+      telegram: { botToken: "token", allowedUserIds: [123] },
       voice: { enabled: true },
     })
   })
@@ -91,6 +96,8 @@ describe("setConfigValue", () => {
     })
 
     await expect(readJson(configPath)).resolves.toMatchObject({
+      schemaVersion: 2,
+      telegram: { botToken: "token", allowedUserIds: [123] },
       voice: { groqApiKey: null },
     })
   })
@@ -130,6 +137,8 @@ describe("setConfigValue", () => {
     expect(result.config.voice.enabled).toBe(true)
     expect(result.config.voice.mode).toBe("all")
     await expect(readJson(configPath)).resolves.toMatchObject({
+      schemaVersion: 2,
+      telegram: { botToken: "token", allowedUserIds: [123] },
       voice: { enabled: true, mode: "all" },
     })
   })

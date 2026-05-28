@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import { migrateConfig } from "./configMigration.js"
 import { GatewayConfigError, getConfigPaths, loadConfigFromObject } from "./loadConfig.js"
 
 export async function setConfigValue({
@@ -21,7 +22,7 @@ export async function setConfigValue({
 }
 
 export async function setConfigValuesAtPath({ configPath, values, cwd = process.cwd() } = {}) {
-  const rawConfig = await readJsonConfig(configPath)
+  const rawConfig = migrateConfig(await readJsonConfig(configPath))
   let nextConfig = rawConfig
   for (const [key, value] of Object.entries(values ?? {})) {
     nextConfig = setNestedValue(nextConfig, key, value)
