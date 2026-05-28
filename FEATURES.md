@@ -34,7 +34,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
 - Non-command text from an authorized private user, or from any sender in an allowed group chat, is sent to OpenCode as a prompt.
-- Forwarded Telegram text, photo, album, and voice prompts include safe original-author context when Telegram provides it, with a safe fallback to the authorized user.
+- Telegram text, photo, album, voice, and sticker prompts include safe author context, including forwarded original authors and messages sent by anonymous admins or on behalf of chats/channels when Telegram provides usable names.
 - The bot shows Telegram typing activity while a prompt is running.
 - In private chats, the bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt. Group chats always suppress this activity message.
 - OpenCode permission requests are sent as text with `Allow once`, `Always allow`, and `Deny` buttons, even when voice replies are enabled.

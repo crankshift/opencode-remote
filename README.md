@@ -178,7 +178,7 @@ The bot currently supports:
 
 Any non-command text message from an authorized private Telegram user, or from any sender in an allowed group chat, is sent to OpenCode as a prompt. If no active session is selected, the gateway creates one automatically.
 
-Forwarded Telegram text, photo, album, and voice prompts include safe author context for OpenCode when Telegram provides the original author. If Telegram hides or omits the forwarded author, the prompt falls back to the authorized Telegram user without exposing raw Telegram payloads or numeric user IDs.
+Telegram text, photo, album, voice, and sticker prompts include safe author context for OpenCode. Forwarded prompts prefer the original author when Telegram provides it. Messages sent by anonymous admins or on behalf of a chat/channel use the sender chat title or username when available. If Telegram hides or omits usable author data, the prompt falls back to the authorized Telegram user without exposing raw Telegram payloads or numeric IDs.
 
 When a new OpenCode session starts, OpenCode Remote sends hidden gateway context with no assistant reply. This helps the agent understand that voice input may arrive as transcripts and that final text can be delivered as voice notes when voice mode is enabled.
 

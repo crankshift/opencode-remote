@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.6.1] - 2026-05-28
+
+### Fixed
+
+- Fixed Telegram prompt author context for messages sent by anonymous admins or on behalf of chats/channels by using Telegram `sender_chat` names when available.
+
 ## [0.6.0] - 2026-05-28
 
 ### Added

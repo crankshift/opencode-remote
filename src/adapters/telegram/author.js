@@ -4,6 +4,11 @@ export function authorContextFromTelegramMessage(message) {
     return { name: forwardedName, source: "forwarded" }
   }
 
+  const senderChatName = telegramChatDisplayName(message?.sender_chat)
+  if (senderChatName) {
+    return { name: senderChatName, source: "sender" }
+  }
+
   return {
     name: telegramUserDisplayName(message?.from) ?? "Authorized Telegram user",
     source: "sender",

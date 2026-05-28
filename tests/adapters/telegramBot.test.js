@@ -776,6 +776,42 @@ describe("createTelegramBot", () => {
     )
   })
 
+  test("normal text prompts include sender chat author context", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "hello from the room",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Admin" },
+        sender_chat: { id: -1001, type: "supergroup", title: "Release Room" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("hello from the room"),
+        author: { name: "Release Room", source: "sender" },
+      }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
+  })
+
   test("text prompts in voice all mode send voice replies without text", async () => {
     const controller = {
       sendPrompt: vi.fn(async () => "answer"),
