@@ -57,6 +57,7 @@ src/core/voice/                  STT/TTS orchestration, ffmpeg conversion, cache
 src/core/gateway/controller.js   messenger-neutral gateway controller
 src/core/opencode/               OpenCode client and server manager
 src/adapters/telegram/           grammY adapter, auth, media, albums, voice
+src/adapters/telegram/stickers*  Telegram sticker download, cache, store, rendering helpers
 tests/                           Vitest tests with mocked external services by default
 ```
 
@@ -78,6 +79,7 @@ Add modules only when they reduce real complexity. Prefer the smallest correct c
 - Inline callback data must use short bounded tokens, not raw long session IDs or permission IDs.
 - Permission prompts must remain text-only, even when voice replies are enabled.
 - Photo downloads must not expose bot tokens in persisted attachment URLs.
+- Sticker cache and saved pack state must not persist bot tokens, raw download URLs, chat IDs, user IDs, or raw Telegram payloads.
 - Always clean up downloaded media files in `finally` or equivalent cleanup paths.
 - Keep Telegram UX in the adapter; do not move Telegram reactions, message IDs, chat actions, or grammY types into core.
 
@@ -87,6 +89,7 @@ Add modules only when they reduce real complexity. Prefer the smallest correct c
 - `telegram.botToken` and `telegram.allowedUserId` are required and must stay private.
 - Project-local `.opencode-remote/` is ignored because `config.json` contains secrets.
 - App state is non-secret SQLite data in the platform app-data directory; see `DEVELOPMENT.md` for exact paths.
+- Telegram sticker pack state is non-secret adapter state in `telegram-stickers.db`; reusable visuals are disposable cache under `cache/stickers`.
 - Project state uses OpenCode-style identity: Git remote hash, then cached repo ID, then root commit; non-Git folders use the shared `global` identity.
 - Do not add model or provider env vars until the related feature is actually implemented.
 

@@ -10,6 +10,7 @@ describe("commands", () => {
       "stop",
       "progress",
       "voice",
+      "stickers",
       "help",
     ])
   })
@@ -21,5 +22,6 @@ describe("commands", () => {
     expect(help).toContain("/sessions - List and switch OpenCode sessions")
     expect(help).toContain("/progress - Set tool progress visibility")
     expect(help).toContain("/voice - Show or set voice mode")
+    expect(help).toContain("/stickers - Manage saved sticker packs")
   })
 })

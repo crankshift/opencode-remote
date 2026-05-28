@@ -229,6 +229,40 @@ describe("runGateway", () => {
     expect(createTelegramBot).toHaveBeenCalledWith(expect.objectContaining({ voiceService }))
   })
 
+  test("creates and passes the Telegram sticker store to the Telegram bot", async () => {
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+    const stickerStore = { close: vi.fn() }
+    const openTelegramStickerStore = vi.fn(() => stickerStore)
+    const createTelegramBot = vi.fn(() => bot)
+
+    await runGateway({
+      config: testConfig(),
+      logger: testLogger(),
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        openTelegramStickerStore,
+        createTelegramBot,
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(openTelegramStickerStore).toHaveBeenCalledWith()
+    expect(createTelegramBot).toHaveBeenCalledWith(expect.objectContaining({ stickerStore }))
+  })
+
   test("passes voice-aware gateway context to the controller", async () => {
     const logger = testLogger()
     const createGatewayController = vi.fn(() => ({}))
@@ -333,6 +367,7 @@ describe("runGateway", () => {
 
   test("registered shutdown stops Telegram polling and owned server", async () => {
     const server = { stop: vi.fn(async () => undefined) }
+    const stickerStore = { close: vi.fn() }
     const bot = {
       api: { setMyCommands: vi.fn(async () => undefined) },
       start: vi.fn(async () => undefined),
@@ -354,6 +389,7 @@ describe("runGateway", () => {
         })),
         createProjectStateStore: vi.fn(() => ({})),
         createGatewayController: vi.fn(() => ({})),
+        openTelegramStickerStore: vi.fn(() => stickerStore),
         createTelegramBot: vi.fn(() => bot),
       },
       processLike,
@@ -363,6 +399,7 @@ describe("runGateway", () => {
 
     expect(bot.stop).toHaveBeenCalled()
     expect(server.stop).toHaveBeenCalled()
+    expect(stickerStore.close).toHaveBeenCalled()
   })
 })
 

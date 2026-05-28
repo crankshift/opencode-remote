@@ -2,6 +2,7 @@ import {
   createTelegramBot as defaultCreateTelegramBot,
   registerTelegramBotCommands as defaultRegisterTelegramBotCommands,
 } from "../adapters/telegram/bot.js"
+import { openTelegramStickerStore as defaultOpenTelegramStickerStore } from "../adapters/telegram/stickerStore.js"
 import { loadConfig } from "../config/loadConfig.js"
 import { setConfigValuesAtPath as defaultSetConfigValuesAtPath } from "../config/writeConfig.js"
 import { createGatewayContext } from "../core/gateway/context.js"
@@ -36,6 +37,8 @@ export async function runGateway({
   const registerTelegramBotCommands =
     dependencies.registerTelegramBotCommands ?? defaultRegisterTelegramBotCommands
   const createVoiceService = dependencies.createVoiceService ?? defaultCreateVoiceService
+  const openTelegramStickerStore =
+    dependencies.openTelegramStickerStore ?? defaultOpenTelegramStickerStore
   const assertFfmpegAvailable = dependencies.assertFfmpegAvailable ?? defaultAssertFfmpegAvailable
   const setConfigValuesAtPath = dependencies.setConfigValuesAtPath ?? defaultSetConfigValuesAtPath
 
@@ -69,6 +72,7 @@ export async function runGateway({
       })
     },
   })
+  const stickerStore = openTelegramStickerStore()
   const bot = createTelegramBot({
     token: resolvedConfig.telegram.botToken,
     allowedUserId: resolvedConfig.telegram.allowedUserId,
@@ -76,6 +80,7 @@ export async function runGateway({
     logger: resolvedLogger,
     progressVerbosity: resolvedConfig.progressVerbosity,
     voiceService,
+    stickerStore,
   })
 
   let stopping = false
@@ -87,6 +92,7 @@ export async function runGateway({
     resolvedLogger.info({ signal }, "Shutting down gateway")
     await bot.stop()
     await server.stop()
+    stickerStore.close?.()
   }
 
   processLike.once("SIGINT", shutdown)

@@ -4,6 +4,13 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.6.0] - 2026-05-28
+
+### Added
+
+- Added Telegram sticker understanding with static sticker attachments, generated visual previews for video and animated stickers, reusable sticker visual caching, and saved sticker pack management. (#20)
+- Added saved sticker replies for explicit sticker requests and eligible reaction markers, including a safe description catalog built from cached sticker visuals. (#20)
+
 ### Removed
 
 - Removed Dependabot configuration to stop automated dependency update pull requests.

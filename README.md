@@ -2,7 +2,7 @@
 
 OpenCode Remote lets you use OpenCode from Telegram. It runs on your machine, connects to your local or remote OpenCode server, and forwards messages from one authorized Telegram user to OpenCode sessions.
 
-This is a Telegram MVP with text prompts, photo prompts, OpenCode permission approvals, and opt-in voice input/replies. Model switching and multi-messenger support are not implemented yet.
+This is a Telegram MVP with text prompts, photo prompts, sticker prompts/replies, OpenCode permission approvals, and opt-in voice input/replies. Model switching and multi-messenger support are not implemented yet.
 
 See [Features](https://github.com/crankshift/opencode-remote/blob/main/FEATURES.md) for the full current capability list, [Contributing](https://github.com/crankshift/opencode-remote/blob/main/CONTRIBUTING.md) for contribution guidance, [Changelog](https://github.com/crankshift/opencode-remote/blob/main/CHANGELOG.md) for release notes, and [TODO](https://github.com/crankshift/opencode-remote/blob/main/TODO.md) for planned work.
 
@@ -166,6 +166,7 @@ The bot currently supports:
 /stop      Request stop for the active OpenCode session
 /progress  Show or set tool progress visibility: off, new, all, verbose
 /voice     Show or set voice mode
+/stickers  Manage saved sticker packs
 /help      Show available commands
 ```
 
@@ -178,6 +179,18 @@ When a new OpenCode session starts, OpenCode Remote sends hidden gateway context
 When OpenCode requests permission during a prompt, the bot sends a text message with `Allow once`, `Always allow`, and `Deny` buttons. Permission prompts are always text, including when `/voice on` or `/voice all` would make normal assistant replies voice-only.
 
 Telegram photo albums are handled as one OpenCode prompt when Telegram provides a shared `media_group_id`. The album caption becomes the prompt text. Separate text messages sent after an album are treated as separate prompts.
+
+Telegram stickers are downloaded as visual prompt context for OpenCode. Static stickers are sent as WebP image attachments. Video stickers use `ffmpeg` to generate sampled preview sheets. Animated `.tgs` stickers use `lottie_convert.py` from python-lottie when it is available, with a source-file fallback if conversion is not installed. The gateway caches reusable sticker visuals under app-data cache storage, keyed by Telegram `file_unique_id` and safe visual metadata. When possible, cached sticker visuals are summarized into short saved-sticker descriptions so future sticker requests can use a compact text catalog instead of exposing cache paths or Telegram file identifiers.
+
+Sticker pack commands:
+
+```text
+/stickers save
+/stickers list
+/stickers forget <pack_name>
+```
+
+Use `/stickers save` as a reply to a sticker to save that sticker pack for future sticker replies. `/stickers list` shows saved packs. `/stickers forget <pack_name>` removes a saved pack and its cached sticker previews. Incoming stickers from unsaved packs may also show a `Save pack` button. Once packs are saved, asking the bot to send a sticker lets OpenCode request one through the gateway without exposing Telegram file identifiers to the model. Saved sticker data is non-secret Telegram file metadata; bot tokens, user IDs, chat IDs, and raw download URLs are not persisted.
 
 Voice commands:
 

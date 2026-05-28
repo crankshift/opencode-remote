@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { createTelegramBot } from "../../src/adapters/telegram/bot.js"
+import { createMemoryStickerStore } from "../../src/adapters/telegram/stickerStore.js"
 
 class FakeBot {
   constructor(token) {
@@ -56,10 +57,12 @@ describe("createTelegramBot", () => {
       "stop",
       "progress",
       "voice",
+      "stickers",
     ])
     expect(bot.messageHandlers.has("message:text")).toBe(true)
     expect(bot.messageHandlers.has("message:photo")).toBe(true)
     expect(bot.messageHandlers.has("message:voice")).toBe(true)
+    expect(bot.messageHandlers.has("message:sticker")).toBe(true)
     expect(bot.messageHandlers.has("message_reaction")).toBe(true)
     expect(bot.errorHandler).toEqual(expect.any(Function))
     expect(bot.api.setMyCommands).not.toHaveBeenCalled()
@@ -1160,6 +1163,57 @@ describe("createTelegramBot", () => {
     )
   })
 
+  test("text prompts tell OpenCode how to request saved sticker replies", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "cat-1",
+          fileId: "file-secret-cat",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+      ],
+    })
+    await stickerStore.updateStickerDescription("cat-1", "laughing orange cat")
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "send me a sticker",
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    const prompt = controller.sendPrompt.mock.calls[0][0]
+    expect(prompt.text).toContain("If the user explicitly asks for a sticker")
+    expect(prompt.text).toContain("[telegram_sticker: 😹]")
+    expect(prompt.text).toContain("[telegram_sticker: any]")
+    expect(prompt.text).toContain("funny_cats")
+    expect(prompt.text).toContain("😹")
+    expect(prompt.text).toContain("laughing orange cat")
+    expect(prompt.text).not.toContain("file-secret-cat")
+  })
+
   test("hidden telegram reaction markers are stripped and applied to the user message", async () => {
     const controller = {
       sendPrompt: vi.fn(async () => "Nice idea.\n[telegram_reaction: 👍]"),
@@ -1184,6 +1238,384 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith("Nice idea.")
     expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+    expect(setMessageReaction).toHaveBeenNthCalledWith(3, 456, 10, [{ type: "emoji", emoji: "👍" }])
+  })
+
+  test("hidden telegram sticker markers are stripped and send matching saved stickers", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "cat-1",
+          fileId: "cat-file-id",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+        {
+          fileUniqueId: "ok-1",
+          fileId: "ok-file-id",
+          packName: "funny_cats",
+          emoji: "👍",
+          kind: "static",
+        },
+      ],
+    })
+    const controller = {
+      sendPrompt: vi.fn(async () => "Here you go.\n[telegram_sticker: 😹]"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      random: vi.fn(() => 0),
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "Here you go." }))
+    const replyWithSticker = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "send sticker", chat: { id: 456 } },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction },
+      reply,
+      replyWithSticker,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Here you go.")
+    expect(replyWithSticker).toHaveBeenCalledWith("cat-file-id")
+    expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
+    expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+    expect(setMessageReaction).toHaveBeenCalledTimes(2)
+  })
+
+  test("any telegram sticker marker sends a saved sticker without empty text", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "cat-1",
+          fileId: "cat-file-id",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+      ],
+    })
+    const controller = {
+      sendPrompt: vi.fn(async () => "[telegram_sticker: any]"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      random: vi.fn(() => 0),
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "" }))
+    const replyWithSticker = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "send sticker", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+      replyWithSticker,
+    })
+
+    expect(reply).not.toHaveBeenCalled()
+    expect(replyWithSticker).toHaveBeenCalledWith("cat-file-id")
+  })
+
+  test("telegram sticker markers can select saved stickers by description", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "cat-1",
+          fileId: "cat-file-id",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+        {
+          fileUniqueId: "duck-1",
+          fileId: "duck-file-id",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+      ],
+    })
+    await stickerStore.updateStickerDescription("cat-1", "laughing orange cat")
+    await stickerStore.updateStickerDescription("duck-1", "thumbs up duck")
+    const controller = {
+      sendPrompt: vi.fn(async () => "[telegram_sticker: thumbs up duck]"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      random: vi.fn(() => 0),
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const replyWithSticker = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "send duck sticker", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "" })),
+      replyWithSticker,
+    })
+
+    expect(replyWithSticker).toHaveBeenCalledWith("duck-file-id")
+  })
+
+  test("sticker messages send visual sticker prompts and offer to save unsaved packs", async () => {
+    const attachment = {
+      mime: "image/webp",
+      url: "file:///cache/sticker.webp",
+      filePath: "/cache/sticker.webp",
+    }
+    const controller = {
+      sendPrompt: vi.fn(async () => "sticker answer"),
+    }
+    const stickerStore = createMemoryStickerStore()
+    const createStickerPrompt = vi.fn(async () => ({
+      prompt: { text: "Sticker prompt", attachments: [attachment] },
+      packName: "funny_cats",
+      cleanupFiles: ["/tmp/source.webp"],
+    }))
+    const cleanupStickerFiles = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      createStickerPrompt,
+      cleanupStickerFiles,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:sticker")({
+      message: {
+        message_id: 10,
+        chat: { id: 456 },
+        from: { id: 123, is_bot: false, first_name: "Authorized", last_name: "User" },
+        sticker: telegramSticker({ set_name: "funny_cats" }),
+      },
+      api: { sendChatAction: vi.fn(async () => undefined) },
+      reply,
+    })
+
+    expect(createStickerPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "token",
+        sticker: expect.objectContaining({ file_id: "file-static" }),
+      }),
+    )
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      {
+        text: expect.stringContaining("Sticker prompt"),
+        attachments: [attachment],
+        author: { name: "Authorized User", source: "sender" },
+      },
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    )
+    expect(reply).toHaveBeenCalledWith("sticker answer")
+    expect(reply).toHaveBeenCalledWith(
+      "Sticker pack funny_cats is not saved. Save it for future sticker replies?",
+      expect.objectContaining({ reply_markup: expect.any(Object) }),
+    )
+    expect(cleanupStickerFiles).toHaveBeenCalledWith(["/tmp/source.webp"], expect.any(Object))
+  })
+
+  test("stickers save command saves the replied sticker pack", async () => {
+    const stickerStore = createMemoryStickerStore()
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      stickerStore,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.commands.get("stickers")({
+      message: {
+        text: "/stickers save",
+        reply_to_message: { sticker: telegramSticker({ set_name: "funny_cats" }) },
+      },
+      api: {
+        getStickerSet: vi.fn(async () => ({
+          name: "funny_cats",
+          stickers: [telegramSticker({ file_unique_id: "one" })],
+        })),
+      },
+      reply,
+    })
+
+    expect(await stickerStore.listPacks()).toEqual([
+      { name: "funny_cats", stickerCount: 1, emojis: ["😹"] },
+    ])
+    expect(reply).toHaveBeenCalledWith("Saved sticker pack funny_cats (1 sticker).")
+  })
+
+  test("stickers save command rejects stickers without a pack name safely", async () => {
+    const stickerStore = createMemoryStickerStore()
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      stickerStore,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.commands.get("stickers")({
+      message: {
+        text: "/stickers save",
+        reply_to_message: { sticker: telegramSticker({ set_name: undefined }) },
+      },
+      api: { getStickerSet: vi.fn() },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("That sticker does not belong to a saveable sticker pack.")
+    expect(await stickerStore.listPacks()).toEqual([])
+  })
+
+  test("stickers list and forget manage saved packs", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "one",
+          fileId: "file-one",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+      ],
+    })
+    const cleanupStickerFiles = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller: {},
+      stickerStore,
+      cleanupStickerFiles,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.commands.get("stickers")({ message: { text: "/stickers list" }, reply })
+    await bot.commands.get("stickers")({ message: { text: "/stickers forget funny_cats" }, reply })
+
+    expect(reply).toHaveBeenCalledWith("Saved sticker packs:\n- funny_cats (1 sticker, 😹)")
+    expect(reply).toHaveBeenCalledWith("Forgot sticker pack funny_cats.")
+    expect(await stickerStore.listPacks()).toEqual([])
+  })
+
+  test("saved stickers can replace requested emoji reactions", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "ok_pack",
+      stickers: [
+        {
+          fileUniqueId: "ok-1",
+          fileId: "sticker-file-id",
+          packName: "ok_pack",
+          emoji: "👍",
+          kind: "static",
+        },
+      ],
+    })
+    const controller = {
+      sendPrompt: vi.fn(async () => "Nice.\n[telegram_reaction: 👍]"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      random: vi.fn(() => 0),
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "Nice." }))
+    const replyWithSticker = vi.fn(async () => ({ message_id: 12, chat: { id: 456 } }))
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction },
+      reply,
+      replyWithSticker,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Nice.")
+    expect(replyWithSticker).toHaveBeenCalledWith("sticker-file-id")
+    expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
+    expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
+    expect(setMessageReaction).toHaveBeenCalledTimes(2)
+  })
+
+  test("missing sticker send APIs fall back to emoji reactions", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "ok_pack",
+      stickers: [
+        {
+          fileUniqueId: "ok-1",
+          fileId: "sticker-file-id",
+          packName: "ok_pack",
+          emoji: "👍",
+          kind: "static",
+        },
+      ],
+    })
+    const controller = {
+      sendPrompt: vi.fn(async () => "Nice.\n[telegram_reaction: 👍]"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      allowedUserId: 123,
+      controller,
+      stickerStore,
+      random: vi.fn(() => 0),
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "Nice." }))
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction },
+      reply,
+    })
+
     expect(setMessageReaction).toHaveBeenNthCalledWith(3, 456, 10, [{ type: "emoji", emoji: "👍" }])
   })
 
@@ -1594,5 +2026,20 @@ function photoContext({ messageId, fileId, caption = "", reply }) {
     },
     api: { sendChatAction: vi.fn(async () => undefined) },
     reply,
+  }
+}
+
+function telegramSticker(overrides = {}) {
+  return {
+    file_id: "file-static",
+    file_unique_id: "unique-static",
+    width: 512,
+    height: 512,
+    file_size: 100,
+    emoji: "😹",
+    set_name: "funny_cats",
+    is_animated: false,
+    is_video: false,
+    ...overrides,
   }
 }
