@@ -35,14 +35,16 @@ export async function downloadTelegramVoice({
 export async function sendTelegramVoice({
   ctx,
   filePath,
+  caption,
   inputFileFactory = (path) => new InputFile(path),
 } = {}) {
   const voice = inputFileFactory(filePath)
+  const options = caption ? { caption } : undefined
   if (typeof ctx.replyWithVoice === "function") {
-    return ctx.replyWithVoice(voice)
+    return options ? ctx.replyWithVoice(voice, options) : ctx.replyWithVoice(voice)
   }
   const chatId = ctx.chat?.id ?? ctx.message?.chat?.id
-  return ctx.api.sendVoice(chatId, voice)
+  return options ? ctx.api.sendVoice(chatId, voice, options) : ctx.api.sendVoice(chatId, voice)
 }
 
 function mimeFromFilePath(filePath) {

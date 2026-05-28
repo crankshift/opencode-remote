@@ -50,6 +50,7 @@ describe("loadConfig", () => {
       voice: {
         enabled: false,
         mode: "on",
+        captions: false,
         voice: "en-US-AndrewNeural",
         groqApiKey: null,
         sttModel: "whisper-large-v3-turbo",
@@ -141,6 +142,7 @@ describe("loadConfig", () => {
         voice: {
           enabled: true,
           mode: "all",
+          captions: true,
           voice: "uk-UA-OstapNeural",
           groqApiKey: "gsk_test",
           sttModel: "whisper-large-v3",
@@ -152,6 +154,7 @@ describe("loadConfig", () => {
     expect(config.voice).toEqual({
       enabled: true,
       mode: "all",
+      captions: true,
       voice: "uk-UA-OstapNeural",
       groqApiKey: "gsk_test",
       sttModel: "whisper-large-v3",

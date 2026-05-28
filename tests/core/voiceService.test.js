@@ -4,6 +4,7 @@ import { createVoiceService } from "../../src/core/voice/voiceService.js"
 const baseConfig = {
   enabled: true,
   mode: "on",
+  captions: false,
   voice: "en-US-AndrewNeural",
   groqApiKey: "gsk_test",
   sttModel: "whisper-large-v3-turbo",
@@ -85,6 +86,19 @@ describe("voiceService", () => {
     expect(saveConfig).toHaveBeenNthCalledWith(2, { enabled: false, mode: "off" })
   })
 
+  test("persists voice caption changes", async () => {
+    const saveConfig = vi.fn(async () => undefined)
+    const service = createVoiceService({ config: baseConfig, saveConfig })
+
+    await expect(service.setCaptions(true)).resolves.toEqual({ captions: true })
+    expect(service.shouldCaption()).toBe(true)
+
+    await expect(service.setCaptions(false)).resolves.toEqual({ captions: false })
+    expect(service.shouldCaption()).toBe(false)
+    expect(saveConfig).toHaveBeenNthCalledWith(1, { captions: true })
+    expect(saveConfig).toHaveBeenNthCalledWith(2, { captions: false })
+  })
+
   test("validates and persists selected voice", async () => {
     const voice = { ShortName: "uk-UA-OstapNeural", Locale: "uk-UA", Gender: "Male" }
     const findVoice = vi.fn(async () => voice)
@@ -106,6 +120,7 @@ describe("voiceService", () => {
     await expect(service.status()).resolves.toEqual({
       enabled: true,
       mode: "on",
+      captions: false,
       voice: "en-US-AndrewNeural",
       sttModel: "whisper-large-v3-turbo",
       hasGroqApiKey: true,

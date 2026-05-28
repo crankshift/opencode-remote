@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.8.0] - 2026-05-28
+
+### Added
+
+- Added `/voice captions` and `voice.captions` so successful Telegram voice replies can include assistant text as a caption or companion message. (#26)
+
 ## [0.7.0] - 2026-05-28
 
 ### Added

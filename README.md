@@ -122,6 +122,7 @@ The config file is JSON:
   "voice": {
     "enabled": false,
     "mode": "on",
+    "captions": false,
     "voice": "en-US-AndrewNeural",
     "groqApiKey": null,
     "sttModel": "whisper-large-v3-turbo"
@@ -143,7 +144,7 @@ The config file is JSON:
 
 Group behavior is managed from a private DM with the bot using `/group`. The DM menu lists known allowed groups, including groups from `telegram.allowedChatIds` and groups the bot has seen. Only configured `allowedUserIds` can use this menu. Running `/group` inside a group replies with a short notice to configure the bot in DM instead. Custom trigger phrases are configured per group from this DM menu; they are plain text, case-insensitive, and match as bounded words or phrases anywhere in text, captions, and voice transcripts.
 
-`voice` controls optional Telegram voice input and spoken replies. `mode="on"` sends voice-note replies only after voice prompts, `mode="all"` sends voice-note replies after text, photo, and voice prompts, and `mode="off"` disables voice. When a voice-note reply succeeds, the bot does not also send the text reply; if speech generation or sending fails, it falls back to text. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
+`voice` controls optional Telegram voice input and spoken replies. `mode="on"` sends voice-note replies only after voice prompts, `mode="all"` sends voice-note replies after text, photo, and voice prompts, and `mode="off"` disables voice. By default, successful voice-note replies are voice-only. Set `voice.captions=true` or use `/voice captions on` to include short assistant text as the voice caption, or send longer assistant text as a companion text message. If speech generation or sending fails, the bot falls back to text once. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
 
 `logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
 
@@ -153,6 +154,7 @@ Set individual config values from the CLI:
 opencode-remote config set voice.enabled true
 opencode-remote config set voice.groqApiKey gsk_...
 opencode-remote config set voice.mode all -g
+opencode-remote config set voice.captions true
 ```
 
 Clear generated voice files from the app-data cache:
@@ -210,12 +212,13 @@ Voice commands:
 /voice on
 /voice off
 /voice all
+/voice captions [on|off]
 /voice list <countryCode|locale> [page]
 /voice set <voiceShortName>
 /voice test
 ```
 
-`/voice list` requires a short country code such as `ua` or `us`, or a full locale such as `uk-UA`; page is optional. Short codes match Edge TTS country/region codes first and fall back to language codes when no matching region exists. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only; if speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
+`/voice list` requires a short country code such as `ua` or `us`, or a full locale such as `uk-UA`; page is optional. Short codes match Edge TTS country/region codes first and fall back to language codes when no matching region exists. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only by default; `/voice captions on` includes short assistant text as the voice caption and sends longer assistant text as a companion text message. If speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
 
 ## Troubleshooting
 

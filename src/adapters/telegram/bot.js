@@ -278,6 +278,29 @@ export function createTelegramBot({
       return
     }
 
+    if (request.action === "captions") {
+      if (request.captions === undefined) {
+        const status = await voiceService.status()
+        await replyAndRemember(
+          ctx,
+          `Voice captions are ${status.captions ? "on" : "off"}. ${voiceCaptionsUsageText()}`,
+          botMessageMemory,
+        )
+        return
+      }
+      if (request.captions === null) {
+        await replyAndRemember(ctx, voiceCaptionsUsageText(), botMessageMemory)
+        return
+      }
+      const result = await voiceService.setCaptions(request.captions)
+      await replyAndRemember(
+        ctx,
+        `Voice captions set to ${result.captions ? "on" : "off"}.`,
+        botMessageMemory,
+      )
+      return
+    }
+
     if (request.action === "list") {
       if (!request.filters) {
         await replyAndRemember(ctx, voiceListUsageText(), botMessageMemory)
@@ -640,13 +663,25 @@ export function createTelegramBot({
       return
     }
 
+    let sentMessage
+    let caption
     try {
       const voice = await voiceService.synthesizeTelegramVoice(text)
-      const sentMessage = await sendVoice({ ctx, filePath: voice.filePath })
-      const chatId = sentMessage?.chat?.id ?? ctx.chat?.id ?? ctx.message?.chat?.id
-      botMessageMemory.remember(chatId, sentMessage?.message_id, text)
+      caption = voiceCaptionForText(text, voiceService)
+      sentMessage = await sendVoice({
+        ctx,
+        filePath: voice.filePath,
+        ...(caption ? { caption } : {}),
+      })
     } catch (error) {
       logger.warn({ error }, "Could not send Telegram voice reply")
+      await sendTextReply(ctx, text)
+      return
+    }
+
+    const chatId = sentMessage?.chat?.id ?? ctx.chat?.id ?? ctx.message?.chat?.id
+    botMessageMemory.remember(chatId, sentMessage?.message_id, text)
+    if (voiceService?.shouldCaption?.() && !caption) {
       await sendTextReply(ctx, text)
     }
   }
@@ -932,7 +967,23 @@ function parseVoiceCommand(text) {
   if (action === "set") {
     return { action, voice: parts[2] }
   }
+  if (action === "captions") {
+    return { action, captions: parseVoiceCaptionsValue(parts[2]) }
+  }
   return { action }
+}
+
+function parseVoiceCaptionsValue(value) {
+  if (value === undefined) {
+    return undefined
+  }
+  if (value === "on") {
+    return true
+  }
+  if (value === "off") {
+    return false
+  }
+  return null
 }
 
 function parseStickersCommand(text) {
@@ -984,6 +1035,7 @@ function parseVoiceListFilters(parts) {
 function formatVoiceStatus(status) {
   return [
     `Voice mode: ${status.enabled ? status.mode : "off"}`,
+    `Voice captions: ${status.captions ? "on" : "off"}`,
     `Voice: ${status.voice}`,
     `STT model: ${status.sttModel}`,
     `Groq API key: ${status.hasGroqApiKey ? "configured" : "missing"}`,
@@ -1007,11 +1059,24 @@ function formatVoiceListItem(voice) {
 }
 
 function voiceUsageText() {
-  return "Use /voice status|on|off|all|list|set|test."
+  return "Use /voice status|on|off|all|captions|list|set|test."
+}
+
+function voiceCaptionsUsageText() {
+  return "Use /voice captions on|off to change it."
 }
 
 function voiceListUsageText() {
   return "Use /voice list <countryCode|locale> [page]."
+}
+
+const TELEGRAM_VOICE_CAPTION_LIMIT = 1024
+
+function voiceCaptionForText(text, voiceService) {
+  if (!voiceService?.shouldCaption?.()) {
+    return null
+  }
+  return text.length <= TELEGRAM_VOICE_CAPTION_LIMIT ? text : null
 }
 
 function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs }) {
