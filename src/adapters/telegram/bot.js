@@ -7,6 +7,7 @@ import {
   recordProgressEvent,
 } from "../../core/formatting/progressText.js"
 import { isAuthorizedTelegramUser } from "./auth.js"
+import { authorContextFromTelegramMessage } from "./author.js"
 import {
   captionFromMessages,
   cleanupAttachments as defaultCleanupMediaAttachments,
@@ -275,7 +276,10 @@ export function createTelegramBot({
     try {
       await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction(ctx.message.text),
+        formatPromptWithTelegramReactionInstruction({
+          text: ctx.message.text,
+          author: authorContextFromTelegramMessage(ctx.message),
+        }),
         progress,
         ctx,
       )
@@ -337,6 +341,7 @@ export function createTelegramBot({
       const response = await sendPromptWithProgress(
         formatPromptWithTelegramReactionInstruction({
           text: captionFromMessages(messages),
+          author: authorContextFromTelegramMessage(messages[0]),
           attachments,
         }),
         progress,
@@ -398,7 +403,10 @@ export function createTelegramBot({
       const transcript = await voiceService.transcribe(attachment.filePath)
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction(transcript),
+        formatPromptWithTelegramReactionInstruction({
+          text: transcript,
+          author: authorContextFromTelegramMessage(ctx.message),
+        }),
         progress,
         ctx,
       )
