@@ -50,4 +50,19 @@ describe("telegram voice helpers", () => {
     expect(inputFileFactory).toHaveBeenCalledWith("/cache/reply.ogg")
     expect(replyWithVoice).toHaveBeenCalledWith({ input: "/cache/reply.ogg" })
   })
+
+  test("passes captions to ctx.replyWithVoice", async () => {
+    const replyWithVoice = vi.fn(async () => ({ message_id: 1 }))
+    const inputFileFactory = vi.fn((path) => ({ path }))
+
+    await sendTelegramVoice({
+      ctx: { replyWithVoice },
+      filePath: "/cache/reply.ogg",
+      caption: "answer",
+      inputFileFactory,
+    })
+
+    expect(inputFileFactory).toHaveBeenCalledWith("/cache/reply.ogg")
+    expect(replyWithVoice).toHaveBeenCalledWith({ path: "/cache/reply.ogg" }, { caption: "answer" })
+  })
 })

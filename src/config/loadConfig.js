@@ -31,6 +31,7 @@ const telegramConfigSchema = z
 const defaultVoiceConfig = {
   enabled: false,
   mode: "on",
+  captions: false,
   voice: "en-US-AndrewNeural",
   groqApiKey: null,
   sttModel: "whisper-large-v3-turbo",
@@ -52,6 +53,7 @@ const configSchema = z.object({
     .object({
       enabled: z.boolean().default(false),
       mode: voiceModeSchema.default("on"),
+      captions: z.boolean().default(false),
       voice: z.string().min(1).default("en-US-AndrewNeural"),
       groqApiKey: z.string().min(1).nullable().default(null),
       sttModel: z.string().min(1).default("whisper-large-v3-turbo"),
@@ -147,6 +149,7 @@ export function loadConfigFromObject(rawConfig, { configPath, cwd = process.cwd(
     voice: {
       enabled: parsed.data.voice.enabled,
       mode: parsed.data.voice.mode,
+      captions: parsed.data.voice.captions,
       voice: parsed.data.voice.voice,
       groqApiKey: parsed.data.voice.groqApiKey,
       sttModel: parsed.data.voice.sttModel,

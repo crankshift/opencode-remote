@@ -147,6 +147,22 @@ describe("gatewayController", () => {
     expect(calls).toEqual(["create", "context", "prompt"])
   })
 
+  test("primes explicitly created sessions with additional context", async () => {
+    const store = createStore()
+    const opencode = {
+      createSession: vi.fn(async () => ({ id: "ses_2", title: "New" })),
+      sendContext: vi.fn(async () => undefined),
+    }
+    const controller = createGatewayController({ opencode, store })
+
+    await expect(controller.createSession({ context: "extra context" })).resolves.toEqual({
+      id: "ses_2",
+      title: "New",
+    })
+
+    expect(opencode.sendContext).toHaveBeenCalledWith("ses_2", "extra context")
+  })
+
   test("does not prime existing selected sessions", async () => {
     const store = createStore({ activeSessionId: "ses_1" })
     const opencode = {

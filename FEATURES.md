@@ -29,7 +29,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/sessions` lists recent OpenCode sessions and lets the user switch with inline buttons.
 - `/stop` requests abort for the active OpenCode session.
 - `/progress` shows or sets private-chat prompt activity visibility: `off`, `new`, `all`, or `verbose`.
-- `/voice` shows and controls voice mode, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
+- `/voice` shows and controls voice mode, toggles voice captions, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
 - `/stickers` saves, lists, and forgets sticker packs for future sticker replies.
 - `/group` opens a private-chat management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
 - Per-group custom trigger phrases are managed from the DM `/group` menu.
@@ -48,7 +48,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - When saved sticker packs are available, explicit user requests for a sticker can be answered with a saved sticker reply through a hidden gateway marker.
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
 - Telegram voice messages are transcribed and sent to OpenCode when voice mode is enabled.
-- Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with text fallback if speech generation or sending fails.
+- Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with optional text captions and text fallback if speech generation or sending fails.
 
 ## OpenCode Sessions
 
@@ -73,6 +73,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 ## Voice Mode
 
 - Voice mode is disabled by default.
+- Voice captions are disabled by default and can be enabled with `/voice captions on`.
 - Groq Whisper uses `whisper-large-v3-turbo` by default for transcription.
 - `/voice list <countryCode|locale> [page]` pages Edge TTS voices for a required country code such as `ua` or `us`, or a full locale such as `uk-UA`.
 - Edge TTS voice short names such as `en-US-AndrewNeural` and `uk-UA-OstapNeural` can be selected with `/voice set`.

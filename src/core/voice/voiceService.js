@@ -28,6 +28,7 @@ export function createVoiceService({
       return {
         enabled: voiceConfig.enabled,
         mode: voiceConfig.mode,
+        captions: voiceConfig.captions,
         voice: voiceConfig.voice,
         sttModel: voiceConfig.sttModel,
         hasGroqApiKey: Boolean(voiceConfig.groqApiKey),
@@ -45,6 +46,10 @@ export function createVoiceService({
         return false
       }
       return voiceConfig.mode === "all" || source === "voice"
+    },
+
+    shouldCaption() {
+      return voiceConfig.captions
     },
 
     async transcribe(filePath) {
@@ -67,6 +72,13 @@ export function createVoiceService({
         throw new Error("Use /voice on|off|all.")
       }
       const next = { enabled: mode !== "off", mode }
+      await saveConfig(next)
+      voiceConfig = { ...voiceConfig, ...next }
+      return next
+    },
+
+    async setCaptions(captions) {
+      const next = { captions: Boolean(captions) }
       await saveConfig(next)
       voiceConfig = { ...voiceConfig, ...next }
       return next
@@ -102,6 +114,7 @@ function normalizeVoiceConfig(config = {}) {
   return {
     enabled: Boolean(config.enabled),
     mode: VOICE_MODES.includes(config.mode) ? config.mode : "on",
+    captions: Boolean(config.captions),
     voice: config.voice || "en-US-AndrewNeural",
     groqApiKey: config.groqApiKey || null,
     sttModel: config.sttModel || "whisper-large-v3-turbo",

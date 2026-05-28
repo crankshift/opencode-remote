@@ -4,7 +4,7 @@ export const publicBotCommands = [
   { command: "sessions", description: "List and switch OpenCode sessions" },
   { command: "stop", description: "Abort current OpenCode task" },
   { command: "progress", description: "Set tool progress visibility" },
-  { command: "voice", description: "Show or set voice mode" },
+  { command: "voice", description: "Show or set voice mode and captions" },
   { command: "stickers", description: "Manage saved sticker packs" },
 ]
 

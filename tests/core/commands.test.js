@@ -22,7 +22,7 @@ describe("commands", () => {
     expect(help).toContain("/status - Show gateway and OpenCode status")
     expect(help).toContain("/sessions - List and switch OpenCode sessions")
     expect(help).toContain("/progress - Set tool progress visibility")
-    expect(help).toContain("/voice - Show or set voice mode")
+    expect(help).toContain("/voice - Show or set voice mode and captions")
     expect(help).toContain("/stickers - Manage saved sticker packs")
     expect(help).toContain("/group - Manage Telegram group behavior")
   })
