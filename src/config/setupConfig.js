@@ -91,7 +91,7 @@ export async function promptForConfig(
       secret: true,
     })
     output.write(
-      "Allowed chat IDs authorize all messages in those groups, including messages from other bots. To receive all group messages, make this bot a group admin or disable Group Privacy Mode in BotFather. To receive messages from other bots in groups, also enable Bot-to-Bot Communication Mode. Direct messages are allowed only for configured direct user IDs.\n",
+      "Allowed chat IDs let the gateway observe group messages, including messages from other bots, before group routing decides whether to prompt OpenCode. To receive all group messages, make this bot a group admin or disable Group Privacy Mode in BotFather. To receive messages from other bots in groups, also enable Bot-to-Bot Communication Mode. Direct messages are allowed only for configured direct user IDs.\n",
     )
     const { allowedUserIds, allowedChatIds } = await askTelegramAuthorizationConfig(
       rl,

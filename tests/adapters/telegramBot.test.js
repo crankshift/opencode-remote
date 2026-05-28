@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { createTelegramBot } from "../../src/adapters/telegram/bot.js"
+import { createGroupMemory } from "../../src/adapters/telegram/groupMemory.js"
+import { createMemoryGroupStore } from "../../src/adapters/telegram/groupStore.js"
 import { createMemoryStickerStore } from "../../src/adapters/telegram/stickerStore.js"
 
 class FakeBot {
@@ -67,6 +69,7 @@ describe("createTelegramBot", () => {
       "progress",
       "voice",
       "stickers",
+      "group",
     ])
     expect(bot.messageHandlers.has("message:text")).toBe(true)
     expect(bot.messageHandlers.has("message:photo")).toBe(true)
@@ -94,6 +97,27 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith(
       "Gateway is running. Active session: ses_1. Tool progress: verbose",
     )
+  })
+
+  test("new command primes the session with Telegram gateway instructions", async () => {
+    const controller = {
+      createSession: vi.fn(async () => ({ id: "ses_1", title: "New session" })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("new")({ reply })
+
+    expect(controller.createSession).toHaveBeenCalledWith({
+      context: expect.stringContaining("Telegram gateway note:"),
+    })
+    expect(reply).toHaveBeenCalledWith("Created session New session")
   })
 
   test("progress command reports current verbosity", async () => {
@@ -506,6 +530,67 @@ describe("createTelegramBot", () => {
     expect(logger.warn).toHaveBeenCalled()
   })
 
+  test("group command opens a DM menu of known groups", async () => {
+    const groupStore = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    await groupStore.upsertKnownGroup({
+      chatId: -1001,
+      title: "Build Room",
+      username: "build_room",
+      type: "supergroup",
+      status: "active",
+    })
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [123], allowedChatIds: [-1001] }),
+      controller: {},
+      groupStore,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("group")({
+      from: { id: 123, is_bot: false },
+      chat: { id: 123, type: "private" },
+      message: { text: "/group", chat: { id: 123, type: "private" } },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith(
+      "Select a Telegram group to configure:",
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            [expect.objectContaining({ text: "Build Room" })],
+          ]),
+        }),
+      }),
+    )
+  })
+
+  test("group command in group replies with a DM-only notice", async () => {
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [123], allowedChatIds: [-1001] }),
+      controller: {},
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      botIdentity: { username: "OpenCodeRemoteBot" },
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("group")({
+      from: { id: 777, is_bot: false },
+      chat: { id: -1001, type: "supergroup" },
+      message: { text: "/group@OpenCodeRemoteBot", chat: { id: -1001, type: "supergroup" } },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith(
+      "Group settings are managed in DM. Message me and run /group.",
+    )
+  })
+
   test("error handler logs and sends a safe reply", async () => {
     const logger = { warn: vi.fn(), error: vi.fn() }
     const bot = createTelegramBot({
@@ -567,6 +652,33 @@ describe("createTelegramBot", () => {
     })
 
     expect(controller.selectSession).toHaveBeenCalledWith(longId)
+  })
+
+  test("new and session selection clear ephemeral group memory", async () => {
+    const groupMemory = { ...createGroupMemory(), clearAll: vi.fn() }
+    const controller = {
+      createSession: vi.fn(async () => ({ id: "ses_new", title: "New" })),
+      listSessions: vi.fn(async () => [{ id: "ses_existing", title: "Existing" }]),
+      selectSession: vi.fn(async () => undefined),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      groupMemory,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.commands.get("new")({ reply: vi.fn(async () => undefined) })
+    await bot.commands.get("sessions")({ reply: vi.fn(async () => undefined) })
+    await bot.callbackHandlers[0].handler({
+      match: ["session:0", "0"],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(groupMemory.clearAll).toHaveBeenCalledTimes(2)
   })
 
   test("stop command reports when there is no active session", async () => {
@@ -1091,6 +1203,7 @@ describe("createTelegramBot", () => {
       botFactory: FakeBot,
       progressVerbosity: "all",
       progressEditThrottleMs: 0,
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
     })
     const reply = vi.fn(async (text) => ({ message_id: 21, chat: { id: -1001 }, text }))
     const editMessageText = vi.fn(async () => true)
@@ -1098,7 +1211,7 @@ describe("createTelegramBot", () => {
     await bot.messageHandlers.get("message:text")({
       message: {
         message_id: 10,
-        text: "hello",
+        text: "Khmara, hello",
         chat: { id: -1001, type: "supergroup" },
         from: { id: 777, is_bot: false, first_name: "Group" },
       },
@@ -1114,6 +1227,365 @@ describe("createTelegramBot", () => {
     expect(reply).not.toHaveBeenCalledWith(expect.stringContaining("Activity"))
     expect(editMessageText).not.toHaveBeenCalled()
     expect(reply).toHaveBeenCalledWith("answer")
+  })
+
+  test("group text is remembered passively and only routed when addressed", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "group answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [123], allowedChatIds: [-1001] }),
+      controller,
+      groupStore: createMemoryGroupStore({ allowedChatIds: [-1001] }),
+      groupMemory: createGroupMemory({ contextMessages: 10, contextChars: 1_000 }),
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const passiveReply = vi.fn(async () => undefined)
+    const activeReply = vi.fn(async () => ({
+      message_id: 12,
+      chat: { id: -1001 },
+      text: "group answer",
+    }))
+    const setMessageReaction = vi.fn(async () => true)
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "we should use sqlite",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction },
+      reply: passiveReply,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 11,
+        text: "Khmara, what do you think?",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 778, is_bot: false, first_name: "Grace" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction },
+      reply: activeReply,
+    })
+
+    expect(passiveReply).not.toHaveBeenCalled()
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        text: expect.stringContaining("Recent Telegram group context:"),
+      }),
+    )
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain("Ada: we should use sqlite")
+    expect(controller.sendPrompt.mock.calls[0][0].text).not.toContain(
+      "Grace: Khmara, what do you think?",
+    )
+    expect(activeReply).toHaveBeenCalledWith("group answer")
+    expect(setMessageReaction).toHaveBeenNthCalledWith(1, -1001, 11, [
+      { type: "emoji", emoji: "👀" },
+    ])
+    expect(setMessageReaction).toHaveBeenNthCalledWith(2, -1001, 11, [])
+  })
+
+  test("group routing can use grammY ctx.me as bot identity", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "answer") }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      groupStore: createMemoryGroupStore({ allowedChatIds: [-1001] }),
+      groupMemory: createGroupMemory(),
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      me: { id: 9001, username: "OpenCodeRemoteBot", first_name: "Khmara" },
+      message: {
+        message_id: 10,
+        text: "Khmara, answer with ctx.me identity",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 20, chat: { id: -1001 }, text: "answer" })),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  test("group reactions to bot messages do not send feedback prompts by default", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "group answer"),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      groupStore: createMemoryGroupStore({ allowedChatIds: [-1001] }),
+      groupMemory: createGroupMemory(),
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "Khmara, answer this",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => ({ message_id: 20, chat: { id: -1001 }, text: "group answer" })),
+    })
+
+    await bot.messageHandlers.get("message_reaction")({
+      messageReaction: {
+        chat: { id: -1001, type: "supergroup" },
+        message_id: 20,
+        old_reaction: [],
+        new_reaction: [{ type: "emoji", emoji: "👍" }],
+      },
+      chat: { id: -1001, type: "supergroup" },
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  test("group stickers are passive unless they reply to the bot", async () => {
+    const stickerPrompt = {
+      prompt: {
+        text: "User sent a Telegram sticker.",
+        attachments: [{ url: "file:///cache/sticker.webp", mime: "image/webp" }],
+      },
+      cleanupFiles: [],
+      packName: null,
+    }
+    const createStickerPrompt = vi.fn(async () => stickerPrompt)
+    const controller = { sendPrompt: vi.fn(async () => "sticker answer") }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      groupStore: createMemoryGroupStore({ allowedChatIds: [-1001] }),
+      groupMemory: createGroupMemory(),
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
+      createStickerPrompt,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({
+      message_id: 30,
+      chat: { id: -1001 },
+      text: "sticker answer",
+    }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 9,
+        text: "this is our current idea",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => undefined),
+    })
+
+    await bot.messageHandlers.get("message:sticker")({
+      message: {
+        message_id: 10,
+        sticker: telegramSticker({ set_name: "funny_cats", emoji: "😹" }),
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(createStickerPrompt).not.toHaveBeenCalled()
+    expect(controller.sendPrompt).not.toHaveBeenCalled()
+
+    await bot.messageHandlers.get("message:sticker")({
+      message: {
+        message_id: 11,
+        sticker: telegramSticker({ set_name: "funny_cats", emoji: "😹" }),
+        reply_to_message: { message_id: 8, from: { id: 9001, is_bot: true } },
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(createStickerPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain("Recent Telegram group context:")
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain("Ada: this is our current idea")
+    expect(reply).toHaveBeenCalledWith("sticker answer")
+  })
+
+  test("group voice transcripts route only when addressed", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "voice answer") }
+    const voiceService = {
+      isEnabled: vi.fn(() => true),
+      transcribe: vi
+        .fn()
+        .mockResolvedValueOnce("this is passive voice context")
+        .mockResolvedValueOnce("Khmara, answer the voice note"),
+      shouldSpeak: vi.fn(() => false),
+    }
+    const downloadVoice = vi.fn(async () => ({
+      url: "file:///cache/voice.ogg",
+      filePath: "/cache/voice.ogg",
+      mime: "audio/ogg",
+    }))
+    const cleanupMediaAttachments = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      voiceService,
+      downloadVoice,
+      cleanupMediaAttachments,
+      groupStore: createMemoryGroupStore({ allowedChatIds: [-1001] }),
+      groupMemory: createGroupMemory(),
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 30, chat: { id: -1001 }, text: "voice answer" }))
+
+    await bot.messageHandlers.get("message:voice")({
+      message: {
+        message_id: 10,
+        voice: { file_id: "voice-1" },
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    await bot.messageHandlers.get("message:voice")({
+      message: {
+        message_id: 11,
+        voice: { file_id: "voice-2" },
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(voiceService.transcribe).toHaveBeenCalledTimes(2)
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain(
+      "Ada: this is passive voice context",
+    )
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain("Khmara, answer the voice note")
+    expect(reply).toHaveBeenCalledTimes(1)
+    expect(cleanupMediaAttachments).toHaveBeenCalledTimes(2)
+  })
+
+  test("group photos are passive unless captions address the bot", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "photo answer") }
+    const downloadPhoto = vi.fn(async () => ({
+      url: "file:///cache/photo.jpg",
+      filePath: "/cache/photo.jpg",
+      mime: "image/jpeg",
+    }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedChatIds: [-1001] }),
+      controller,
+      downloadPhoto,
+      cleanupMediaAttachments: vi.fn(async () => undefined),
+      groupStore: createMemoryGroupStore({ allowedChatIds: [-1001] }),
+      groupMemory: createGroupMemory(),
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const photo = [
+      { file_id: "small", width: 100, height: 100 },
+      { file_id: "large", width: 500, height: 500 },
+    ]
+    const reply = vi.fn(async () => ({ message_id: 30, chat: { id: -1001 }, text: "photo answer" }))
+
+    await bot.messageHandlers.get("message:photo")({
+      message: {
+        message_id: 10,
+        photo,
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(downloadPhoto).not.toHaveBeenCalled()
+    expect(controller.sendPrompt).not.toHaveBeenCalled()
+
+    await bot.messageHandlers.get("message:photo")({
+      message: {
+        message_id: 11,
+        caption: "Khmara, inspect this photo",
+        photo,
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(downloadPhoto).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain("Khmara, inspect this photo")
+    expect(reply).toHaveBeenCalledWith("photo answer")
   })
 
   test("text prompts strip tool usage announcements from the final answer", async () => {

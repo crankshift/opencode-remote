@@ -74,12 +74,14 @@ Add modules only when they reduce real complexity. Prefer the smallest correct c
 ## Telegram Adapter
 
 - Authorization middleware should ignore unauthorized users and avoid leaking project state.
+- Group routing, known group metadata, DM configuration menus, and ephemeral group memory belong in `src/adapters/telegram/`; do not move Telegram chat IDs, topics, or inline menus into core.
 - Reaction API calls are best-effort warnings and must not block prompt delivery.
 - `replyAndRemember` stores bot replies for reaction feedback. Use it for bot messages that should be remembered.
 - Inline callback data must use short bounded tokens, not raw long session IDs or permission IDs.
 - Permission prompts must remain text-only, even when voice replies are enabled.
 - Photo downloads must not expose bot tokens in persisted attachment URLs.
 - Sticker cache and saved pack state must not persist bot tokens, raw download URLs, chat IDs, user IDs, or raw Telegram payloads.
+- Group message memory is in-memory only and must not persist message text. Persistent group state may store settings and non-secret group metadata.
 - Always clean up downloaded media files in `finally` or equivalent cleanup paths.
 - Keep Telegram UX in the adapter; do not move Telegram reactions, message IDs, chat actions, or grammY types into core.
 

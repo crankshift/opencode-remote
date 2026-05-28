@@ -31,9 +31,11 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/progress` shows or sets private-chat prompt activity visibility: `off`, `new`, `all`, or `verbose`.
 - `/voice` shows and controls voice mode, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
 - `/stickers` saves, lists, and forgets sticker packs for future sticker replies.
+- `/group` opens a private-chat management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
-- Non-command text from an authorized private user, or from any sender in an allowed group chat, is sent to OpenCode as a prompt.
+- Non-command text from an authorized private user is sent to OpenCode as a prompt. In allowed groups, text, photo, voice, and sticker messages are sent to OpenCode only when group routing settings identify them as addressed to the bot.
+- Allowed groups keep bounded in-memory recent context while the gateway is running. Routed group prompts include capped recent context, but passive messages are not sent to OpenCode by themselves.
 - Telegram text, photo, album, voice, and sticker prompts include safe author context, including forwarded original authors and messages sent by anonymous admins or on behalf of chats/channels when Telegram provides usable names.
 - The bot shows Telegram typing activity while a prompt is running.
 - In private chats, the bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt. Group chats always suppress this activity message.
@@ -79,6 +81,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 
 - The bot ignores private Telegram users outside the configured user allowlist.
 - The bot ignores group chats outside the configured chat allowlist. Allowed groups authorize all senders in that group, so configure only groups whose members and admins you trust.
+- Group conversation memory is ephemeral, bounded, and cleared on gateway restart or OpenCode session changes. Persistent group state stores settings and known group metadata, not message text.
 - Secrets are configured through private `.opencode-remote/config.json` files, not persisted settings.
 - The selected active session is persisted as non-secret JSON state.
 - Saved sticker packs persist only non-secret sticker identifiers and metadata.
