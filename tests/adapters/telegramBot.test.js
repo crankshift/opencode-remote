@@ -1293,6 +1293,99 @@ describe("createTelegramBot", () => {
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, -1001, 11, [])
   })
 
+  test("custom group triggers can be configured in DM and route group text", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "custom answer") }
+    const groupStore = createMemoryGroupStore({ allowedChatIds: [-1001] })
+    await groupStore.upsertKnownGroup({ chatId: -1001, title: "Build Room", type: "supergroup" })
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram({ allowedUserIds: [123], allowedChatIds: [-1001] }),
+      controller,
+      groupStore,
+      groupMemory: createGroupMemory({ contextMessages: 10, contextChars: 1_000 }),
+      botIdentity: { id: 9001, username: "OpenCodeRemoteBot", firstName: "Khmara" },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const dmReply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("group")({
+      from: { id: 123, is_bot: false },
+      chat: { id: 123, type: "private" },
+      message: { text: "/group", chat: { id: 123, type: "private" } },
+      reply: dmReply,
+    })
+    const selectData = dmReply.mock.calls[0][1].reply_markup.inline_keyboard[0][0].callback_data
+    const groupCallback = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(selectData),
+    ).handler
+    await groupCallback({
+      from: { id: 123, is_bot: false },
+      match: [selectData, selectData.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply: dmReply,
+    })
+    const addButton = dmReply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Add custom trigger")
+    await groupCallback({
+      from: { id: 123, is_bot: false },
+      match: [addButton.callback_data, addButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply: dmReply,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      from: { id: 123, is_bot: false },
+      chat: { id: 123, type: "private" },
+      message: { message_id: 5, text: "codex please", chat: { id: 123, type: "private" } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: dmReply,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "we use sqlite here",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 777, is_bot: false, first_name: "Ada" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => undefined),
+    })
+    const groupReply = vi.fn(async () => ({
+      message_id: 12,
+      chat: { id: -1001 },
+      text: "custom answer",
+    }))
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 11,
+        text: "Can CODEX    please summarize?",
+        chat: { id: -1001, type: "supergroup" },
+        from: { id: 778, is_bot: false, first_name: "Grace" },
+      },
+      chat: { id: -1001, type: "supergroup" },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: groupReply,
+    })
+
+    expect(controller.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(controller.sendPrompt.mock.calls[0][0].text).toContain("Ada: we use sqlite here")
+    expect(groupReply).toHaveBeenCalledWith("custom answer")
+  })
+
   test("group routing can use grammY ctx.me as bot identity", async () => {
     const controller = { sendPrompt: vi.fn(async () => "answer") }
     const bot = createTelegramBot({

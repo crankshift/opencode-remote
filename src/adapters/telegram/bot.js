@@ -351,6 +351,9 @@ export function createTelegramBot({
   })
 
   bot.on("message:text", async (ctx) => {
+    if (await groupMenu.handlePendingText?.(ctx)) {
+      return
+    }
     if (ctx.message.text.startsWith("/")) {
       return
     }
