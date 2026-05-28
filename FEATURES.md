@@ -32,9 +32,11 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/voice` shows and controls voice mode, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
 - `/stickers` saves, lists, and forgets sticker packs for future sticker replies.
 - `/group` opens a private-chat management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
+- Per-group custom trigger phrases are managed from the DM `/group` menu.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
 - Non-command text from an authorized private user is sent to OpenCode as a prompt. In allowed groups, text, photo, voice, and sticker messages are sent to OpenCode only when group routing settings identify them as addressed to the bot.
+- Custom group trigger phrases are plain text, case-insensitive, and match anywhere in text, captions, and voice transcripts.
 - Allowed groups keep bounded in-memory recent context while the gateway is running. Routed group prompts include capped recent context, but passive messages are not sent to OpenCode by themselves.
 - Telegram text, photo, album, voice, and sticker prompts include safe author context, including forwarded original authors and messages sent by anonymous admins or on behalf of chats/channels when Telegram provides usable names.
 - The bot shows Telegram typing activity while a prompt is running.
