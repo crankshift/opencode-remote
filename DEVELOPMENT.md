@@ -55,7 +55,7 @@ Gateway state is app-managed and stored in a SQLite database named `opencode-rem
 
 The database stores non-secret project state such as the active OpenCode session and `/progress` preference. It keys Git projects similarly to OpenCode: Git remote identity first, then a cached repo ID, then root commit. Non-Git folders use a shared global project identity. Generated voice files are cache under the same app-data root at `cache/voice` and can be removed with `opencode-remote cache clear`.
 
-Telegram sticker pack state is stored separately in `telegram-stickers.db` under the same app-data directory. Sticker visual cache files live under `cache/stickers`. Sticker state stores Telegram `file_unique_id`, current reusable `file_id`, pack name, emoji, dimensions, type, and cache metadata. It must not store bot tokens, raw Telegram download URLs, chat IDs, user IDs, raw update payloads, or temp paths.
+Telegram sticker pack state is stored separately in `telegram-stickers.db` under the same app-data directory. Sticker visual cache files live under `cache/stickers`. Sticker state stores Telegram `file_unique_id`, current reusable `file_id`, pack name, emoji, dimensions, type, optional safe visual descriptions, and cache metadata. It must not store bot tokens, raw Telegram download URLs, chat IDs, user IDs, raw update payloads, or temp paths.
 
 Use `opencode-remote run --state-suffix dev` to use `opencode-remote-dev.db` instead of the normal state database. The source `pnpm dev` script uses this to keep development state separate from regular gateway state.
 

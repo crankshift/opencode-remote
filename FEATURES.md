@@ -40,6 +40,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Incoming text prompts get a temporary eye reaction while processing.
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
 - When saved sticker packs are available, eligible hidden reaction markers may be answered with a saved sticker reply instead of an emoji reaction.
+- When saved sticker packs are available, explicit user requests for a sticker can be answered with a saved sticker reply through a hidden gateway marker.
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
 - Telegram voice messages are transcribed and sent to OpenCode when voice mode is enabled.
 - Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with text fallback if speech generation or sending fails.
@@ -62,6 +63,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Telegram sticker messages are sent to OpenCode with visual attachment context and safe sticker metadata.
 - Static stickers use direct WebP image attachments. Video stickers use sampled preview sheets. Animated `.tgs` stickers use `lottie_convert.py` when available, with source-file fallback.
 - Sticker visuals are cached under app-data cache storage and validated with `file_unique_id`, kind, dimensions, file size, and converter version.
+- Cached sticker visuals can be summarized into short safe descriptions for the saved-sticker catalog used by future sticker replies.
 
 ## Voice Mode
 

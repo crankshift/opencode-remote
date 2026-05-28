@@ -38,6 +38,49 @@ describe("telegram sticker store", () => {
     }
   })
 
+  test("persists safe sticker descriptions for saved sticker catalogs", async () => {
+    const { store, directory } = await openTempStore()
+
+    try {
+      await store.savePack({
+        name: "funny_cats",
+        stickers: [stickerMeta({ fileUniqueId: "cat-1", fileId: "file-cat-1", emoji: "😹" })],
+      })
+      await store.updateStickerDescription("cat-1", "laughing orange cat")
+
+      await expect(store.listStickerCatalog()).resolves.toEqual([
+        {
+          packName: "funny_cats",
+          emoji: "😹",
+          description: "laughing orange cat",
+        },
+      ])
+      await expect(
+        store.findStickerForSelector("laughing orange cat", { random: () => 0 }),
+      ).resolves.toEqual(expect.objectContaining({ fileUniqueId: "cat-1", fileId: "file-cat-1" }))
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test("preserves seen sticker descriptions when a pack is saved later", async () => {
+    const store = createMemoryStickerStore()
+    stores.push(store)
+
+    await store.upsertSeenSticker(
+      stickerMeta({ fileUniqueId: "cat-1", fileId: "file-cat-1", packName: "funny_cats" }),
+    )
+    await store.updateStickerDescription("cat-1", "wide-eyed cat")
+    await store.savePack({
+      name: "funny_cats",
+      stickers: [stickerMeta({ fileUniqueId: "cat-1", fileId: "file-cat-1", emoji: "😹" })],
+    })
+
+    await expect(store.listStickerCatalog()).resolves.toEqual([
+      { packName: "funny_cats", emoji: "😹", description: "wide-eyed cat" },
+    ])
+  })
+
   test("selects a saved sticker by emoji with fallback to any saved sticker", async () => {
     const store = createMemoryStickerStore()
     stores.push(store)

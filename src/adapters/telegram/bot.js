@@ -278,14 +278,12 @@ export function createTelegramBot({
     for (const emoji of addedEmojis) {
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction(
-          formatReactionFeedbackPrompt(emoji, botMessage),
-        ),
+        await formatPromptForTelegramGateway(formatReactionFeedbackPrompt(emoji, botMessage)),
         progress,
         ctx,
       )
       await progress.flush()
-      const { visibleText } = parseTelegramReactionMarker(response, progress)
+      const { visibleText } = parseTelegramGatewayMarkers(response, progress)
       for (const chunk of chunkText(visibleText)) {
         await replyAndRemember(ctx, chunk, botMessageMemory)
       }
@@ -305,7 +303,7 @@ export function createTelegramBot({
     try {
       await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction({
+        await formatPromptForTelegramGateway({
           text: ctx.message.text,
           author: authorContextFromTelegramMessage(ctx.message),
         }),
@@ -313,9 +311,14 @@ export function createTelegramBot({
         ctx,
       )
       await progress.flush()
-      const parsedResponse = parseTelegramReactionMarker(response, progress)
+      const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       requestedReaction = parsedResponse.requestedReaction
+      const requestedSticker = parsedResponse.requestedSticker
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "text")
+      if (requestedSticker) {
+        await sendRequestedSticker(ctx, requestedSticker)
+        requestedReaction = null
+      }
     } finally {
       await progress.flush()
       await clearMessageReaction(ctx, chatId, messageId, logger)
@@ -372,7 +375,7 @@ export function createTelegramBot({
 
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction({
+        await formatPromptForTelegramGateway({
           text: captionFromMessages(messages),
           author: authorContextFromTelegramMessage(messages[0]),
           attachments,
@@ -381,9 +384,11 @@ export function createTelegramBot({
         ctx,
       )
       await progress.flush()
-      const parsedResponse = parseTelegramReactionMarker(response, progress)
+      const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "photo")
-      if (parsedResponse.requestedReaction) {
+      if (parsedResponse.requestedSticker) {
+        await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
+      } else if (parsedResponse.requestedReaction) {
         await handleRequestedReaction(
           ctx,
           messages[0]?.chat?.id,
@@ -435,7 +440,7 @@ export function createTelegramBot({
       const transcript = await voiceService.transcribe(attachment.filePath)
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction({
+        await formatPromptForTelegramGateway({
           text: transcript,
           author: authorContextFromTelegramMessage(ctx.message),
         }),
@@ -443,8 +448,11 @@ export function createTelegramBot({
         ctx,
       )
       await progress.flush()
-      const parsedResponse = parseTelegramReactionMarker(response, progress)
+      const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "voice")
+      if (parsedResponse.requestedSticker) {
+        await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
+      }
     } finally {
       stopTyping()
       await cleanupMediaAttachments(attachments, logger)
@@ -461,12 +469,13 @@ export function createTelegramBot({
         sticker: ctx.message.sticker,
         store: stickerStore,
         logger,
+        describeStickerVisual,
       })
       cleanupFiles = result.cleanupFiles ?? []
 
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
-        formatPromptWithTelegramReactionInstruction({
+        await formatPromptForTelegramGateway({
           ...result.prompt,
           author: authorContextFromTelegramMessage(ctx.message),
         }),
@@ -474,9 +483,11 @@ export function createTelegramBot({
         ctx,
       )
       await progress.flush()
-      const parsedResponse = parseTelegramReactionMarker(response, progress)
+      const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "sticker")
-      if (parsedResponse.requestedReaction) {
+      if (parsedResponse.requestedSticker) {
+        await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
+      } else if (parsedResponse.requestedReaction) {
         await handleRequestedReaction(
           ctx,
           ctx.message?.chat?.id,
@@ -492,6 +503,10 @@ export function createTelegramBot({
   }
 
   async function replyWithPreferredMode(ctx, text, source) {
+    if (!String(text ?? "").trim()) {
+      return
+    }
+
     if (!voiceService?.shouldSpeak?.({ source })) {
       await sendTextReply(ctx, text)
       return
@@ -530,19 +545,38 @@ export function createTelegramBot({
       return false
     }
 
+    return sendStickerFileId(ctx, sticker.fileId, "Could not send Telegram sticker reaction")
+  }
+
+  async function sendRequestedSticker(ctx, selector) {
+    if (!stickerStore) {
+      return false
+    }
+    const requestedEmoji = normalizeStickerSelector(selector)
+    const sticker =
+      typeof stickerStore.findStickerForSelector === "function"
+        ? await stickerStore.findStickerForSelector(requestedEmoji, { random })
+        : await stickerStore.findStickerForEmoji(requestedEmoji, { random })
+    if (!sticker?.fileId) {
+      return false
+    }
+    return sendStickerFileId(ctx, sticker.fileId, "Could not send Telegram sticker reply")
+  }
+
+  async function sendStickerFileId(ctx, fileId, warningMessage) {
     try {
       if (typeof ctx.replyWithSticker === "function") {
-        await ctx.replyWithSticker(sticker.fileId)
+        await ctx.replyWithSticker(fileId)
       } else {
-        const chatId = ctx.chat?.id ?? ctx.message?.chat?.id
+        const chatId = ctx.chat?.id ?? ctx.message?.chat?.id ?? ctx.messageReaction?.chat?.id
         if (!chatId || typeof ctx.api?.sendSticker !== "function") {
           return false
         }
-        await ctx.api.sendSticker(chatId, sticker.fileId)
+        await ctx.api.sendSticker(chatId, fileId)
       }
       return true
     } catch (error) {
-      logger.warn({ error }, "Could not send Telegram sticker reaction")
+      logger.warn({ error }, warningMessage)
       return false
     }
   }
@@ -650,6 +684,17 @@ export function createTelegramBot({
       logger,
       verbosity: await getActiveProgressVerbosity(),
       editThrottleMs: progressEditThrottleMs,
+    })
+  }
+
+  async function formatPromptForTelegramGateway(prompt) {
+    return formatPromptWithTelegramGatewayInstructions(prompt, { stickerStore, logger })
+  }
+
+  async function describeStickerVisual({ sticker, attachment, visualDescription }) {
+    return controller.sendPrompt({
+      text: formatStickerDescriptionRequest(sticker, visualDescription),
+      attachments: [attachment],
     })
   }
 
@@ -1031,6 +1076,7 @@ async function replyAndRemember(ctx, text, botMessageMemory, options) {
 }
 
 const TELEGRAM_REACTION_MARKER = /\[telegram_reaction:\s*([^\]\n]+?)\s*\]/giu
+const TELEGRAM_STICKER_MARKER = /\[telegram_sticker:\s*([^\]\n]+?)\s*\]/giu
 
 const TELEGRAM_REACTION_INSTRUCTION = [
   "Telegram gateway note:",
@@ -1040,27 +1086,127 @@ const TELEGRAM_REACTION_INSTRUCTION = [
   "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
 ].join("\n")
 
-function formatPromptWithTelegramReactionInstruction(prompt) {
+async function formatPromptWithTelegramGatewayInstructions(prompt, { stickerStore, logger } = {}) {
+  const instructions = [TELEGRAM_REACTION_INSTRUCTION]
+  const stickerInstruction = await createTelegramStickerReplyInstruction(stickerStore, logger)
+  if (stickerInstruction) {
+    instructions.push(stickerInstruction)
+  }
+  return appendPromptInstruction(prompt, instructions.join("\n\n"))
+}
+
+function appendPromptInstruction(prompt, instruction) {
   if (typeof prompt !== "string") {
     return {
       ...prompt,
-      text: [String(prompt?.text ?? ""), "", TELEGRAM_REACTION_INSTRUCTION].join("\n"),
+      text: [String(prompt?.text ?? ""), "", instruction].join("\n"),
     }
   }
-  return [prompt, "", TELEGRAM_REACTION_INSTRUCTION].join("\n")
+  return [prompt, "", instruction].join("\n")
 }
 
-function parseTelegramReactionMarker(text, progress) {
+async function createTelegramStickerReplyInstruction(stickerStore, logger) {
+  if (typeof stickerStore?.listPacks !== "function") {
+    return null
+  }
+
+  let packs
+  try {
+    packs = await stickerStore.listPacks()
+  } catch (error) {
+    logger?.warn?.({ error }, "Could not list saved Telegram sticker packs")
+    return null
+  }
+
+  if (!Array.isArray(packs) || packs.length === 0) {
+    return null
+  }
+
+  const emojis = savedStickerEmojis(packs)
+  const catalog = await readStickerCatalog(stickerStore, logger)
+  const exampleEmoji = emojis[0] ?? "any"
+  return [
+    "Telegram sticker reply capability:",
+    "If the user explicitly asks for a sticker, include exactly one hidden marker anywhere in your response:",
+    `[telegram_sticker: ${exampleEmoji}]`,
+    "Use an emoji or short sticker description from the available saved sticker catalog when it matches the requested mood, or use [telegram_sticker: any]. The marker will be removed before the user sees the reply.",
+    `Available saved sticker packs: ${formatStickerInstructionPacks(packs)}`,
+    `Available saved sticker emojis: ${emojis.length > 0 ? emojis.join(" ") : "any"}`,
+    ...(catalog.length > 0
+      ? ["Available saved sticker catalog:", ...catalog.map(formatStickerCatalogItem)]
+      : []),
+  ].join("\n")
+}
+
+async function readStickerCatalog(stickerStore, logger) {
+  if (typeof stickerStore?.listStickerCatalog !== "function") {
+    return []
+  }
+  try {
+    return (await stickerStore.listStickerCatalog()).filter((sticker) => sticker.description)
+  } catch (error) {
+    logger?.warn?.({ error }, "Could not list saved Telegram sticker catalog")
+    return []
+  }
+}
+
+function formatStickerCatalogItem(sticker) {
+  const packName = sticker.packName ?? "saved sticker"
+  const emoji = sticker.emoji ? `${sticker.emoji} ` : ""
+  return `- ${emoji}${packName}: ${sticker.description}`
+}
+
+function savedStickerEmojis(packs) {
+  return [...new Set(packs.flatMap((pack) => pack.emojis ?? []).filter(Boolean))]
+}
+
+function formatStickerInstructionPacks(packs) {
+  return packs.map(formatStickerInstructionPack).join(", ")
+}
+
+function formatStickerInstructionPack(pack) {
+  const emojis =
+    Array.isArray(pack.emojis) && pack.emojis.length > 0 ? ` (${pack.emojis.join(" ")})` : ""
+  return `${pack.name}${emojis}`
+}
+
+function parseTelegramGatewayMarkers(text, progress) {
   let requestedReaction = null
-  const visibleText = String(text).replace(TELEGRAM_REACTION_MARKER, (_match, emoji) => {
-    requestedReaction ??= emoji.trim()
-    return ""
-  })
+  let requestedSticker = null
+  const visibleText = String(text)
+    .replace(TELEGRAM_REACTION_MARKER, (_match, emoji) => {
+      requestedReaction ??= emoji.trim()
+      return ""
+    })
+    .replace(TELEGRAM_STICKER_MARKER, (_match, sticker) => {
+      requestedSticker ??= normalizeStickerSelector(sticker)
+      return ""
+    })
 
   return {
     visibleText: stripToolingAnnouncements(visibleText, progress?.toolingTerms),
     requestedReaction,
+    requestedSticker,
   }
+}
+
+function normalizeStickerSelector(selector) {
+  return String(selector ?? "").trim() || "any"
+}
+
+function formatStickerDescriptionRequest(sticker, visualDescription) {
+  return [
+    "Gateway internal task: describe this Telegram sticker for a saved sticker catalog.",
+    "Use the attached cached sticker visual or preview.",
+    "Return only a short lowercase noun phrase of 2 to 6 words.",
+    "Do not include IDs, file paths, markdown, quotes, or hidden gateway markers.",
+    "Focus on visible content and mood, for example: laughing orange cat, thumbs up duck, angry wizard.",
+    "",
+    "Sticker metadata:",
+    `- Sticker emoji: ${sticker?.emoji ?? "unknown"}`,
+    `- Sticker pack: ${sticker?.set_name ?? "none"}`,
+    `- Sticker visual: ${visualDescription}`,
+  ].join("\n")
 }
 
 function stripToolingAnnouncements(text, toolingTerms = new Set()) {

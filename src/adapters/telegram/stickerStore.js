@@ -28,6 +28,9 @@ export function openTelegramStickerStore(
     async listPacks() {
       return listPacks(database)
     },
+    async listStickerCatalog() {
+      return listStickerCatalog(listSavedStickers(database))
+    },
     async hasSavedPack(name) {
       return Boolean(getSavedPack(database, name))
     },
@@ -37,11 +40,17 @@ export function openTelegramStickerStore(
     async findStickerForEmoji(emoji, options) {
       return findStickerForEmoji(listSavedStickers(database), emoji, options)
     },
+    async findStickerForSelector(selector, options) {
+      return findStickerForSelector(listSavedStickers(database), selector, options)
+    },
     async upsertSeenSticker(sticker) {
       upsertSeenSticker(database, sticker)
     },
     async getSeenSticker(fileUniqueId) {
       return rowToSticker(getSeenSticker(database, fileUniqueId))
+    },
+    async updateStickerDescription(fileUniqueId, description) {
+      updateStickerDescription(database, fileUniqueId, description)
     },
     async writeCacheRecord(record) {
       writeCacheRecord(database, record)
@@ -67,12 +76,19 @@ export function createMemoryStickerStore() {
       const normalizedStickers = normalizeStickerList(pack?.stickers, name)
       packs.set(name, { name })
       for (const sticker of normalizedStickers) {
-        stickers.set(sticker.fileUniqueId, sticker)
-        seen.set(sticker.fileUniqueId, sticker)
+        const stickerWithDescription = preserveDescription(
+          sticker,
+          stickers.get(sticker.fileUniqueId) ?? seen.get(sticker.fileUniqueId),
+        )
+        stickers.set(sticker.fileUniqueId, stickerWithDescription)
+        seen.set(sticker.fileUniqueId, stickerWithDescription)
       }
     },
     async listPacks() {
       return listPackSummaries([...packs.keys()], [...stickers.values()])
+    },
+    async listStickerCatalog() {
+      return listStickerCatalog([...stickers.values()])
     },
     async hasSavedPack(name) {
       return packs.has(name)
@@ -99,12 +115,25 @@ export function createMemoryStickerStore() {
     async findStickerForEmoji(emoji, options) {
       return findStickerForEmoji([...stickers.values()], emoji, options)
     },
+    async findStickerForSelector(selector, options) {
+      return findStickerForSelector([...stickers.values()], selector, options)
+    },
     async upsertSeenSticker(sticker) {
       const normalized = normalizeSticker(sticker)
-      seen.set(normalized.fileUniqueId, normalized)
+      const previous = seen.get(normalized.fileUniqueId)
+      seen.set(normalized.fileUniqueId, preserveDescription(normalized, previous))
     },
     async getSeenSticker(fileUniqueId) {
       return seen.get(fileUniqueId) ?? null
+    },
+    async updateStickerDescription(fileUniqueId, description) {
+      const normalizedDescription = normalizeDescription(description)
+      for (const collection of [stickers, seen]) {
+        const sticker = collection.get(fileUniqueId)
+        if (sticker) {
+          collection.set(fileUniqueId, { ...sticker, description: normalizedDescription })
+        }
+      }
     },
     async writeCacheRecord(record) {
       const normalized = normalizeCacheRecord(record)
@@ -134,6 +163,7 @@ function initialize(database) {
       pack_name TEXT NOT NULL REFERENCES saved_pack(name) ON DELETE CASCADE,
       file_id TEXT NOT NULL,
       emoji TEXT,
+      description TEXT,
       kind TEXT NOT NULL,
       width INTEGER,
       height INTEGER,
@@ -147,6 +177,7 @@ function initialize(database) {
       pack_name TEXT,
       file_id TEXT NOT NULL,
       emoji TEXT,
+      description TEXT,
       kind TEXT NOT NULL,
       width INTEGER,
       height INTEGER,
@@ -169,6 +200,16 @@ function initialize(database) {
       PRIMARY KEY (file_unique_id, kind)
     ) STRICT;
   `)
+  ensureColumn(database, "saved_sticker", "description", "TEXT")
+  ensureColumn(database, "seen_sticker", "description", "TEXT")
+}
+
+function ensureColumn(database, table, column, definition) {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all()
+  if (columns.some((row) => row.name === column)) {
+    return
+  }
+  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }
 
 function savePack(database, pack) {
@@ -184,16 +225,19 @@ function savePack(database, pack) {
     .run(name, now, now)
 
   for (const sticker of stickers) {
-    upsertSeenSticker(database, sticker)
+    const previousSeenSticker = rowToSticker(getSeenSticker(database, sticker.fileUniqueId))
+    const stickerWithDescription = preserveDescription(sticker, previousSeenSticker)
+    upsertSeenSticker(database, stickerWithDescription)
     database
       .prepare(
         `INSERT INTO saved_sticker
-          (file_unique_id, pack_name, file_id, emoji, kind, width, height, file_size, time_created, time_updated)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (file_unique_id, pack_name, file_id, emoji, description, kind, width, height, file_size, time_created, time_updated)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(file_unique_id) DO UPDATE SET
           pack_name = excluded.pack_name,
           file_id = excluded.file_id,
           emoji = excluded.emoji,
+          description = COALESCE(excluded.description, saved_sticker.description),
           kind = excluded.kind,
           width = excluded.width,
           height = excluded.height,
@@ -201,14 +245,15 @@ function savePack(database, pack) {
           time_updated = excluded.time_updated`,
       )
       .run(
-        sticker.fileUniqueId,
-        sticker.packName,
-        sticker.fileId,
-        sticker.emoji,
-        sticker.kind,
-        sticker.width,
-        sticker.height,
-        sticker.fileSize,
+        stickerWithDescription.fileUniqueId,
+        stickerWithDescription.packName,
+        stickerWithDescription.fileId,
+        stickerWithDescription.emoji,
+        stickerWithDescription.description,
+        stickerWithDescription.kind,
+        stickerWithDescription.width,
+        stickerWithDescription.height,
+        stickerWithDescription.fileSize,
         now,
         now,
       )
@@ -253,7 +298,7 @@ function forgetPack(database, name) {
 function listSavedStickers(database) {
   return database
     .prepare(
-      `SELECT file_unique_id, pack_name, file_id, emoji, kind, width, height, file_size
+      `SELECT file_unique_id, pack_name, file_id, emoji, description, kind, width, height, file_size
        FROM saved_sticker
        ORDER BY rowid`,
     )
@@ -267,12 +312,13 @@ function upsertSeenSticker(database, sticker) {
   database
     .prepare(
       `INSERT INTO seen_sticker
-        (file_unique_id, pack_name, file_id, emoji, kind, width, height, file_size, time_created, time_updated)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (file_unique_id, pack_name, file_id, emoji, description, kind, width, height, file_size, time_created, time_updated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(file_unique_id) DO UPDATE SET
         pack_name = excluded.pack_name,
         file_id = excluded.file_id,
         emoji = excluded.emoji,
+        description = COALESCE(excluded.description, seen_sticker.description),
         kind = excluded.kind,
         width = excluded.width,
         height = excluded.height,
@@ -284,6 +330,7 @@ function upsertSeenSticker(database, sticker) {
       normalized.packName,
       normalized.fileId,
       normalized.emoji,
+      normalized.description,
       normalized.kind,
       normalized.width,
       normalized.height,
@@ -296,10 +343,20 @@ function upsertSeenSticker(database, sticker) {
 function getSeenSticker(database, fileUniqueId) {
   return database
     .prepare(
-      `SELECT file_unique_id, pack_name, file_id, emoji, kind, width, height, file_size
+      `SELECT file_unique_id, pack_name, file_id, emoji, description, kind, width, height, file_size
        FROM seen_sticker WHERE file_unique_id = ?`,
     )
     .get(fileUniqueId)
+}
+
+function updateStickerDescription(database, fileUniqueId, description) {
+  const normalizedDescription = normalizeDescription(description)
+  database
+    .prepare("UPDATE seen_sticker SET description = ?, time_updated = ? WHERE file_unique_id = ?")
+    .run(normalizedDescription, Date.now(), fileUniqueId)
+  database
+    .prepare("UPDATE saved_sticker SET description = ?, time_updated = ? WHERE file_unique_id = ?")
+    .run(normalizedDescription, Date.now(), fileUniqueId)
 }
 
 function writeCacheRecord(database, record) {
@@ -353,6 +410,14 @@ function listPackSummaries(packNames, stickers) {
   })
 }
 
+function listStickerCatalog(stickers) {
+  return stickers.map((sticker) => ({
+    packName: sticker.packName,
+    emoji: sticker.emoji,
+    description: sticker.description,
+  }))
+}
+
 function findStickerForEmoji(stickers, emoji, { random = Math.random } = {}) {
   const matching = stickers.filter((sticker) => sticker.emoji === emoji)
   const candidates = matching.length > 0 ? matching : stickers
@@ -361,6 +426,35 @@ function findStickerForEmoji(stickers, emoji, { random = Math.random } = {}) {
   }
   const index = Math.min(candidates.length - 1, Math.floor(random() * candidates.length))
   return candidates[index]
+}
+
+function findStickerForSelector(stickers, selector, { random = Math.random } = {}) {
+  const normalizedSelector = normalizeSelector(selector)
+  if (!normalizedSelector || normalizedSelector === "any") {
+    return pickSticker(stickers, random)
+  }
+
+  const matchingEmoji = stickers.filter((sticker) => sticker.emoji === selector)
+  if (matchingEmoji.length > 0) {
+    return pickSticker(matchingEmoji, random)
+  }
+
+  const matchingDescription = stickers.filter((sticker) =>
+    normalizeSelector(sticker.description).includes(normalizedSelector),
+  )
+  if (matchingDescription.length > 0) {
+    return pickSticker(matchingDescription, random)
+  }
+
+  return pickSticker(stickers, random)
+}
+
+function pickSticker(stickers, random) {
+  if (stickers.length === 0) {
+    return null
+  }
+  const index = Math.min(stickers.length - 1, Math.floor(random() * stickers.length))
+  return stickers[index]
 }
 
 function normalizeStickerList(stickers, packName) {
@@ -378,6 +472,7 @@ function normalizeSticker(sticker) {
     fileId,
     packName: firstString(sticker?.packName, sticker?.set_name) ?? null,
     emoji: firstString(sticker?.emoji) ?? null,
+    description: normalizeDescription(sticker?.description),
     kind: firstString(sticker?.kind) ?? "static",
     width: numberOrNull(sticker?.width),
     height: numberOrNull(sticker?.height),
@@ -413,6 +508,7 @@ function rowToSticker(row) {
     fileId: row.file_id,
     packName: row.pack_name ?? null,
     emoji: row.emoji ?? null,
+    description: row.description ?? null,
     kind: row.kind,
     width: row.width ?? null,
     height: row.height ?? null,
@@ -434,6 +530,28 @@ function rowToCacheRecord(row) {
     converterVersion: row.converter_version,
     filePath: row.file_path,
   }
+}
+
+function preserveDescription(sticker, previousSticker) {
+  return {
+    ...sticker,
+    description: normalizeDescription(sticker.description) ?? previousSticker?.description ?? null,
+  }
+}
+
+function normalizeDescription(description) {
+  const value = firstString(description)
+  if (!value) {
+    return null
+  }
+  return value.replace(/\s+/gu, " ").slice(0, 160)
+}
+
+function normalizeSelector(selector) {
+  return String(selector ?? "")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("en-US")
 }
 
 function normalizePackName(name) {

@@ -59,6 +59,7 @@ export async function createStickerPrompt({
   logger,
   renderVideoStickerPreview = defaultRenderVideoStickerPreview,
   renderAnimatedStickerPreview = defaultRenderAnimatedStickerPreview,
+  describeStickerVisual = null,
 } = {}) {
   const kind = stickerKind(sticker)
   const stickerMeta = stickerToStoreMetadata(sticker)
@@ -67,11 +68,14 @@ export async function createStickerPrompt({
   const cacheRecord = await store?.readCacheRecord?.(sticker.file_unique_id, kind)
   if (await isStickerCacheRecordUsable({ sticker, record: cacheRecord })) {
     const mime = kind === "static" ? "image/webp" : "image/png"
-    return stickerPromptResult({
+    return finalizeStickerPromptResult({
       sticker,
       attachment: attachmentFromFile(cacheRecord.filePath, mime),
       visualDescription: kind === "static" ? "static WebP image" : "cached preview",
       cleanupFiles: [],
+      store,
+      describeStickerVisual,
+      logger,
     })
   }
 
@@ -90,11 +94,14 @@ export async function createStickerPrompt({
       fetchFn,
     })
     await writeStickerCacheRecord(store, sticker, outputPath, kind)
-    return stickerPromptResult({
+    return finalizeStickerPromptResult({
       sticker,
       attachment,
       visualDescription: "static WebP image",
       cleanupFiles: [],
+      store,
+      describeStickerVisual,
+      logger,
     })
   }
 
@@ -122,19 +129,25 @@ export async function createStickerPrompt({
       rendered.mime ?? "image/png",
     )
     await writeStickerCacheRecord(store, sticker, attachment.filePath, kind)
-    return stickerPromptResult({
+    return finalizeStickerPromptResult({
       sticker,
       attachment,
       visualDescription: `${kind} sticker sampled preview`,
       cleanupFiles,
+      store,
+      describeStickerVisual,
+      logger,
     })
   } catch (error) {
     logger?.warn?.({ error, kind }, "Could not render Telegram sticker preview")
-    return stickerPromptResult({
+    return finalizeStickerPromptResult({
       sticker,
       attachment: downloaded,
       visualDescription: `${kind} sticker source file`,
       cleanupFiles,
+      store,
+      describeStickerVisual,
+      logger,
     })
   }
 }
@@ -191,6 +204,73 @@ function stickerPromptResult({ sticker, attachment, visualDescription, cleanupFi
     fileUniqueId: sticker.file_unique_id,
     cleanupFiles,
   }
+}
+
+async function finalizeStickerPromptResult({
+  sticker,
+  attachment,
+  visualDescription,
+  cleanupFiles,
+  store,
+  describeStickerVisual,
+  logger,
+}) {
+  await maybeStoreStickerDescription({
+    sticker,
+    attachment,
+    visualDescription,
+    store,
+    describeStickerVisual,
+    logger,
+  })
+  return stickerPromptResult({ sticker, attachment, visualDescription, cleanupFiles })
+}
+
+async function maybeStoreStickerDescription({
+  sticker,
+  attachment,
+  visualDescription,
+  store,
+  describeStickerVisual,
+  logger,
+}) {
+  if (
+    typeof describeStickerVisual !== "function" ||
+    typeof store?.updateStickerDescription !== "function"
+  ) {
+    return
+  }
+  const existingSticker = await store?.getSeenSticker?.(sticker.file_unique_id)
+  if (existingSticker?.description) {
+    return
+  }
+
+  try {
+    const description = sanitizeStickerDescription(
+      await describeStickerVisual({ sticker, attachment, visualDescription }),
+    )
+    if (description) {
+      await store.updateStickerDescription(sticker.file_unique_id, description)
+    }
+  } catch (error) {
+    logger?.warn?.({ error }, "Could not describe Telegram sticker visual")
+  }
+}
+
+function sanitizeStickerDescription(description) {
+  const line = String(description ?? "")
+    .split(/\r?\n/u)
+    .map((part) => part.trim())
+    .find(Boolean)
+  if (!line) {
+    return null
+  }
+  const safe = line
+    .replace(/\[[^\]\n]*\]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 160)
+  return safe || null
 }
 
 function attachmentFromFile(filePath, mime) {

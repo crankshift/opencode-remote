@@ -74,6 +74,74 @@ describe("telegram sticker helpers", () => {
     }
   })
 
+  test("stores safe sticker descriptions generated from cached visual attachments", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "telegram-described-sticker-"))
+    const store = createMemoryStickerStore()
+    const describeStickerVisual = vi.fn(async ({ attachment, sticker, visualDescription }) => {
+      expect(attachment).toEqual(
+        expect.objectContaining({
+          mime: "image/webp",
+          filePath: expect.stringMatching(/unique-static/u),
+        }),
+      )
+      expect(sticker.file_id).toBe("file-static")
+      expect(visualDescription).toBe("static WebP image")
+      return "laughing cat\n[telegram_sticker: 😹]"
+    })
+
+    try {
+      await createStickerPrompt({
+        api: { getFile: vi.fn(async () => ({ file_path: "stickers/static.webp" })) },
+        token: "secret-token",
+        sticker: staticSticker({ emoji: "😹", set_name: "funny_cats" }),
+        store,
+        cacheDirectory: directory,
+        fetchFn: vi.fn(async () => ({
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([4, 5, 6]).buffer,
+        })),
+        describeStickerVisual,
+      })
+
+      expect(describeStickerVisual).toHaveBeenCalledTimes(1)
+      await expect(store.getSeenSticker("unique-static")).resolves.toEqual(
+        expect.objectContaining({ description: "laughing cat" }),
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test("does not regenerate sticker descriptions when one already exists", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "telegram-described-sticker-existing-"))
+    const store = createMemoryStickerStore()
+    await store.upsertSeenSticker(stickerMetaFromTelegram(staticSticker()))
+    await store.updateStickerDescription("unique-static", "existing cat")
+    const describeStickerVisual = vi.fn(async () => "new cat")
+
+    try {
+      await createStickerPrompt({
+        api: { getFile: vi.fn(async () => ({ file_path: "stickers/static.webp" })) },
+        token: "secret-token",
+        sticker: staticSticker(),
+        store,
+        cacheDirectory: directory,
+        fetchFn: vi.fn(async () => ({
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([4, 5, 6]).buffer,
+        })),
+        describeStickerVisual,
+      })
+
+      expect(describeStickerVisual).not.toHaveBeenCalled()
+      await expect(store.getSeenSticker("unique-static")).resolves.toEqual(
+        expect.objectContaining({ description: "existing cat" }),
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test("reuses usable cached sticker previews without downloading again", async () => {
     const directory = await mkdtemp(join(tmpdir(), "telegram-cached-sticker-"))
     const store = createMemoryStickerStore()
@@ -274,5 +342,18 @@ function videoSticker(overrides = {}) {
     is_animated: false,
     is_video: true,
     ...overrides,
+  }
+}
+
+function stickerMetaFromTelegram(sticker) {
+  return {
+    fileUniqueId: sticker.file_unique_id,
+    fileId: sticker.file_id,
+    packName: sticker.set_name,
+    emoji: sticker.emoji,
+    kind: "static",
+    width: sticker.width,
+    height: sticker.height,
+    fileSize: sticker.file_size,
   }
 }
