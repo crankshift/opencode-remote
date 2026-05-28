@@ -9,6 +9,8 @@ export function createTelegramGroupPromptHelper({
   botIdentity = {},
   logger,
 } = {}) {
+  const scopeLogTokens = createScopeLogTokens()
+
   return {
     async prepareText(ctx) {
       await rememberKnownGroup(ctx.message)
@@ -21,12 +23,31 @@ export function createTelegramGroupPromptHelper({
       })
 
       if (!decision.route) {
-        rememberText(scope, ctx.message, settings)
+        const currentRecord = rememberText(scope, ctx.message, settings)
+        logGroupMemoryDecision({
+          message: ctx.message,
+          kind: "text",
+          settings,
+          decision,
+          scope,
+          currentRecord,
+        })
         return { route: false }
       }
 
+      const contextCandidateEntries = countScopeEntries(scope)
       const context = buildContext(scope, settings, ctx.message.message_id)
       const currentRecord = rememberText(scope, ctx.message, settings)
+      logGroupMemoryDecision({
+        message: ctx.message,
+        kind: "text",
+        settings,
+        decision,
+        scope,
+        currentRecord,
+        context,
+        contextCandidateEntries,
+      })
       return routedPrompt(scope, currentRecord, context)
     },
 
@@ -42,12 +63,31 @@ export function createTelegramGroupPromptHelper({
       })
 
       if (!decision.route) {
-        rememberPhoto(scope, messages, settings)
+        const currentRecord = rememberPhoto(scope, messages, settings)
+        logGroupMemoryDecision({
+          message,
+          kind: "photo",
+          settings,
+          decision,
+          scope,
+          currentRecord,
+        })
         return { route: false }
       }
 
+      const contextCandidateEntries = countScopeEntries(scope)
       const context = buildContext(scope, settings, message.message_id)
       const currentRecord = rememberPhoto(scope, messages, settings)
+      logGroupMemoryDecision({
+        message,
+        kind: "photo",
+        settings,
+        decision,
+        scope,
+        currentRecord,
+        context,
+        contextCandidateEntries,
+      })
       return routedPrompt(scope, currentRecord, context)
     },
 
@@ -62,12 +102,31 @@ export function createTelegramGroupPromptHelper({
       })
 
       if (!decision.route) {
-        rememberSticker(scope, ctx.message, settings)
+        const currentRecord = rememberSticker(scope, ctx.message, settings)
+        logGroupMemoryDecision({
+          message: ctx.message,
+          kind: "sticker",
+          settings,
+          decision,
+          scope,
+          currentRecord,
+        })
         return { route: false }
       }
 
+      const contextCandidateEntries = countScopeEntries(scope)
       const context = buildContext(scope, settings, ctx.message.message_id)
       const currentRecord = rememberSticker(scope, ctx.message, settings)
+      logGroupMemoryDecision({
+        message: ctx.message,
+        kind: "sticker",
+        settings,
+        decision,
+        scope,
+        currentRecord,
+        context,
+        contextCandidateEntries,
+      })
       return routedPrompt(scope, currentRecord, context)
     },
 
@@ -83,12 +142,31 @@ export function createTelegramGroupPromptHelper({
       })
 
       if (!decision.route) {
-        rememberTranscript(scope, ctx.message, transcript, settings)
+        const currentRecord = rememberTranscript(scope, ctx.message, transcript, settings)
+        logGroupMemoryDecision({
+          message: ctx.message,
+          kind: "voice",
+          settings,
+          decision,
+          scope,
+          currentRecord,
+        })
         return { route: false }
       }
 
+      const contextCandidateEntries = countScopeEntries(scope)
       const context = buildContext(scope, settings, ctx.message.message_id)
       const currentRecord = rememberTranscript(scope, ctx.message, transcript, settings)
+      logGroupMemoryDecision({
+        message: ctx.message,
+        kind: "voice",
+        settings,
+        decision,
+        scope,
+        currentRecord,
+        context,
+        contextCandidateEntries,
+      })
       return routedPrompt(scope, currentRecord, context)
     },
 
@@ -168,6 +246,13 @@ export function createTelegramGroupPromptHelper({
         })
   }
 
+  function countScopeEntries(scope) {
+    if (typeof groupMemory?.snapshot !== "function") {
+      return 0
+    }
+    return groupMemory.snapshot(scope).length
+  }
+
   function routedPrompt(scope, currentRecord, context) {
     return {
       route: true,
@@ -225,6 +310,62 @@ export function createTelegramGroupPromptHelper({
     })
   }
 
+  function logGroupMemoryDecision({
+    message,
+    kind,
+    settings,
+    decision,
+    scope,
+    currentRecord,
+    context,
+    contextCandidateEntries = 0,
+  }) {
+    logger?.debug?.(
+      {
+        ...scopeLogContext(scope),
+        chatType: message?.chat?.type ?? "unknown",
+        contextCandidateEntries,
+        contextEntries: context?.entries?.length ?? 0,
+        hasThread: Number.isInteger(scope?.threadId),
+        memoryEnabled: settings?.memory?.enabled !== false,
+        messageKind: kind,
+        remembered: Boolean(currentRecord),
+        route: decision?.route === true,
+        routeReason: decision?.reason ?? null,
+        routeTrigger: decision?.trigger ?? null,
+        scopeEntryCount: countScopeEntries(scope),
+        senderKind: senderKind(message),
+        sessionScoped: scope?.sessionId !== "active",
+      },
+      "Telegram group memory decision",
+    )
+  }
+
+  function scopeLogContext(scope) {
+    return {
+      chatScope: scopeLogTokens.token("chat", scope?.chatId ?? "unknown"),
+      sessionScope:
+        scope?.sessionId === "active"
+          ? "active"
+          : scopeLogTokens.token("session", scope?.sessionId),
+      threadScope:
+        scope?.threadId == null ? "main" : scopeLogTokens.token("thread", scope?.threadId),
+    }
+  }
+
+  function senderKind(message) {
+    if (message?.from?.is_bot === true) {
+      return "bot"
+    }
+    if (message?.from?.is_bot === false) {
+      return "human"
+    }
+    if (message?.sender_chat) {
+      return "chat"
+    }
+    return "unknown"
+  }
+
   function botIdentityForContext(ctx) {
     return {
       ...botIdentity,
@@ -232,6 +373,27 @@ export function createTelegramGroupPromptHelper({
       username: botIdentity.username ?? ctx.me?.username,
       firstName: botIdentity.firstName ?? ctx.me?.first_name ?? ctx.me?.firstName,
     }
+  }
+}
+
+function createScopeLogTokens() {
+  const tokenMaps = new Map()
+  return {
+    token(kind, value) {
+      const map = getTokenMap(kind)
+      const key = String(value ?? "unknown")
+      if (!map.has(key)) {
+        map.set(key, `${kind}:${map.size + 1}`)
+      }
+      return map.get(key)
+    },
+  }
+
+  function getTokenMap(kind) {
+    if (!tokenMaps.has(kind)) {
+      tokenMaps.set(kind, new Map())
+    }
+    return tokenMaps.get(kind)
   }
 }
 
