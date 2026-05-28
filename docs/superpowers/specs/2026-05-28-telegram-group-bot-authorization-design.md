@@ -45,7 +45,7 @@ Setup prompts should write the v2 shape only.
 
 Prompts:
 
-- `Telegram allowed direct user IDs, comma-separated (optional)`
+- `Telegram user IDs allowed to DM this bot directly, comma-separated (optional)`
 - `Telegram allowed group chat IDs, comma-separated (optional)`
 
 The parser accepts whitespace around comma-separated tokens, so `1,2` and `1,   3` both produce arrays. Blank user/chat prompts are allowed only when the other prompt contains at least one ID. Invalid tokens produce clear setup validation errors.

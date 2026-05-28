@@ -300,7 +300,7 @@ async function askTelegramAuthorizationConfig(rl, currentConfig) {
   while (true) {
     const allowedUserIds = await askOptionalIntegerList(
       rl,
-      "Telegram allowed direct user IDs, comma-separated (optional)",
+      "Telegram user IDs allowed to DM this bot directly, comma-separated (optional)",
       currentConfig?.telegram.allowedUserIds,
       { positiveOnly: true },
     )

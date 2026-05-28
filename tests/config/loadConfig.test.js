@@ -470,7 +470,7 @@ describe("promptForConfig", () => {
     expect(output.text()).toContain("Current config found")
     expect(output.text()).toContain("Telegram bot token (current: set; press Enter to keep)")
     expect(output.text()).toContain(
-      "Telegram allowed direct user IDs, comma-separated (optional) (current: 321; press Enter to keep)",
+      "Telegram user IDs allowed to DM this bot directly, comma-separated (optional) (current: 321; press Enter to keep)",
     )
   })
 

@@ -103,7 +103,7 @@ test("allows group-only setup with no direct user IDs", () => {})
 Prompts:
 
 ```text
-Telegram allowed direct user IDs, comma-separated (optional)
+Telegram user IDs allowed to DM this bot directly, comma-separated (optional)
 Telegram allowed group chat IDs, comma-separated (optional)
 ```
 
