@@ -2,6 +2,8 @@ import {
   createTelegramBot as defaultCreateTelegramBot,
   registerTelegramBotCommands as defaultRegisterTelegramBotCommands,
 } from "../adapters/telegram/bot.js"
+import { createTelegramGroupRegistry as defaultCreateTelegramGroupRegistry } from "../adapters/telegram/groupRegistry.js"
+import { openTelegramGroupStore as defaultOpenTelegramGroupStore } from "../adapters/telegram/groupStore.js"
 import { openTelegramStickerStore as defaultOpenTelegramStickerStore } from "../adapters/telegram/stickerStore.js"
 import { loadConfig } from "../config/loadConfig.js"
 import { setConfigValuesAtPath as defaultSetConfigValuesAtPath } from "../config/writeConfig.js"
@@ -39,6 +41,10 @@ export async function runGateway({
   const createVoiceService = dependencies.createVoiceService ?? defaultCreateVoiceService
   const openTelegramStickerStore =
     dependencies.openTelegramStickerStore ?? defaultOpenTelegramStickerStore
+  const openTelegramGroupStore =
+    dependencies.openTelegramGroupStore ?? defaultOpenTelegramGroupStore
+  const createTelegramGroupRegistry =
+    dependencies.createTelegramGroupRegistry ?? defaultCreateTelegramGroupRegistry
   const assertFfmpegAvailable = dependencies.assertFfmpegAvailable ?? defaultAssertFfmpegAvailable
   const setConfigValuesAtPath = dependencies.setConfigValuesAtPath ?? defaultSetConfigValuesAtPath
 
@@ -73,15 +79,24 @@ export async function runGateway({
     },
   })
   const stickerStore = openTelegramStickerStore()
+  const groupStore = openTelegramGroupStore()
+  const groupRegistry = createTelegramGroupRegistry({
+    telegram: resolvedConfig.telegram,
+    store: groupStore,
+    logger: resolvedLogger,
+  })
   const bot = createTelegramBot({
     token: resolvedConfig.telegram.botToken,
-    allowedUserId: resolvedConfig.telegram.allowedUserId,
+    telegram: resolvedConfig.telegram,
     controller,
     logger: resolvedLogger,
     progressVerbosity: resolvedConfig.progressVerbosity,
     voiceService,
     stickerStore,
+    groupStore,
+    groupRegistry,
   })
+  groupRegistry.setApi?.(bot.api)
 
   let stopping = false
   async function shutdown(signal) {
@@ -93,15 +108,17 @@ export async function runGateway({
     await bot.stop()
     await server.stop()
     stickerStore.close?.()
+    groupStore.close?.()
   }
 
   processLike.once("SIGINT", shutdown)
   processLike.once("SIGTERM", shutdown)
 
   await registerTelegramBotCommands(bot, resolvedLogger)
+  await groupRegistry.refreshAllowedGroups?.()
   resolvedLogger.info("Starting Telegram polling")
   await bot.start({
-    allowed_updates: ["message", "callback_query", "message_reaction"],
+    allowed_updates: ["message", "callback_query", "message_reaction", "my_chat_member"],
   })
 }
 

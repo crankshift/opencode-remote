@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
-import { botCommands } from "../../src/core/commands/commands.js"
+import { privateBotCommands, publicBotCommands } from "../../src/core/commands/commands.js"
 import { runGateway } from "../../src/runtime/bootstrap.js"
 
 describe("runGateway", () => {
@@ -99,11 +99,12 @@ describe("runGateway", () => {
     expect(ensureOpenCodeServer).toHaveBeenCalledWith(testConfig().opencode)
     expect(createBot).toHaveBeenCalledWith(
       expect.objectContaining({
+        telegram: testConfig().telegram,
         progressVerbosity: "all",
       }),
     )
     expect(bot.start).toHaveBeenCalledWith({
-      allowed_updates: ["message", "callback_query", "message_reaction"],
+      allowed_updates: ["message", "callback_query", "message_reaction", "my_chat_member"],
     })
     expect(processLike.once).toHaveBeenCalledWith("SIGINT", expect.any(Function))
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
@@ -142,8 +143,8 @@ describe("runGateway", () => {
       processLike: { once: vi.fn() },
     })
 
-    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(1, botCommands)
-    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, botCommands, {
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(1, publicBotCommands)
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, privateBotCommands, {
       scope: { type: "all_private_chats" },
     })
     expect(order).toEqual(["default", "all_private_chats", "start"])
@@ -180,12 +181,12 @@ describe("runGateway", () => {
     })
 
     expect(logger.warn).toHaveBeenCalledWith({ error }, "Could not register Telegram commands")
-    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(1, botCommands)
-    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, botCommands, {
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(1, publicBotCommands)
+    expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, privateBotCommands, {
       scope: { type: "all_private_chats" },
     })
     expect(bot.start).toHaveBeenCalledWith({
-      allowed_updates: ["message", "callback_query", "message_reaction"],
+      allowed_updates: ["message", "callback_query", "message_reaction", "my_chat_member"],
     })
   })
 
@@ -261,6 +262,61 @@ describe("runGateway", () => {
 
     expect(openTelegramStickerStore).toHaveBeenCalledWith()
     expect(createTelegramBot).toHaveBeenCalledWith(expect.objectContaining({ stickerStore }))
+  })
+
+  test("creates group store and refreshes known allowed groups before polling", async () => {
+    const order = []
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => {
+        order.push("start")
+      }),
+      stop: vi.fn(async () => undefined),
+    }
+    const groupStore = { close: vi.fn() }
+    const registry = {
+      setApi: vi.fn(),
+      refreshAllowedGroups: vi.fn(async () => {
+        order.push("refresh")
+      }),
+    }
+    const openTelegramGroupStore = vi.fn(() => groupStore)
+    const createTelegramGroupRegistry = vi.fn(() => registry)
+    const createTelegramBot = vi.fn(() => bot)
+
+    await runGateway({
+      config: testConfig(),
+      logger: testLogger(),
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        openTelegramGroupStore,
+        createTelegramGroupRegistry,
+        createTelegramBot,
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(openTelegramGroupStore).toHaveBeenCalledWith()
+    expect(createTelegramGroupRegistry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        telegram: testConfig().telegram,
+        store: groupStore,
+      }),
+    )
+    expect(registry.setApi).toHaveBeenCalledWith(bot.api)
+    expect(createTelegramBot).toHaveBeenCalledWith(
+      expect.objectContaining({ groupStore, groupRegistry: registry }),
+    )
+    expect(order).toEqual(["refresh", "start"])
   })
 
   test("passes voice-aware gateway context to the controller", async () => {
@@ -368,6 +424,7 @@ describe("runGateway", () => {
   test("registered shutdown stops Telegram polling and owned server", async () => {
     const server = { stop: vi.fn(async () => undefined) }
     const stickerStore = { close: vi.fn() }
+    const groupStore = { close: vi.fn() }
     const bot = {
       api: { setMyCommands: vi.fn(async () => undefined) },
       start: vi.fn(async () => undefined),
@@ -390,6 +447,7 @@ describe("runGateway", () => {
         createProjectStateStore: vi.fn(() => ({})),
         createGatewayController: vi.fn(() => ({})),
         openTelegramStickerStore: vi.fn(() => stickerStore),
+        openTelegramGroupStore: vi.fn(() => groupStore),
         createTelegramBot: vi.fn(() => bot),
       },
       processLike,
@@ -400,12 +458,14 @@ describe("runGateway", () => {
     expect(bot.stop).toHaveBeenCalled()
     expect(server.stop).toHaveBeenCalled()
     expect(stickerStore.close).toHaveBeenCalled()
+    expect(groupStore.close).toHaveBeenCalled()
   })
 })
 
 function testConfig() {
   return {
-    telegram: { botToken: "token", allowedUserId: 123 },
+    schemaVersion: 2,
+    telegram: { botToken: "token", allowedUserIds: [123], allowedChatIds: [] },
     opencode: {
       apiUrl: "http://localhost:4096",
       command: "opencode",

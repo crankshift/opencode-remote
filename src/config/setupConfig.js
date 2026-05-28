@@ -9,6 +9,7 @@ import {
   detectFfmpegInstaller as defaultDetectFfmpegInstaller,
   installFfmpeg as defaultInstallFfmpeg,
 } from "../core/voice/audioConverter.js"
+import { CURRENT_CONFIG_SCHEMA_VERSION } from "./configMigration.js"
 import { getConfigPaths, loadConfig, loadConfigFromObject } from "./loadConfig.js"
 
 const defaultPromptConfig = {
@@ -89,8 +90,12 @@ export async function promptForConfig(
     const botToken = await askRequired(rl, "Telegram bot token", currentConfig?.telegram.botToken, {
       secret: true,
     })
-    const allowedUserId = Number(
-      await askInteger(rl, "Telegram allowed user ID", currentConfig?.telegram.allowedUserId),
+    output.write(
+      "Allowed chat IDs let the gateway observe group messages, including messages from other bots, before group routing decides whether to prompt OpenCode. To receive all group messages, make this bot a group admin or disable Group Privacy Mode in BotFather. To receive messages from other bots in groups, also enable Bot-to-Bot Communication Mode. Direct messages are allowed only for configured direct user IDs.\n",
+    )
+    const { allowedUserIds, allowedChatIds } = await askTelegramAuthorizationConfig(
+      rl,
+      currentConfig,
     )
     const progressVerbosity = await askChoice(
       rl,
@@ -137,9 +142,11 @@ export async function promptForConfig(
     return {
       scope,
       config: {
+        schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
         telegram: {
           botToken,
-          allowedUserId,
+          allowedUserIds,
+          ...(allowedChatIds.length > 0 ? { allowedChatIds } : {}),
         },
         progressVerbosity,
         ...(voice ? { voice } : {}),
@@ -289,15 +296,70 @@ async function askRequired(rl, label, currentValue, options = {}) {
   }
 }
 
-async function askInteger(rl, label, currentValue) {
+async function askTelegramAuthorizationConfig(rl, currentConfig) {
   while (true) {
-    const value = await askRequired(rl, label, currentValue)
-    const parsed = Number(value)
-    if (Number.isInteger(parsed) && parsed > 0) {
-      return value
+    const allowedUserIds = await askOptionalIntegerList(
+      rl,
+      "Telegram user IDs allowed to DM this bot directly, comma-separated (optional)",
+      currentConfig?.telegram.allowedUserIds,
+      { positiveOnly: true },
+    )
+    const allowedChatIds = await askOptionalIntegerList(
+      rl,
+      "Telegram allowed group chat IDs, comma-separated (optional)",
+      currentConfig?.telegram.allowedChatIds,
+      { positiveOnly: false },
+    )
+    if (allowedUserIds.length > 0 || allowedChatIds.length > 0) {
+      return { allowedUserIds, allowedChatIds }
     }
-    rl.output.write(`${label} must be a positive integer.\n`)
+    rl.output.write("Configure at least one allowed direct user ID or allowed group chat ID.\n")
   }
+}
+
+async function askOptionalIntegerList(rl, label, currentValue, options) {
+  while (true) {
+    const value = (
+      await rl.question(`${label}${formatCurrentHint(formatCurrentList(currentValue))}: `)
+    ).trim()
+    if (!value && Array.isArray(currentValue)) {
+      return currentValue
+    }
+    if (!value) {
+      return []
+    }
+    const parsed = parseIntegerList(value, options)
+    if (parsed.ok) {
+      return parsed.value
+    }
+    rl.output.write(parsed.message)
+  }
+}
+
+function parseIntegerList(value, { positiveOnly }) {
+  const values = String(value)
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  const parsed = []
+  for (const value of values) {
+    const number = Number(value)
+    if (!Number.isInteger(number) || (positiveOnly && number <= 0)) {
+      return {
+        ok: false,
+        message: positiveOnly
+          ? "IDs must be comma-separated positive integers.\n"
+          : "Chat IDs must be comma-separated integers.\n",
+      }
+    }
+    parsed.push(number)
+  }
+  return { ok: true, value: parsed }
+}
+
+function formatCurrentList(value) {
+  return Array.isArray(value) && value.length > 0 ? value.join(",") : undefined
 }
 
 async function askChoice(

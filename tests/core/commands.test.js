@@ -11,6 +11,7 @@ describe("commands", () => {
       "progress",
       "voice",
       "stickers",
+      "group",
       "help",
     ])
   })
@@ -23,5 +24,6 @@ describe("commands", () => {
     expect(help).toContain("/progress - Set tool progress visibility")
     expect(help).toContain("/voice - Show or set voice mode")
     expect(help).toContain("/stickers - Manage saved sticker packs")
+    expect(help).toContain("/group - Manage Telegram group behavior")
   })
 })

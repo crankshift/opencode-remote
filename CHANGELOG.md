@@ -4,6 +4,23 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.7.0] - 2026-05-28
+
+### Added
+
+- Added configured Telegram group chat allowlists with group-scoped routing, ephemeral context memory, and DM-based `/group` settings.
+- Added per-group custom trigger phrases for routing text, captions, and voice transcripts to OpenCode.
+
+### Fixed
+
+- Fixed custom group triggers to match bounded words or phrases so short bot names such as `Рес` do not trigger on longer words such as `ресурси`.
+
+## [0.6.1] - 2026-05-28
+
+### Fixed
+
+- Fixed Telegram prompt author context for messages sent by anonymous admins or on behalf of chats/channels by using Telegram `sender_chat` names when available.
+
 ## [0.6.0] - 2026-05-28
 
 ### Added

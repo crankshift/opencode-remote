@@ -1,6 +1,10 @@
 import { rm } from "node:fs/promises"
 import { Bot, InlineKeyboard } from "grammy"
-import { botCommands, renderHelpText } from "../../core/commands/commands.js"
+import {
+  privateBotCommands,
+  publicBotCommands,
+  renderHelpText,
+} from "../../core/commands/commands.js"
 import { chunkText } from "../../core/formatting/chunkText.js"
 import {
   createProgressTextState,
@@ -9,6 +13,10 @@ import {
 } from "../../core/formatting/progressText.js"
 import { isAuthorizedTelegramUser } from "./auth.js"
 import { authorContextFromTelegramMessage } from "./author.js"
+import { createGroupMemory as defaultCreateGroupMemory } from "./groupMemory.js"
+import { createTelegramGroupMenu } from "./groupMenu.js"
+import { createTelegramGroupPromptHelper } from "./groupPrompts.js"
+import { createMemoryGroupStore } from "./groupStore.js"
 import {
   captionFromMessages,
   cleanupAttachments as defaultCleanupMediaAttachments,
@@ -28,12 +36,15 @@ import {
 const SAFE_ERROR_REPLY = "OpenCode Remote failed while handling that request."
 
 export async function registerTelegramBotCommands(bot, logger) {
-  for (const scope of [null, { type: "all_private_chats" }]) {
+  for (const { commands, scope } of [
+    { commands: publicBotCommands, scope: null },
+    { commands: privateBotCommands, scope: { type: "all_private_chats" } },
+  ]) {
     try {
       if (scope) {
-        await bot.api.setMyCommands(botCommands, { scope })
+        await bot.api.setMyCommands(commands, { scope })
       } else {
-        await bot.api.setMyCommands(botCommands)
+        await bot.api.setMyCommands(commands)
       }
     } catch (error) {
       logger.warn({ error }, "Could not register Telegram commands")
@@ -43,7 +54,7 @@ export async function registerTelegramBotCommands(bot, logger) {
 
 export function createTelegramBot({
   token,
-  allowedUserId,
+  telegram,
   controller,
   logger,
   botFactory = Bot,
@@ -57,9 +68,14 @@ export function createTelegramBot({
   cleanupMediaAttachments = defaultCleanupMediaAttachments,
   voiceService = null,
   stickerStore = null,
+  groupStore = createMemoryGroupStore({ allowedChatIds: telegram.allowedChatIds }),
+  groupMemory = defaultCreateGroupMemory(),
+  groupRegistry = null,
+  botIdentity = {},
   createStickerPrompt = defaultCreateStickerPrompt,
   cleanupStickerFiles = defaultCleanupStickerFiles,
   random = Math.random,
+  groupNoticeCooldownMs,
 }) {
   const bot = new botFactory(token)
   let fallbackProgressVerbosity = progressVerbosity
@@ -67,6 +83,19 @@ export function createTelegramBot({
   const permissionResponseTokens = createBoundedTokenStore(200)
   const stickerSaveTokens = createBoundedTokenStore(200)
   const botMessageMemory = createBotMessageMemory(200)
+  const groupMenu = createTelegramGroupMenu({
+    store: groupStore,
+    memory: groupMemory,
+    noticeCooldownMs: groupNoticeCooldownMs,
+  })
+  const groupPrompts = createTelegramGroupPromptHelper({
+    groupStore,
+    groupMemory,
+    groupRegistry,
+    controller,
+    botIdentity,
+    logger,
+  })
   const mediaGroupBuffer = createMediaGroupBuffer({
     waitMs: mediaGroupWaitMs,
     logger,
@@ -79,8 +108,11 @@ export function createTelegramBot({
   })
 
   bot.use(async (ctx, next) => {
-    if (!isAuthorizedTelegramUser(ctx, allowedUserId)) {
-      logger.warn({ userId: ctx.from?.id }, "Ignoring unauthorized Telegram update")
+    if (!isAuthorizedTelegramUser(ctx, telegram)) {
+      logger.warn(
+        { userId: ctx.from?.id, chatId: ctx.chat?.id ?? ctx.message?.chat?.id },
+        "Ignoring unauthorized Telegram update",
+      )
       return
     }
     await next()
@@ -113,7 +145,10 @@ export function createTelegramBot({
   })
 
   bot.command("new", async (ctx) => {
-    const session = await controller.createSession()
+    const session = await controller.createSession({
+      context: await formatPromptForTelegramGateway(""),
+    })
+    groupMemory.clearAll?.()
     await replyAndRemember(ctx, `Created session ${session.title ?? session.id}`, botMessageMemory)
   })
 
@@ -146,6 +181,7 @@ export function createTelegramBot({
       return
     }
     await controller.selectSession(sessionId)
+    groupMemory.clearAll?.()
     await ctx.answerCallbackQuery({ text: "Session selected" })
     await replyAndRemember(ctx, `Selected session ${sessionId}`, botMessageMemory)
   })
@@ -192,6 +228,15 @@ export function createTelegramBot({
   })
 
   bot.command("progress", async (ctx) => {
+    if (!isPrivateTelegramChat(ctx)) {
+      await replyAndRemember(
+        ctx,
+        "Tool progress is only available in private chats.",
+        botMessageMemory,
+      )
+      return
+    }
+
     const requestedVerbosity = parseProgressVerbosity(ctx.message?.text)
     if (!requestedVerbosity) {
       const activeProgressVerbosity = await getActiveProgressVerbosity()
@@ -267,8 +312,19 @@ export function createTelegramBot({
     await handleStickersCommand(ctx)
   })
 
+  bot.command("group", async (ctx) => {
+    await groupMenu.handleCommand(ctx)
+  })
+
+  bot.callbackQuery(/^group:(.+)$/u, async (ctx) => {
+    await groupMenu.handleCallback(ctx)
+  })
+
   bot.on("message_reaction", async (ctx) => {
     const update = ctx.messageReaction
+    if (!isPrivateTelegramChat(ctx) && !(await groupReactionsEnabled(update.chat.id))) {
+      return
+    }
     const botMessage = botMessageMemory.get(update.chat.id, update.message_id)
     if (!botMessage) {
       return
@@ -290,9 +346,29 @@ export function createTelegramBot({
     }
   })
 
+  bot.on("my_chat_member", async (ctx) => {
+    await groupRegistry?.handleMyChatMember?.(ctx.myChatMember ?? ctx.update?.my_chat_member)
+  })
+
   bot.on("message:text", async (ctx) => {
+    if (await groupMenu.handlePendingText?.(ctx)) {
+      return
+    }
     if (ctx.message.text.startsWith("/")) {
       return
+    }
+
+    let groupScope = null
+    let groupCurrentRecord = null
+    let groupContextText = ""
+    if (!isPrivateTelegramChat(ctx)) {
+      const groupResult = await groupPrompts.prepareText(ctx)
+      if (!groupResult.route) {
+        return
+      }
+      groupScope = groupResult.scope
+      groupCurrentRecord = groupResult.currentRecord
+      groupContextText = groupResult.contextText
     }
 
     const chatId = ctx.message.chat.id
@@ -304,7 +380,7 @@ export function createTelegramBot({
       await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
-          text: ctx.message.text,
+          text: groupPrompts.withContext(ctx.message.text, groupContextText),
           author: authorContextFromTelegramMessage(ctx.message),
         }),
         progress,
@@ -315,6 +391,7 @@ export function createTelegramBot({
       requestedReaction = parsedResponse.requestedReaction
       const requestedSticker = parsedResponse.requestedSticker
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "text")
+      groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (requestedSticker) {
         await sendRequestedSticker(ctx, requestedSticker)
         requestedReaction = null
@@ -349,6 +426,19 @@ export function createTelegramBot({
   return bot
 
   async function handlePhotoMessages(ctx, messages) {
+    let groupScope = null
+    let groupCurrentRecord = null
+    let groupContextText = ""
+    if (!isPrivateTelegramChat(ctx)) {
+      const groupResult = await groupPrompts.preparePhoto(ctx, messages)
+      if (!groupResult.route) {
+        return
+      }
+      groupScope = groupResult.scope
+      groupCurrentRecord = groupResult.currentRecord
+      groupContextText = groupResult.contextText
+    }
+
     const attachments = []
     const stopTyping = startTypingIndicator(ctx, logger)
 
@@ -376,7 +466,7 @@ export function createTelegramBot({
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
-          text: captionFromMessages(messages),
+          text: groupPrompts.withContext(captionFromMessages(messages), groupContextText),
           author: authorContextFromTelegramMessage(messages[0]),
           attachments,
         }),
@@ -386,6 +476,7 @@ export function createTelegramBot({
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "photo")
+      groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
         await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
       } else if (parsedResponse.requestedReaction) {
@@ -438,10 +529,22 @@ export function createTelegramBot({
       attachments.push(attachment)
 
       const transcript = await voiceService.transcribe(attachment.filePath)
+      let groupScope = null
+      let groupCurrentRecord = null
+      let groupContextText = ""
+      if (!isPrivateTelegramChat(ctx)) {
+        const groupResult = await groupPrompts.prepareVoice(ctx, transcript)
+        if (!groupResult.route) {
+          return
+        }
+        groupScope = groupResult.scope
+        groupCurrentRecord = groupResult.currentRecord
+        groupContextText = groupResult.contextText
+      }
       const progress = await createPromptProgressRenderer(ctx)
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
-          text: transcript,
+          text: groupPrompts.withContext(transcript, groupContextText),
           author: authorContextFromTelegramMessage(ctx.message),
         }),
         progress,
@@ -450,6 +553,7 @@ export function createTelegramBot({
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "voice")
+      groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
         await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
       }
@@ -460,6 +564,19 @@ export function createTelegramBot({
   }
 
   async function handleStickerMessage(ctx) {
+    let groupScope = null
+    let groupCurrentRecord = null
+    let groupContextText = ""
+    if (!isPrivateTelegramChat(ctx)) {
+      const groupResult = await groupPrompts.prepareSticker(ctx)
+      if (!groupResult.route) {
+        return
+      }
+      groupScope = groupResult.scope
+      groupCurrentRecord = groupResult.currentRecord
+      groupContextText = groupResult.contextText
+    }
+
     let cleanupFiles = []
     const stopTyping = startTypingIndicator(ctx, logger)
     try {
@@ -477,6 +594,7 @@ export function createTelegramBot({
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
           ...result.prompt,
+          text: groupPrompts.withContext(result.prompt?.text ?? "", groupContextText),
           author: authorContextFromTelegramMessage(ctx.message),
         }),
         progress,
@@ -485,6 +603,7 @@ export function createTelegramBot({
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "sticker")
+      groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
         await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
       } else if (parsedResponse.requestedReaction) {
@@ -499,6 +618,15 @@ export function createTelegramBot({
     } finally {
       stopTyping()
       await cleanupStickerFiles(cleanupFiles, logger)
+    }
+  }
+
+  async function groupReactionsEnabled(chatId) {
+    try {
+      return (await groupStore.getSettings(chatId))?.reactions?.enabled === true
+    } catch (error) {
+      logger?.warn?.({ error, chatId }, "Could not read Telegram group reaction settings")
+      return false
     }
   }
 
@@ -682,7 +810,7 @@ export function createTelegramBot({
     return createTelegramProgressRenderer({
       ctx,
       logger,
-      verbosity: await getActiveProgressVerbosity(),
+      verbosity: isPrivateTelegramChat(ctx) ? await getActiveProgressVerbosity() : "off",
       editThrottleMs: progressEditThrottleMs,
     })
   }
@@ -974,6 +1102,12 @@ function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs
       logger.warn({ error }, "Could not edit Telegram progress message")
     }
   }
+}
+
+function isPrivateTelegramChat(ctx) {
+  const chatType =
+    ctx?.chat?.type ?? ctx?.message?.chat?.type ?? ctx?.callbackQuery?.message?.chat?.type
+  return chatType !== "group" && chatType !== "supergroup" && chatType !== "channel"
 }
 
 function rememberToolingTerms(toolingTerms, event) {

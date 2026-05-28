@@ -18,19 +18,20 @@ export function createGatewayController({
     return session.id
   }
 
-  async function createSession() {
+  async function createSession(options = {}) {
     const session = await opencode.createSession()
     await store.write({ activeSessionId: session.id })
-    await primeSession(session.id)
+    await primeSession(session.id, options.context)
     return session
   }
 
-  async function primeSession(sessionId) {
+  async function primeSession(sessionId, additionalContext) {
     if (!gatewayContext || typeof opencode.sendContext !== "function") {
       return
     }
+    const context = [gatewayContext, additionalContext].filter(Boolean).join("\n\n")
     try {
-      await opencode.sendContext(sessionId, gatewayContext)
+      await opencode.sendContext(sessionId, context)
     } catch (error) {
       logger?.warn?.({ error, sessionId }, "Could not send OpenCode gateway context")
     }
@@ -65,8 +66,8 @@ export function createGatewayController({
       return { progressVerbosity }
     },
 
-    async createSession() {
-      return createSession()
+    async createSession(options) {
+      return createSession(options)
     },
 
     async listSessions() {

@@ -33,10 +33,12 @@ describe("loadConfig", () => {
     )
 
     expect(config).toEqual({
+      schemaVersion: 2,
       configPath,
       telegram: {
         botToken: "token",
-        allowedUserId: 12345,
+        allowedUserIds: [12345],
+        allowedChatIds: [],
       },
       opencode: {
         apiUrl: "http://localhost:4096",
@@ -55,6 +57,75 @@ describe("loadConfig", () => {
       logLevel: "info",
       settingsPath: join(cwd, ".opencode-remote", "settings.json"),
     })
+  })
+
+  test("migrates singular Telegram allowed user ID to plural v2 config", () => {
+    const cwd = "/project"
+    const configPath = join(cwd, ".opencode-remote", "config.json")
+
+    const config = loadConfigFromObject(
+      {
+        telegram: {
+          botToken: "token",
+          allowedUserId: "12345",
+        },
+      },
+      { configPath, cwd },
+    )
+
+    expect(config.schemaVersion).toBe(2)
+    expect(config.telegram).toEqual({
+      botToken: "token",
+      allowedUserIds: [12345],
+      allowedChatIds: [],
+    })
+  })
+
+  test("prefers plural Telegram allowed user IDs when singular and plural are both present", () => {
+    const config = loadConfigFromObject(
+      {
+        telegram: {
+          botToken: "token",
+          allowedUserId: 111,
+          allowedUserIds: [222, 333],
+        },
+      },
+      { configPath: "/project/.opencode-remote/config.json", cwd: "/project" },
+    )
+
+    expect(config.telegram.allowedUserIds).toEqual([222, 333])
+  })
+
+  test("normalizes group chat allowlists without direct users", () => {
+    const config = loadConfigFromObject(
+      {
+        schemaVersion: 2,
+        telegram: {
+          botToken: "token",
+          allowedUserIds: [],
+          allowedChatIds: [-1001, 789],
+        },
+      },
+      { configPath: "/project/.opencode-remote/config.json", cwd: "/project" },
+    )
+
+    expect(config.telegram).toEqual({
+      botToken: "token",
+      allowedUserIds: [],
+      allowedChatIds: [-1001, 789],
+    })
+  })
+
+  test("rejects configs without direct users or allowed chats", () => {
+    expect(() =>
+      loadConfigFromObject(
+        {
+          schemaVersion: 2,
+          telegram: { botToken: "token", allowedUserIds: [] },
+        },
+        { configPath: "/project/.opencode-remote/config.json", cwd: "/project" },
+      ),
+    ).toThrow(/telegram/)
   })
 
   test("normalizes custom voice config", () => {
@@ -99,7 +170,11 @@ describe("loadConfig", () => {
     const config = await loadConfig({ cwd, homeDir })
 
     expect(config.configPath).toBe(join(cwd, ".opencode-remote", "config.json"))
-    expect(config.telegram).toEqual({ botToken: "local-token", allowedUserId: 222 })
+    expect(config.telegram).toEqual({
+      botToken: "local-token",
+      allowedUserIds: [222],
+      allowedChatIds: [],
+    })
     expect(config.settingsPath).toBe(join(cwd, ".opencode-remote", "settings.json"))
   })
 
@@ -112,7 +187,11 @@ describe("loadConfig", () => {
     const config = await loadConfig({ cwd, homeDir })
 
     expect(config.configPath).toBe(join(homeDir, ".opencode-remote", "config.json"))
-    expect(config.telegram).toEqual({ botToken: "global-token", allowedUserId: 333 })
+    expect(config.telegram).toEqual({
+      botToken: "global-token",
+      allowedUserIds: [333],
+      allowedChatIds: [],
+    })
     expect(config.settingsPath).toBe(join(homeDir, ".opencode-remote", "settings.json"))
   })
 
@@ -179,7 +258,8 @@ describe("loadOrCreateConfig", () => {
     const prompter = vi.fn(async () => ({
       scope: "local",
       config: {
-        telegram: { botToken: "created-token", allowedUserId: 444 },
+        schemaVersion: 2,
+        telegram: { botToken: "created-token", allowedUserIds: [444] },
         opencode: { apiUrl: "http://localhost:4096", command: "opencode", autoStart: true },
         progressVerbosity: "all",
         logLevel: "info",
@@ -196,7 +276,8 @@ describe("loadOrCreateConfig", () => {
     expect(config.configPath).toBe(localPath)
     expect(config.settingsPath).toBe(join(cwd, ".opencode-remote", "settings.json"))
     await expect(readJson(localPath)).resolves.toMatchObject({
-      telegram: { botToken: "created-token", allowedUserId: 444 },
+      schemaVersion: 2,
+      telegram: { botToken: "created-token", allowedUserIds: [444] },
     })
   })
 
@@ -205,7 +286,8 @@ describe("loadOrCreateConfig", () => {
     const prompter = vi.fn(async () => ({
       scope: "global",
       config: {
-        telegram: { botToken: "created-token", allowedUserId: 555 },
+        schemaVersion: 2,
+        telegram: { botToken: "created-token", allowedUserIds: [555] },
       },
     }))
 
@@ -215,7 +297,8 @@ describe("loadOrCreateConfig", () => {
     expect(config.configPath).toBe(globalPath)
     expect(config.settingsPath).toBe(join(homeDir, ".opencode-remote", "settings.json"))
     await expect(readJson(globalPath)).resolves.toMatchObject({
-      telegram: { botToken: "created-token", allowedUserId: 555 },
+      schemaVersion: 2,
+      telegram: { botToken: "created-token", allowedUserIds: [555] },
     })
   })
 })
@@ -231,16 +314,22 @@ describe("createConfig", () => {
     const prompter = vi.fn(async () => ({
       scope: "local",
       config: {
-        telegram: { botToken: "new-token", allowedUserId: 222 },
+        schemaVersion: 2,
+        telegram: { botToken: "new-token", allowedUserIds: [222] },
       },
     }))
 
     const config = await createConfig({ cwd, homeDir, prompter, confirmOverwrite })
 
     expect(confirmOverwrite).not.toHaveBeenCalled()
-    expect(config.telegram).toEqual({ botToken: "new-token", allowedUserId: 222 })
+    expect(config.telegram).toEqual({
+      botToken: "new-token",
+      allowedUserIds: [222],
+      allowedChatIds: [],
+    })
     await expect(readJson(existingPath)).resolves.toMatchObject({
-      telegram: { botToken: "new-token", allowedUserId: 222 },
+      schemaVersion: 2,
+      telegram: { botToken: "new-token", allowedUserIds: [222] },
     })
   })
 
@@ -249,7 +338,8 @@ describe("createConfig", () => {
     const prompter = vi.fn(async () => ({
       scope: "local",
       config: {
-        telegram: { botToken: "token", allowedUserId: 123 },
+        schemaVersion: 2,
+        telegram: { botToken: "token", allowedUserIds: [123] },
       },
       startup: { enabled: true },
     }))
@@ -279,23 +369,71 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "token", "123", "", "", "", ""])
+    await writeAnswers(input, ["", "token", "123", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
       scope: "local",
       config: {
-        telegram: { botToken: "token", allowedUserId: 123 },
+        schemaVersion: 2,
+        telegram: { botToken: "token", allowedUserIds: [123] },
         progressVerbosity: "verbose",
         logLevel: "info",
       },
       startup: { enabled: false },
     })
+    expect(output.text()).toContain("Group Privacy Mode")
     expect(output.text()).not.toMatch(/OpenCode API URL/)
     expect(output.text()).not.toMatch(/OpenCode command/)
     expect(output.text()).not.toMatch(/Auto-start OpenCode/)
     expect(output.text()).not.toMatch(/OpenCode workdir/)
     expect(output.text()).not.toMatch(/Settings path/)
+  })
+
+  test("collects comma-separated Telegram direct user and group chat allowlists", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["", "token", "1,   3", "-1001, 42", "", "", "", ""])
+    const answers = await prompt
+
+    expect(answers.config.schemaVersion).toBe(2)
+    expect(answers.config.telegram).toEqual({
+      botToken: "token",
+      allowedUserIds: [1, 3],
+      allowedChatIds: [-1001, 42],
+    })
+    expect(output.text()).toContain("Group Privacy Mode")
+  })
+
+  test("allows group-only setup with no direct user IDs", async () => {
+    const { cwd, homeDir } = await tempWorkspace()
+    const input = new PassThrough()
+    const output = captureOutput()
+
+    const prompt = promptForConfig(
+      {
+        localConfigPath: join(cwd, ".opencode-remote", "config.json"),
+        globalConfigPath: join(homeDir, ".opencode-remote", "config.json"),
+      },
+      { input, output },
+    )
+    await writeAnswers(input, ["", "token", "", "-1001", "", "", "", ""])
+    const answers = await prompt
+
+    expect(answers.config.telegram).toEqual({
+      botToken: "token",
+      allowedUserIds: [],
+      allowedChatIds: [-1001],
+    })
   })
 
   test("uses existing local config values when local setup input is blank", async () => {
@@ -316,13 +454,14 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "", "", "", "", "", ""])
+    await writeAnswers(input, ["", "", "", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
       scope: "local",
       config: {
-        telegram: { botToken: "existing-token", allowedUserId: 321 },
+        schemaVersion: 2,
+        telegram: { botToken: "existing-token", allowedUserIds: [321] },
         progressVerbosity: "all",
         logLevel: "debug",
       },
@@ -330,7 +469,9 @@ describe("promptForConfig", () => {
     })
     expect(output.text()).toContain("Current config found")
     expect(output.text()).toContain("Telegram bot token (current: set; press Enter to keep)")
-    expect(output.text()).toContain("Telegram allowed user ID (current: 321; press Enter to keep)")
+    expect(output.text()).toContain(
+      "Telegram user IDs allowed to DM this bot directly, comma-separated (optional) (current: 321; press Enter to keep)",
+    )
   })
 
   test("uses existing global config values when global setup input is blank", async () => {
@@ -351,13 +492,14 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["global", "", "", "", "", "", ""])
+    await writeAnswers(input, ["global", "", "", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers).toEqual({
       scope: "global",
       config: {
-        telegram: { botToken: "global-token", allowedUserId: 654 },
+        schemaVersion: 2,
+        telegram: { botToken: "global-token", allowedUserIds: [654] },
         progressVerbosity: "new",
         logLevel: "warn",
       },
@@ -382,10 +524,10 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "local-token", "111", "", "", "", ""])
+    await writeAnswers(input, ["", "local-token", "111", "", "", "", "", ""])
     const answers = await prompt
 
-    expect(answers.config.telegram).toEqual({ botToken: "local-token", allowedUserId: 111 })
+    expect(answers.config.telegram).toEqual({ botToken: "local-token", allowedUserIds: [111] })
     expect(output.text()).not.toContain("Current config found")
   })
 
@@ -409,6 +551,7 @@ describe("promptForConfig", () => {
       "",
       "token",
       "123",
+      "",
       "",
       "",
       "yes",
@@ -439,7 +582,7 @@ describe("promptForConfig", () => {
       },
       { input, output },
     )
-    await writeAnswers(input, ["", "token", "123", "", "", "", "yes"])
+    await writeAnswers(input, ["", "token", "123", "", "", "", "", "yes"])
     const answers = await prompt
 
     expect(answers.startup).toEqual({ enabled: true })
@@ -476,7 +619,7 @@ describe("promptForConfig", () => {
         checkFfmpeg: vi.fn(async () => ({ available: true })),
       },
     )
-    await writeAnswers(input, ["", "", "", "", "", "", "", "", ""])
+    await writeAnswers(input, ["", "", "", "", "", "", "", "", "", ""])
     const answers = await prompt
 
     expect(answers.config.voice).toEqual({
@@ -522,6 +665,7 @@ describe("promptForConfig", () => {
       "",
       "token",
       "123",
+      "",
       "",
       "",
       "yes",
@@ -579,6 +723,7 @@ describe("promptForConfig", () => {
       "123",
       "",
       "",
+      "",
       "yes",
       "",
       "",
@@ -618,7 +763,7 @@ describe("promptForConfig", () => {
         detectFfmpegInstaller: vi.fn(async () => null),
       },
     )
-    await writeAnswers(input, ["", "token", "123", "", "", "yes", "skip", ""])
+    await writeAnswers(input, ["", "token", "123", "", "", "", "yes", "skip", ""])
     const answers = await prompt
 
     expect(answers.config.voice).toBeUndefined()
@@ -644,6 +789,7 @@ describe("promptForConfig", () => {
     await pressKey(input, "\r")
     await pressKey(input, "token\n")
     await pressKey(input, "123\n")
+    await pressKey(input, "\r")
     await pressKey(input, "\x1b[A")
     await pressKey(input, "\r")
     await pressKey(input, "\r")

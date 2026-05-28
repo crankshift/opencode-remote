@@ -243,7 +243,7 @@ async function tempRoot() {
 function testConfig(configPath) {
   return {
     configPath,
-    telegram: { botToken: "token", allowedUserId: 123 },
+    telegram: { botToken: "token", allowedUserIds: [123], allowedChatIds: [] },
     opencode: {
       apiUrl: "http://localhost:4096",
       command: "opencode",

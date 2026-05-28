@@ -1,4 +1,4 @@
-export const botCommands = [
+export const publicBotCommands = [
   { command: "status", description: "Show gateway and OpenCode status" },
   { command: "new", description: "Create and select a new OpenCode session" },
   { command: "sessions", description: "List and switch OpenCode sessions" },
@@ -6,13 +6,20 @@ export const botCommands = [
   { command: "progress", description: "Set tool progress visibility" },
   { command: "voice", description: "Show or set voice mode" },
   { command: "stickers", description: "Manage saved sticker packs" },
+]
+
+export const privateBotCommands = [
+  ...publicBotCommands,
+  { command: "group", description: "Manage Telegram group behavior" },
   { command: "help", description: "Show available commands" },
 ]
+
+export const botCommands = privateBotCommands
 
 export function renderHelpText() {
   return [
     "OpenCode Remote commands:",
     "",
-    ...botCommands.map((command) => `/${command.command} - ${command.description}`),
+    ...privateBotCommands.map((command) => `/${command.command} - ${command.description}`),
   ].join("\n")
 }
