@@ -1,6 +1,8 @@
 export const CUSTOM_TRIGGER_MAX_COUNT = 20
 export const CUSTOM_TRIGGER_MAX_LENGTH = 64
 
+const WORD_CHARACTER_CLASS = "\\p{Letter}\\p{Number}_"
+
 export const DEFAULT_GROUP_SETTINGS = {
   replyPolicy: "humans",
   triggers: {
@@ -143,7 +145,16 @@ function matchesCustomTrigger(text, triggers) {
   if (!candidate) {
     return false
   }
-  return triggers.some((trigger) => candidate.includes(normalizeComparableText(trigger)))
+  return triggers.some((trigger) => {
+    const phrase = normalizeComparableText(trigger)
+    if (!phrase) {
+      return false
+    }
+    return new RegExp(
+      `(^|[^${WORD_CHARACTER_CLASS}])${escapeRegex(phrase)}($|[^${WORD_CHARACTER_CLASS}])`,
+      "u",
+    ).test(candidate)
+  })
 }
 
 function normalizeComparableText(value) {

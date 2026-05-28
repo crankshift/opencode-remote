@@ -125,6 +125,52 @@ describe("evaluateGroupMessageRouting", () => {
     ).toEqual({ route: true, trigger: "custom" })
   })
 
+  test("routes custom triggers as bounded words", () => {
+    const settings = {
+      ...DEFAULT_GROUP_SETTINGS,
+      customTriggers: ["Рес"],
+    }
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "ресурси" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: false, reason: "not_addressed" })
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "рес шось там шось там" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: true, trigger: "custom" })
+  })
+
+  test("routes custom trigger phrases as bounded words", () => {
+    const settings = {
+      ...DEFAULT_GROUP_SETTINGS,
+      customTriggers: ["codex please"],
+    }
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "codex pleased" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: false, reason: "not_addressed" })
+
+    expect(
+      evaluateGroupMessageRouting({
+        message: message({ text: "Can CODEX    please check this?" }),
+        settings,
+        botIdentity,
+      }),
+    ).toEqual({ route: true, trigger: "custom" })
+  })
+
   test("treats custom trigger phrases as plain text", () => {
     const settings = {
       ...DEFAULT_GROUP_SETTINGS,
