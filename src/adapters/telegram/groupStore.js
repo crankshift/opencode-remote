@@ -60,6 +60,9 @@ export function openTelegramGroupStore(dbPath, { Database = DatabaseSync, pathOp
     async resetSettings(chatId) {
       return resetSettings(database, chatId)
     },
+    async pruneUnallowedGroups(allowedChatIds) {
+      pruneUnallowedGroups(database, allowedChatIds)
+    },
     close() {
       database.close()
     },
@@ -123,6 +126,19 @@ export function createMemoryGroupStore({ allowedChatIds = [] } = {}) {
     async resetSettings(chatId) {
       settings.delete(chatId)
       return normalizeGroupConfig()
+    },
+    async pruneUnallowedGroups(allowedChatIds) {
+      const allowed = normalizeAllowedChatIds(allowedChatIds)
+      if (allowed.length === 0) {
+        return
+      }
+      const allowedSet = new Set(allowed)
+      for (const chatId of [...groups.keys()]) {
+        if (!allowedSet.has(chatId)) {
+          groups.delete(chatId)
+          settings.delete(chatId)
+        }
+      }
     },
     close() {},
   }
@@ -210,6 +226,18 @@ function resetSettings(database, chatId) {
     .prepare("UPDATE telegram_group SET settings_json = NULL, time_updated = ? WHERE chat_id = ?")
     .run(Date.now(), chatId)
   return normalizeGroupConfig()
+}
+
+function pruneUnallowedGroups(database, allowedChatIds) {
+  const allowed = normalizeAllowedChatIds(allowedChatIds)
+  if (allowed.length === 0) {
+    return
+  }
+
+  const placeholders = allowed.map(() => "?").join(", ")
+  database
+    .prepare(`DELETE FROM telegram_group WHERE chat_id NOT IN (${placeholders})`)
+    .run(...allowed)
 }
 
 function ensureGroup(database, chatId) {
@@ -316,4 +344,8 @@ function mergeGroupConfig(base, patch = {}) {
 function safeString(value) {
   const text = String(value ?? "").trim()
   return text || null
+}
+
+function normalizeAllowedChatIds(values) {
+  return [...new Set((Array.isArray(values) ? values : []).filter(Number.isInteger))]
 }

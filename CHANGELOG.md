@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.8.2] - 2026-05-28
+
+### Fixed
+
+- Fixed the Telegram `/group` menu to prune stale known-group metadata for groups no longer present in `telegram.allowedChatIds`. (#33)
+
 ## [0.8.1] - 2026-05-28
 
 ### Added

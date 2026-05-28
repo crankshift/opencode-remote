@@ -10,6 +10,7 @@ const GROUP_NOTICE_TEXT = "Group settings are managed in DM. Message me and run 
 export function createTelegramGroupMenu({
   store,
   memory,
+  allowedChatIds,
   noticeCooldownMs = 10 * 60 * 1000,
   now = Date.now,
 } = {}) {
@@ -24,7 +25,10 @@ export function createTelegramGroupMenu({
         return
       }
 
-      const groups = typeof store?.listGroups === "function" ? await store.listGroups() : []
+      await pruneUnallowedGroups()
+      const groups = filterAllowedGroups(
+        typeof store?.listGroups === "function" ? await store.listGroups() : [],
+      )
       if (groups.length === 0) {
         await ctx.reply("No known Telegram groups are configured for this gateway.")
         return
@@ -258,6 +262,24 @@ export function createTelegramGroupMenu({
     }
     noticeTimes.set(chatId, now())
     await ctx.reply(GROUP_NOTICE_TEXT)
+  }
+
+  async function pruneUnallowedGroups() {
+    if (!Array.isArray(allowedChatIds) || typeof store?.pruneUnallowedGroups !== "function") {
+      return
+    }
+    await store.pruneUnallowedGroups(allowedChatIds)
+  }
+
+  function filterAllowedGroups(groups) {
+    if (!Array.isArray(allowedChatIds)) {
+      return groups
+    }
+    const allowed = new Set(allowedChatIds.filter(Number.isInteger))
+    if (allowed.size === 0) {
+      return []
+    }
+    return groups.filter((group) => allowed.has(group.chatId))
   }
 }
 
