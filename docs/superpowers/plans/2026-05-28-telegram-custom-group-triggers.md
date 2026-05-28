@@ -353,7 +353,29 @@ Append this validation test:
     const menu = createTelegramGroupMenu({ store, memory: createGroupMemory() })
     const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
 
-    await menu.startCustomTriggerAddForTesting?.(123, -1001)
+    await menu.handleCommand({
+      from: { id: 123 },
+      chat: { id: 123, type: "private" },
+      message: { chat: { id: 123, type: "private" } },
+      reply,
+    })
+    const selectData = reply.mock.calls[0][1].reply_markup.inline_keyboard[0][0].callback_data
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [selectData, selectData.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+    const addButton = reply.mock.calls.at(-1)[1].reply_markup.inline_keyboard
+      .flat()
+      .find((button) => button.text === "Add custom trigger")
+    await menu.handleCallback({
+      from: { id: 123 },
+      match: [addButton.callback_data, addButton.callback_data.replace("group:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
     expect(
       await menu.handlePendingText({
         from: { id: 123 },
@@ -392,15 +414,11 @@ Add pending state near `groupTokens`:
   const pendingCustomTriggerAdds = new Map()
 ```
 
-Expose `handlePendingText` and a testing helper in the returned object:
+Expose `handlePendingText` in the returned object:
 
 ```js
     async handlePendingText(ctx) {
       return handlePendingCustomTriggerText(ctx)
-    },
-
-    async startCustomTriggerAddForTesting(userId, chatId) {
-      pendingCustomTriggerAdds.set(userId, { chatId })
     },
 ```
 
