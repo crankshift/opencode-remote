@@ -120,7 +120,7 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith("Created session New session")
   })
 
-  test("progress command reports current verbosity", async () => {
+  test("progress command opens a menu with current verbosity", async () => {
     const bot = createTelegramBot({
       token: "token",
       telegram: testTelegram(),
@@ -135,8 +135,52 @@ describe("createTelegramBot", () => {
     await bot.commands.get("progress")({ message: { text: "/progress" }, reply })
 
     expect(reply).toHaveBeenCalledWith(
-      "Tool progress is all. Use /progress off|new|all|verbose to change it.",
+      expect.stringContaining("Tool Progress"),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            [expect.objectContaining({ text: "Hide activity" })],
+            [expect.objectContaining({ text: "Show new prompts" })],
+            [expect.objectContaining({ text: "Show every update" })],
+            [expect.objectContaining({ text: "Show detailed updates" })],
+          ]),
+        }),
+      }),
     )
+  })
+
+  test("progress menu callback persists selected verbosity", async () => {
+    const controller = {
+      getProgressVerbosity: vi.fn(async () => "all"),
+      setProgressVerbosity: vi.fn(async () => ({ progressVerbosity: "off" })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("progress")({ message: { text: "/progress" }, reply })
+    const offButton = reply.mock.calls[0][1].reply_markup.inline_keyboard
+      .flat()
+      .find((button) => button.text === "Hide activity")
+    const handler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(offButton.callback_data),
+    )
+    const answerCallbackQuery = vi.fn(async () => undefined)
+
+    await handler.handler({
+      match: [offButton.callback_data, offButton.callback_data.replace("progress:", "")],
+      answerCallbackQuery,
+      reply,
+    })
+
+    expect(controller.setProgressVerbosity).toHaveBeenCalledWith("off")
+    expect(answerCallbackQuery).toHaveBeenCalledWith({ text: "Tool progress set to off" })
+    expect(reply.mock.calls.at(-1)[0]).toContain("Current: off")
   })
 
   test("progress command persists verbose verbosity", async () => {
@@ -238,6 +282,300 @@ describe("createTelegramBot", () => {
     )
   })
 
+  test("voice command opens a settings menu", async () => {
+    const voiceService = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        mode: "on",
+        captions: false,
+        voice: "en-US-AndrewNeural",
+        sttModel: "whisper-large-v3-turbo",
+        hasGroqApiKey: true,
+        ffmpegAvailable: true,
+        cacheDirectory: "/cache/voice",
+      })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("voice")({ message: { text: "/voice" }, reply })
+
+    expect(reply).toHaveBeenCalledWith(
+      expect.stringContaining("Voice Settings"),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            [expect.objectContaining({ text: "Reply Format" })],
+            [expect.objectContaining({ text: "Captions" })],
+            [expect.objectContaining({ text: "List Voices" })],
+            [expect.objectContaining({ text: "Test Voice" })],
+          ]),
+        }),
+      }),
+    )
+  })
+
+  test("voice mode menu callback changes mode without typing a command", async () => {
+    const voiceService = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        mode: "on",
+        captions: false,
+        voice: "en-US-AndrewNeural",
+        sttModel: "whisper-large-v3-turbo",
+        hasGroqApiKey: true,
+        ffmpegAvailable: true,
+        cacheDirectory: "/cache/voice",
+      })),
+      setMode: vi.fn(async (mode) => ({ enabled: mode !== "off", mode })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("voice")({ message: { text: "/voice" }, reply })
+    const modeButton = reply.mock.calls[0][1].reply_markup.inline_keyboard
+      .flat()
+      .find((button) => button.text === "Reply Format")
+    const modeHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(modeButton.callback_data),
+    )
+    await modeHandler.handler({
+      match: [modeButton.callback_data, modeButton.callback_data.replace("voice:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(reply.mock.calls.at(-1)[0]).toContain("Voice Reply Format")
+    const allButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Voice for every prompt")
+    const allHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(allButton.callback_data),
+    )
+    const answerCallbackQuery = vi.fn(async () => undefined)
+
+    await allHandler.handler({
+      match: [allButton.callback_data, allButton.callback_data.replace("voice_mode:", "")],
+      answerCallbackQuery,
+      reply,
+    })
+
+    expect(voiceService.setMode).toHaveBeenCalledWith("all")
+    expect(answerCallbackQuery).toHaveBeenCalledWith({ text: "voice for every prompt" })
+    expect(reply.mock.calls.at(-1)[0]).toContain("Reply format: voice for every prompt")
+  })
+
+  test("voice captions callback toggles captions without typing a command", async () => {
+    const voiceService = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        mode: "on",
+        captions: false,
+        voice: "en-US-AndrewNeural",
+        sttModel: "whisper-large-v3-turbo",
+        hasGroqApiKey: true,
+        ffmpegAvailable: true,
+        cacheDirectory: "/cache/voice",
+      })),
+      setCaptions: vi.fn(async (captions) => ({ captions })),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("voice")({ message: { text: "/voice" }, reply })
+    const captionsButton = reply.mock.calls[0][1].reply_markup.inline_keyboard
+      .flat()
+      .find((button) => button.text === "Captions")
+    const captionsHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(captionsButton.callback_data),
+    )
+    await captionsHandler.handler({
+      match: [captionsButton.callback_data, captionsButton.callback_data.replace("voice:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(reply.mock.calls.at(-1)[0]).toContain("Voice Captions")
+    const onButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Turn Captions On")
+    const onHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(onButton.callback_data),
+    )
+
+    await onHandler.handler({
+      match: [onButton.callback_data, onButton.callback_data.replace("voice_captions:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(voiceService.setCaptions).toHaveBeenCalledWith(true)
+    expect(reply.mock.calls.at(-1)[0]).toContain("Captions: on")
+  })
+
+  test("voice list callback opens countries, paginated voice buttons, and sets a selected voice", async () => {
+    const usVoices = Array.from({ length: 25 }, (_, index) => ({
+      ShortName: `en-US-Test${index}Neural`,
+      Locale: "en-US",
+      Gender: index % 2 === 0 ? "Male" : "Female",
+      FriendlyName: `Microsoft Test ${index} Online`,
+    }))
+    const voiceService = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        mode: "on",
+        captions: false,
+        voice: "uk-UA-OstapNeural",
+        sttModel: "whisper-large-v3-turbo",
+        hasGroqApiKey: true,
+        ffmpegAvailable: true,
+        cacheDirectory: "/cache/voice",
+      })),
+      listVoices: vi.fn(async (filters = {}) => {
+        const allVoices = [
+          {
+            ShortName: "uk-UA-OstapNeural",
+            Locale: "uk-UA",
+            Gender: "Male",
+            FriendlyName: "Microsoft Ostap Online",
+          },
+          {
+            ShortName: "en-US-AndrewNeural",
+            Locale: "en-US",
+            Gender: "Male",
+            FriendlyName: "Microsoft Andrew Online",
+          },
+          ...usVoices,
+          {
+            ShortName: "es-AR-ElenaNeural",
+            Locale: "es-AR",
+            Gender: "Female",
+            FriendlyName: "Microsoft Elena Online",
+          },
+        ]
+        const voices = filters.locale
+          ? allVoices.filter((voice) => voice.Locale.toLowerCase().endsWith(`-${filters.locale}`))
+          : allVoices
+        const pageSize = filters.pageSize ?? 20
+        const page = filters.page ?? 1
+        const totalPages = Math.max(1, Math.ceil(voices.length / pageSize))
+        const start = (page - 1) * pageSize
+        return {
+          voices: voices.slice(start, start + pageSize),
+          page,
+          pageSize,
+          totalPages,
+          total: voices.length,
+        }
+      }),
+      setVoice: vi.fn(async (shortName) => ({ ShortName: shortName })),
+    }
+    const controller = { sendPrompt: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      voiceService,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("voice")({ message: { text: "/voice" }, reply })
+    const listButton = reply.mock.calls[0][1].reply_markup.inline_keyboard
+      .flat()
+      .find((button) => button.text === "List Voices")
+    const listHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(listButton.callback_data),
+    )
+    await listHandler.handler({
+      from: { id: 123, is_bot: false },
+      chat: { id: 123, type: "private" },
+      match: [listButton.callback_data, listButton.callback_data.replace("voice:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(reply.mock.calls.at(-1)[0]).toContain("Voice Countries")
+    const countryButtons = reply.mock.calls.at(-1)[1].reply_markup.inline_keyboard.flat()
+    expect(countryButtons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(["AR - es-AR", "UA - uk-UA", "US - en-US"]),
+    )
+    const usButton = countryButtons.find((button) => button.text === "US - en-US")
+    const usHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(usButton.callback_data),
+    )
+
+    await usHandler.handler({
+      match: [usButton.callback_data, usButton.callback_data.replace("voice_country:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(voiceService.listVoices).toHaveBeenCalledWith({ locale: "us", page: 1, pageSize: 10 })
+    expect(controller.sendPrompt).not.toHaveBeenCalled()
+    expect(reply.mock.calls.at(-1)[0]).toContain("Voices for US page 1/3")
+    const voiceButtons = reply.mock.calls.at(-1)[1].reply_markup.inline_keyboard.flat()
+    expect(voiceButtons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(["en-US-AndrewNeural", "en-US-Test8Neural", "Next"]),
+    )
+
+    const nextButton = voiceButtons.find((button) => button.text === "Next")
+    const nextHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(nextButton.callback_data),
+    )
+    await nextHandler.handler({
+      match: [
+        nextButton.callback_data,
+        ...nextButton.callback_data.match(/^voice_page:([^:]+):(\d+)$/u).slice(1),
+      ],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(voiceService.listVoices).toHaveBeenCalledWith({ locale: "us", page: 2, pageSize: 10 })
+    expect(reply.mock.calls.at(-1)[0]).toContain("Voices for US page 2/3")
+
+    const pageTwoVoice = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "en-US-Test9Neural")
+    const voiceHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(pageTwoVoice.callback_data),
+    )
+    await voiceHandler.handler({
+      match: [pageTwoVoice.callback_data, pageTwoVoice.callback_data.replace("voice_select:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(voiceService.setVoice).toHaveBeenCalledWith("en-US-Test9Neural")
+    expect(reply.mock.calls.at(-1)[0]).toContain("Voice set to en-US-Test9Neural")
+  })
+
   test("voice mode commands persist mode changes", async () => {
     const voiceService = { setMode: vi.fn(async () => ({ enabled: true, mode: "all" })) }
     const bot = createTelegramBot({
@@ -253,7 +591,7 @@ describe("createTelegramBot", () => {
     await bot.commands.get("voice")({ message: { text: "/voice all" }, reply })
 
     expect(voiceService.setMode).toHaveBeenCalledWith("all")
-    expect(reply).toHaveBeenCalledWith("Voice mode set to all.")
+    expect(reply).toHaveBeenCalledWith("Voice replies set to voice for every prompt.")
   })
 
   test("voice captions command reports current setting and usage", async () => {
@@ -1707,10 +2045,23 @@ describe("createTelegramBot", () => {
       answerCallbackQuery: vi.fn(async () => undefined),
       reply: dmReply,
     })
+    const customTriggersButton = dmReply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Custom trigger phrases")
+    await groupCallback({
+      from: { id: 123, is_bot: false },
+      match: [
+        customTriggersButton.callback_data,
+        customTriggersButton.callback_data.replace("group:", ""),
+      ],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply: dmReply,
+    })
     const addButton = dmReply.mock.calls
       .at(-1)[1]
       .reply_markup.inline_keyboard.flat()
-      .find((button) => button.text === "Add custom trigger")
+      .find((button) => button.text === "Add trigger phrase")
     await groupCallback({
       from: { id: 123, is_bot: false },
       match: [addButton.callback_data, addButton.callback_data.replace("group:", "")],
@@ -2650,6 +3001,122 @@ describe("createTelegramBot", () => {
 
     expect(reply).toHaveBeenCalledWith("That sticker does not belong to a saveable sticker pack.")
     expect(await stickerStore.listPacks()).toEqual([])
+  })
+
+  test("stickers command opens a saved pack menu", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "one",
+          fileId: "file-one",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+      ],
+    })
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      stickerStore,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("stickers")({ message: { text: "/stickers" }, reply })
+
+    expect(reply).toHaveBeenCalledWith(
+      expect.stringContaining("Sticker Packs"),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            [expect.objectContaining({ text: "Saved Packs" })],
+            [expect.objectContaining({ text: "How to Save" })],
+          ]),
+        }),
+      }),
+    )
+  })
+
+  test("stickers saved packs callback opens pack actions and forgets by button", async () => {
+    const stickerStore = createMemoryStickerStore()
+    await stickerStore.savePack({
+      name: "funny_cats",
+      stickers: [
+        {
+          fileUniqueId: "one",
+          fileId: "file-one",
+          packName: "funny_cats",
+          emoji: "😹",
+          kind: "static",
+        },
+      ],
+    })
+    const cleanupStickerFiles = vi.fn(async () => undefined)
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      stickerStore,
+      cleanupStickerFiles,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (_text, options) => ({ reply_markup: options?.reply_markup }))
+
+    await bot.commands.get("stickers")({ message: { text: "/stickers" }, reply })
+    const savedPacksButton = reply.mock.calls[0][1].reply_markup.inline_keyboard
+      .flat()
+      .find((button) => button.text === "Saved Packs")
+    const savedPacksHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(savedPacksButton.callback_data),
+    )
+    await savedPacksHandler.handler({
+      match: [
+        savedPacksButton.callback_data,
+        savedPacksButton.callback_data.replace("stickers:", ""),
+      ],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(reply.mock.calls.at(-1)[0]).toContain("Saved Sticker Packs")
+    const packButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "funny_cats")
+    const packHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(packButton.callback_data),
+    )
+    await packHandler.handler({
+      match: [packButton.callback_data, packButton.callback_data.replace("sticker_pack:", "")],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(reply.mock.calls.at(-1)[0]).toContain("funny_cats")
+    const forgetButton = reply.mock.calls
+      .at(-1)[1]
+      .reply_markup.inline_keyboard.flat()
+      .find((button) => button.text === "Forget Pack")
+    const forgetHandler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test(forgetButton.callback_data),
+    )
+    await forgetHandler.handler({
+      match: [
+        forgetButton.callback_data,
+        forgetButton.callback_data.replace("sticker_forget:", ""),
+      ],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(await stickerStore.listPacks()).toEqual([])
+    expect(reply.mock.calls.at(-1)[0]).toContain("Forgot sticker pack funny_cats")
   })
 
   test("stickers list and forget manage saved packs", async () => {

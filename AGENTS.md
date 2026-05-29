@@ -39,6 +39,7 @@ AI operating guide for `opencode-remote`. Keep this file short: preserve critica
 - `src/core/state/` stores messenger-neutral gateway state only. Never persist secrets.
 - `src/core/voice/` owns voice orchestration and provider wrappers. Keep Groq, Edge TTS, and `ffmpeg` details out of Telegram command wiring.
 - `src/adapters/telegram/` owns grammY types, Telegram IDs, callbacks, reactions, media downloads, and platform UX.
+- Telegram command menu UX rules live in `docs/adapters/telegram/commands/MENU.md`; read it before changing command menus or callback flows.
 - Do not leak Telegram types into core service signatures.
 - Do not leak SDK-specific response shapes into adapters unless wrapped by core DTOs.
 - Command definitions must stay centralized in `src/core/commands/commands.js`; bot registration, help text, docs, and tests should use that source.
@@ -75,6 +76,7 @@ Add modules only when they reduce real complexity. Prefer the smallest correct c
 
 - Authorization middleware should ignore unauthorized users and avoid leaking project state.
 - Group routing, known group metadata, DM configuration menus, and ephemeral group memory belong in `src/adapters/telegram/`; do not move Telegram chat IDs, topics, or inline menus into core.
+- Telegram command menus should use the hybrid pattern from `docs/adapters/telegram/commands/MENU.md`: bare commands open understandable menus, direct commands keep working, complex settings use grouped submenus, and free-text input is explicit/cancellable.
 - Reaction API calls are best-effort warnings and must not block prompt delivery.
 - `replyAndRemember` stores bot replies for reaction feedback. Use it for bot messages that should be remembered.
 - Inline callback data must use short bounded tokens, not raw long session IDs or permission IDs.

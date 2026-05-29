@@ -174,12 +174,14 @@ The bot currently supports:
 /new       Create and select a new OpenCode session
 /sessions  List OpenCode sessions and select one with inline buttons
 /stop      Request stop for the active OpenCode session
-/progress  Show or set tool progress visibility: off, new, all, verbose
-/voice     Show or set voice mode
-/stickers  Manage saved sticker packs
-/group     Manage Telegram group behavior in DM
+/progress  Open a tool-progress menu; direct modes still work
+/voice     Open a voice settings menu; direct subcommands still work
+/stickers  Open a saved sticker-pack menu; direct subcommands still work
+/group     Manage Telegram group behavior in a DM menu
 /help      Show available commands
 ```
+
+Bare configuration commands open inline-button menus for discoverability. Menu buttons open submenus, change settings, run actions, or start guided text input instead of only telling you which command to type. Direct command forms still work for fast use, including `/progress verbose`, `/voice list ua`, `/voice set <voiceShortName>`, `/stickers save`, `/stickers list`, and `/stickers forget <pack_name>`.
 
 Any non-command text message from an authorized private Telegram user is sent to OpenCode as a prompt. In allowed group chats, messages are sent to OpenCode only when group routing settings identify them as addressed to the bot. Defaults are conservative: human senders can trigger replies by replying to the bot, mentioning the bot username, or starting text with the bot name. Per-group custom trigger phrases can also route text, captions, and voice transcripts when the phrase appears anywhere in the message. Other bots are remembered as passive context by default but do not trigger replies unless group settings are changed in the DM `/group` menu. If no active session is selected, the gateway creates one automatically.
 
@@ -203,7 +205,7 @@ Sticker pack commands:
 /stickers forget <pack_name>
 ```
 
-Use `/stickers save` as a reply to a sticker to save that sticker pack for future sticker replies. `/stickers list` shows saved packs. `/stickers forget <pack_name>` removes a saved pack and its cached sticker previews. Incoming stickers from unsaved packs may also show a `Save pack` button. Once packs are saved, asking the bot to send a sticker lets OpenCode request one through the gateway without exposing Telegram file identifiers to the model. Saved sticker data is non-secret Telegram file metadata; bot tokens, user IDs, chat IDs, and raw download URLs are not persisted.
+Use `/stickers` to open the saved-pack menu. Use `/stickers save` as a reply to a sticker to save that sticker pack for future sticker replies. `/stickers list` shows saved packs. `/stickers forget <pack_name>` removes a saved pack and its cached sticker previews. Incoming stickers from unsaved packs may also show a `Save pack` button. Once packs are saved, asking the bot to send a sticker lets OpenCode request one through the gateway without exposing Telegram file identifiers to the model. Saved sticker data is non-secret Telegram file metadata; bot tokens, user IDs, chat IDs, and raw download URLs are not persisted.
 
 Voice commands:
 
@@ -218,7 +220,7 @@ Voice commands:
 /voice test
 ```
 
-`/voice list` requires a short country code such as `ua` or `us`, or a full locale such as `uk-UA`; page is optional. Short codes match Edge TTS country/region codes first and fall back to language codes when no matching region exists. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only by default; `/voice captions on` includes short assistant text as the voice caption and sends longer assistant text as a companion text message. If speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
+Use `/voice` to open the voice settings menu. The menu lists voice countries with pagination, then shows paginated clickable voice buttons for the selected country. Direct `/voice list` still requires a short country code such as `ua` or `us`, or a full locale such as `uk-UA`; page is optional. Short codes match Edge TTS country/region codes first and fall back to language codes when no matching region exists. `/voice on` transcribes Telegram voice messages with Groq Whisper and replies with a voice note only for voice prompts. `/voice all` sends voice notes for text, photo, and voice prompts. Successful voice-note replies are voice-only by default; `/voice captions on` includes short assistant text as the voice caption and sends longer assistant text as a companion text message. If speech generation or sending fails, the bot falls back to the text reply. Telegram voice notes are sent as OGG Opus files converted with `ffmpeg`.
 
 ## Troubleshooting
 

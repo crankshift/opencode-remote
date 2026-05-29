@@ -60,7 +60,32 @@ export function createTelegramGroupMenu({
       if (selection.action === "reply") {
         await store.updateSettings(selection.chatId, { replyPolicy: selection.replyPolicy })
         await ctx.answerCallbackQuery({ text: "Reply policy updated" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithReplyBehaviorMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "open_reply") {
+        await ctx.answerCallbackQuery({ text: "Reply behavior" })
+        await replyWithReplyBehaviorMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "open_triggers") {
+        await ctx.answerCallbackQuery({ text: "Triggers" })
+        await replyWithTriggersMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "open_custom_triggers") {
+        await ctx.answerCallbackQuery({ text: "Custom triggers" })
+        await replyWithCustomTriggersMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "open_memory") {
+        await ctx.answerCallbackQuery({ text: "Memory and context" })
+        await replyWithMemoryContextMenu(ctx, selection.chatId, selection.userId)
+        return
+      }
+      if (selection.action === "back_hub") {
+        await ctx.answerCallbackQuery({ text: "Group settings" })
+        await replyWithGroupHub(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "toggle_trigger") {
@@ -69,7 +94,7 @@ export function createTelegramGroupMenu({
           triggers: { [selection.trigger]: !settings.triggers[selection.trigger] },
         })
         await ctx.answerCallbackQuery({ text: "Trigger updated" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithTriggersMenu(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "toggle_memory") {
@@ -78,32 +103,40 @@ export function createTelegramGroupMenu({
           memory: { enabled: !settings.memory.enabled },
         })
         await ctx.answerCallbackQuery({ text: "Memory updated" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithMemoryContextMenu(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "context_messages") {
         await store.updateSettings(selection.chatId, { context: { messages: selection.messages } })
         await ctx.answerCallbackQuery({ text: "Context messages updated" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithMemoryContextMenu(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "context_chars") {
         await store.updateSettings(selection.chatId, { context: { chars: selection.chars } })
         await ctx.answerCallbackQuery({ text: "Context chars updated" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithMemoryContextMenu(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "clear_memory") {
         memory?.clearChat?.(selection.chatId)
         await ctx.answerCallbackQuery({ text: "Group memory cleared" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithGroupHub(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "add_custom_trigger") {
         pendingCustomTriggerAdds.set(selection.userId, { chatId: selection.chatId })
         await ctx.answerCallbackQuery({ text: "Send trigger phrase" })
         await ctx.reply(
-          `Send the custom trigger phrase for this group. It can be up to ${CUSTOM_TRIGGER_MAX_LENGTH} characters. Send /cancel to stop.`,
+          [
+            "Add custom trigger",
+            "",
+            "Send the phrase people can type in this group to route a message to OpenCode.",
+            `Max length: ${CUSTOM_TRIGGER_MAX_LENGTH} characters.`,
+            "Examples: codex please, remote",
+            "",
+            "Send /cancel to stop.",
+          ].join("\n"),
         )
         return
       }
@@ -121,70 +154,163 @@ export function createTelegramGroupMenu({
           ),
         })
         await ctx.answerCallbackQuery({ text: "Custom trigger removed" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithCustomTriggersMenu(ctx, selection.chatId, selection.userId)
         return
       }
       if (selection.action === "clear_custom_triggers") {
         await store.updateSettings(selection.chatId, { customTriggers: [] })
         await ctx.answerCallbackQuery({ text: "Custom triggers cleared" })
-        await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+        await replyWithCustomTriggersMenu(ctx, selection.chatId, selection.userId)
         return
       }
 
       await ctx.answerCallbackQuery({ text: "Group selected" })
-      await replyWithSettingsMenu(ctx, selection.chatId, selection.userId)
+      await replyWithGroupHub(ctx, selection.chatId, selection.userId)
     },
   }
 
-  async function replyWithSettingsMenu(ctx, chatId, userId) {
+  async function replyWithGroupHub(ctx, chatId, userId) {
     const settings = await store.getSettings(chatId)
-    const groups = typeof store?.listGroups === "function" ? await store.listGroups() : []
-    const group = groups.find((candidate) => candidate.chatId === chatId)
     const keyboard = new InlineKeyboard()
-    for (const replyPolicy of ["off", "humans", "bots", "all"]) {
-      const token = groupTokens.add({ action: "reply", chatId, userId, replyPolicy })
-      keyboard.text(`Reply: ${replyPolicy}`, `group:${token}`).row()
+    keyboard
+      .text(
+        "Who the bot answers",
+        `group:${groupTokens.add({ action: "open_reply", chatId, userId })}`,
+      )
+      .row()
+    keyboard
+      .text(
+        "What triggers replies",
+        `group:${groupTokens.add({ action: "open_triggers", chatId, userId })}`,
+      )
+      .row()
+    keyboard
+      .text(
+        "Custom trigger phrases",
+        `group:${groupTokens.add({ action: "open_custom_triggers", chatId, userId })}`,
+      )
+      .row()
+    keyboard
+      .text(
+        "Temporary memory",
+        `group:${groupTokens.add({ action: "open_memory", chatId, userId })}`,
+      )
+      .row()
+    keyboard.text(
+      "Clear temporary memory",
+      `group:${groupTokens.add({ action: "clear_memory", chatId, userId })}`,
+    )
+    await ctx.reply(formatGroupHub(await groupTitle(chatId), settings), {
+      reply_markup: keyboard,
+    })
+  }
+
+  async function replyWithReplyBehaviorMenu(ctx, chatId, userId) {
+    const settings = await store.getSettings(chatId)
+    const keyboard = new InlineKeyboard()
+    for (const [replyPolicy, label] of [
+      ["off", "Do not answer group messages"],
+      ["humans", "Answer humans only"],
+      ["bots", "Answer bots only"],
+      ["all", "Answer everyone"],
+    ]) {
+      keyboard
+        .text(label, `group:${groupTokens.add({ action: "reply", chatId, userId, replyPolicy })}`)
+        .row()
     }
+    keyboard.text("Back", `group:${groupTokens.add({ action: "back_hub", chatId, userId })}`)
+    await ctx.reply(
+      [
+        `${await groupTitle(chatId)} reply behavior`,
+        "Who should the bot answer in this group?",
+        `Current: ${settings.replyPolicy}`,
+      ].join("\n"),
+      { reply_markup: keyboard },
+    )
+  }
+
+  async function replyWithTriggersMenu(ctx, chatId, userId) {
+    const settings = await store.getSettings(chatId)
+    const keyboard = new InlineKeyboard()
     for (const trigger of ["reply", "mention", "namePrefix", "nameAnywhere"]) {
+      const enabled = Boolean(settings.triggers[trigger])
+      const action = enabled ? "Disable" : "Enable"
       const token = groupTokens.add({ action: "toggle_trigger", chatId, userId, trigger })
+      keyboard.text(`${action} ${formatTriggerLabel(trigger)}`, `group:${token}`).row()
+    }
+    keyboard.text("Back", `group:${groupTokens.add({ action: "back_hub", chatId, userId })}`)
+    await ctx.reply(
+      [
+        `${await groupTitle(chatId)} triggers`,
+        "Choose what makes a group message address the bot.",
+        `Current: ${formatEnabledTriggers(settings.triggers)}`,
+      ].join("\n"),
+      { reply_markup: keyboard },
+    )
+  }
+
+  async function replyWithCustomTriggersMenu(ctx, chatId, userId) {
+    const settings = await store.getSettings(chatId)
+    const keyboard = new InlineKeyboard()
+    keyboard
+      .text(
+        "Add trigger phrase",
+        `group:${groupTokens.add({ action: "add_custom_trigger", chatId, userId })}`,
+      )
+      .row()
+    if (settings.customTriggers.length > 0) {
       keyboard
         .text(
-          `Trigger ${formatTriggerLabel(trigger)}: ${settings.triggers[trigger] ? "on" : "off"}`,
-          `group:${token}`,
+          "Remove trigger phrase",
+          `group:${groupTokens.add({ action: "remove_custom_trigger", chatId, userId })}`,
+        )
+        .row()
+      keyboard
+        .text(
+          "Remove all trigger phrases",
+          `group:${groupTokens.add({ action: "clear_custom_triggers", chatId, userId })}`,
         )
         .row()
     }
-    const addTriggerToken = groupTokens.add({ action: "add_custom_trigger", chatId, userId })
-    keyboard.text("Add custom trigger", `group:${addTriggerToken}`).row()
-    if (settings.customTriggers.length > 0) {
-      const removeTriggerToken = groupTokens.add({
-        action: "remove_custom_trigger",
-        chatId,
-        userId,
-      })
-      keyboard.text("Remove custom trigger", `group:${removeTriggerToken}`).row()
-      const clearTriggerToken = groupTokens.add({
-        action: "clear_custom_triggers",
-        chatId,
-        userId,
-      })
-      keyboard.text("Clear custom triggers", `group:${clearTriggerToken}`).row()
-    }
-    const memoryToken = groupTokens.add({ action: "toggle_memory", chatId, userId })
-    keyboard.text(`Memory: ${settings.memory.enabled ? "off" : "on"}`, `group:${memoryToken}`).row()
+    keyboard.text("Back", `group:${groupTokens.add({ action: "back_hub", chatId, userId })}`)
+    await ctx.reply(
+      [
+        `${await groupTitle(chatId)} custom triggers`,
+        "Custom trigger phrases route group messages to OpenCode when they appear as bounded words or phrases.",
+        `Configured: ${formatCustomTriggers(settings.customTriggers)}`,
+        `Remaining: ${Math.max(0, CUSTOM_TRIGGER_MAX_COUNT - settings.customTriggers.length)} phrases`,
+      ].join("\n"),
+      { reply_markup: keyboard },
+    )
+  }
+
+  async function replyWithMemoryContextMenu(ctx, chatId, userId) {
+    const settings = await store.getSettings(chatId)
+    const keyboard = new InlineKeyboard()
+    keyboard
+      .text(
+        settings.memory.enabled ? "Disable memory" : "Enable memory",
+        `group:${groupTokens.add({ action: "toggle_memory", chatId, userId })}`,
+      )
+      .row()
     for (const messages of [10, 30, 50]) {
       const token = groupTokens.add({ action: "context_messages", chatId, userId, messages })
-      keyboard.text(`Context messages: ${messages}`, `group:${token}`).row()
+      keyboard.text(`Keep last ${messages} messages`, `group:${token}`).row()
     }
     for (const chars of [4_000, 12_000, 24_000]) {
       const token = groupTokens.add({ action: "context_chars", chatId, userId, chars })
-      keyboard.text(`Context chars: ${formatChars(chars)}`, `group:${token}`).row()
+      keyboard.text(`Use ${formatChars(chars)} chars`, `group:${token}`).row()
     }
-    const clearToken = groupTokens.add({ action: "clear_memory", chatId, userId })
-    keyboard.text("Clear memory", `group:${clearToken}`)
-    await ctx.reply(formatGroupSettings(group?.title ?? `Group ${chatId}`, settings), {
-      reply_markup: keyboard,
-    })
+    keyboard.text("Back", `group:${groupTokens.add({ action: "back_hub", chatId, userId })}`)
+    await ctx.reply(
+      [
+        `${await groupTitle(chatId)} memory and context`,
+        "Memory is temporary and clears on restart or session changes.",
+        `Memory: ${settings.memory.enabled ? "on" : "off"}`,
+        `Context: ${settings.context.messages} messages, ${settings.context.chars} chars`,
+      ].join("\n"),
+      { reply_markup: keyboard },
+    )
   }
 
   async function replyWithCustomTriggerRemoveMenu(ctx, chatId, userId) {
@@ -250,7 +376,7 @@ export function createTelegramGroupMenu({
       customTriggers: [...settings.customTriggers, phrase],
     })
     await ctx.reply(`Added custom trigger: ${phrase}`)
-    await replyWithSettingsMenu(ctx, pending.chatId, userId)
+    await replyWithCustomTriggersMenu(ctx, pending.chatId, userId)
     return true
   }
 
@@ -262,6 +388,11 @@ export function createTelegramGroupMenu({
     }
     noticeTimes.set(chatId, now())
     await ctx.reply(GROUP_NOTICE_TEXT)
+  }
+
+  async function groupTitle(chatId) {
+    const groups = typeof store?.listGroups === "function" ? await store.listGroups() : []
+    return groups.find((candidate) => candidate.chatId === chatId)?.title ?? `Group ${chatId}`
   }
 
   async function pruneUnallowedGroups() {
@@ -288,10 +419,10 @@ function isPrivateChat(ctx) {
   return chatType === "private"
 }
 
-function formatGroupSettings(groupTitle, settings) {
+function formatGroupHub(groupTitle, settings) {
   return [
-    `${groupTitle} settings:`,
-    `Reply policy: ${settings.replyPolicy}`,
+    `${groupTitle} settings`,
+    `Reply behavior: ${settings.replyPolicy}`,
     `Triggers: ${formatEnabledTriggers(settings.triggers)}`,
     `Custom triggers: ${formatCustomTriggers(settings.customTriggers)}`,
     `Memory: ${settings.memory.enabled ? "on" : "off"}`,
@@ -315,6 +446,9 @@ function formatEnabledTriggers(triggers) {
 }
 
 function formatTriggerLabel(trigger) {
+  if (trigger === "mention") {
+    return "@mention"
+  }
   return trigger.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)
 }
 

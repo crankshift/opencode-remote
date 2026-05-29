@@ -7,6 +7,7 @@ coverage/
 dist/
 logs/
 node_modules/
+.superpowers/
 *.log
 *.pid
 *.tmp

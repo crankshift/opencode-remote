@@ -4,6 +4,16 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.9.0] - 2026-05-29
+
+### Added
+
+- Added real Telegram command menus for `/progress`, `/voice`, `/stickers`, and `/group`, including actionable callbacks, grouped settings, guided text input, and paginated clickable voice selection. (#27)
+
+### Changed
+
+- Changed Telegram menu button labels to describe user-visible outcomes instead of internal setting names. (#27)
+
 ## [0.8.2] - 2026-05-28
 
 ### Fixed
