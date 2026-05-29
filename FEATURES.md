@@ -28,10 +28,11 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/new` creates and selects a new OpenCode session.
 - `/sessions` lists recent OpenCode sessions and lets the user switch with inline buttons.
 - `/stop` requests abort for the active OpenCode session.
-- `/progress` shows or sets private-chat prompt activity visibility: `off`, `new`, `all`, or `verbose`.
-- `/voice` shows and controls voice mode, toggles voice captions, lists voices by required short country/locale filter, sets the active Edge TTS voice, and sends a test voice note.
-- `/stickers` saves, lists, and forgets sticker packs for future sticker replies.
-- `/group` opens a private-chat management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
+- `/progress` opens a private-chat prompt activity visibility menu and still accepts direct `off`, `new`, `all`, or `verbose` modes.
+- `/voice` opens a voice settings menu with mode, captions, paginated country selection, paginated clickable voice selection, and test voice actions. It still accepts direct commands to show status, set mode, toggle captions, list voices by required short country/locale filter, set the active Edge TTS voice, and send a test voice note.
+- `/stickers` opens a saved-pack menu and still accepts direct commands to save, list, and forget sticker packs for future sticker replies.
+- Telegram command menu buttons perform real actions, open submenus, or start guided text input instead of only returning slash-command usage text.
+- `/group` opens a private-chat grouped management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
 - Per-group custom trigger phrases are managed from the DM `/group` menu.
 - `/help` shows the available bot commands.
 - The Telegram slash-command menu is refreshed on gateway startup.
@@ -70,9 +71,9 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Sticker visuals are cached under app-data cache storage and validated with `file_unique_id`, kind, dimensions, file size, and converter version.
 - Cached sticker visuals can be summarized into short safe descriptions for the saved-sticker catalog used by future sticker replies.
 
-## Voice Mode
+## Voice Replies
 
-- Voice mode is disabled by default.
+- Voice replies are disabled by default, so Telegram replies are text-only until enabled.
 - Voice captions are disabled by default and can be enabled with `/voice captions on`.
 - Groq Whisper uses `whisper-large-v3-turbo` by default for transcription.
 - `/voice list <countryCode|locale> [page]` pages Edge TTS voices for a required country code such as `ua` or `us`, or a full locale such as `uk-UA`.
