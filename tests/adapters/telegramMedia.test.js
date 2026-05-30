@@ -53,6 +53,7 @@ describe("telegram media helpers", () => {
       ok: true,
       arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
     }))
+    const logger = { debug: vi.fn() }
 
     try {
       const attachment = await downloadTelegramPhoto({
@@ -61,6 +62,7 @@ describe("telegram media helpers", () => {
         photo: { file_id: "file-1" },
         directory,
         fetchFn,
+        logger,
       })
 
       expect(api.getFile).toHaveBeenCalledWith("file-1")
@@ -70,6 +72,12 @@ describe("telegram media helpers", () => {
       expect(attachment.mime).toBe("image/jpeg")
       expect(attachment.url).toMatch(/^file:\/\//u)
       expect(attachment.url).not.toContain("secret-token")
+      expect(logger.debug).toHaveBeenCalledWith(
+        { fileSize: null, mime: "image/jpeg" },
+        "Telegram photo downloaded",
+      )
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("secret-token")
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain(directory)
       await expect(readFile(fileURLToPath(attachment.url))).resolves.toEqual(Buffer.from([1, 2, 3]))
     } finally {
       await rm(directory, { recursive: true, force: true })

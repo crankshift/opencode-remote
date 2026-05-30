@@ -21,16 +21,27 @@ export async function ensureOpenCodeServer({
   waitMs = 500,
   maxAttempts = 120,
   reachabilityTimeoutMs = 5000,
+  logger,
 }) {
   if (await checkReachability(apiUrl, isReachable, reachabilityTimeoutMs)) {
+    logger?.debug?.(
+      { autoStart: Boolean(autoStart), serverStarted: false },
+      "OpenCode server already reachable",
+    )
     return { started: false, stop: async () => {} }
   }
 
   if (!autoStart) {
+    logger?.debug?.({ autoStart: false }, "OpenCode server autostart disabled")
     throw new Error(`OpenCode server is not reachable at ${apiUrl}`)
   }
 
-  const child = processFactory(command, buildServeArgs(apiUrl), {
+  const serveArgs = buildServeArgs(apiUrl)
+  logger?.debug?.(
+    { autoStart: true, hasCommand: Boolean(command), portConfigured: serveArgs.includes("--port") },
+    "Starting OpenCode server",
+  )
+  const child = processFactory(command, serveArgs, {
     cwd: workdir,
     reject: false,
     stdio: "pipe",
@@ -47,9 +58,11 @@ export async function ensureOpenCodeServer({
     if (
       await checkReachability(apiUrl, isReachable, Math.min(reachabilityTimeoutMs, remainingMs))
     ) {
+      logger?.debug?.({ serverStarted: true }, "OpenCode server became reachable")
       return {
         started: true,
         stop: async () => {
+          logger?.debug?.({ serverStarted: true }, "Stopping owned OpenCode server")
           if (typeof child.kill === "function") {
             child.kill("SIGTERM")
           }
@@ -61,6 +74,7 @@ export async function ensureOpenCodeServer({
   if (typeof child.kill === "function") {
     child.kill("SIGTERM")
   }
+  logger?.debug?.({ serverStarted: false }, "OpenCode server startup timed out")
   throw new Error(`OpenCode server did not become reachable at ${apiUrl}`)
 }
 

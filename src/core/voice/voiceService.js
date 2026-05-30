@@ -19,6 +19,7 @@ export function createVoiceService({
   checkFfmpeg: checkFfmpegDependency = checkFfmpeg,
   assertFfmpeg = assertFfmpegAvailable,
   saveConfig = async () => undefined,
+  logger,
 } = {}) {
   let voiceConfig = normalizeVoiceConfig(config)
 
@@ -56,11 +57,14 @@ export function createVoiceService({
       if (!voiceConfig.enabled || voiceConfig.mode === "off") {
         throw new Error("Voice mode is disabled.")
       }
-      return transcribe({
+      logger?.debug?.({ model: voiceConfig.sttModel }, "Voice transcription starting")
+      const transcript = await transcribe({
         filePath,
         apiKey: voiceConfig.groqApiKey,
         model: voiceConfig.sttModel,
       })
+      logger?.debug?.({ hasTranscript: Boolean(transcript) }, "Voice transcription completed")
+      return transcript
     },
 
     async listVoices(filters = {}) {
@@ -99,12 +103,14 @@ export function createVoiceService({
       const id = createId()
       const mp3Path = join(cacheDirectory, `${id}.mp3`)
       const oggPath = join(cacheDirectory, `${id}.ogg`)
+      logger?.debug?.({ voice: voiceConfig.voice }, "Voice synthesis starting")
       await synthesizeMp3({
         text,
         voice: voiceConfig.voice,
         outputPath: mp3Path,
       })
       const result = await convertToOgg({ inputPath: mp3Path, outputPath: oggPath })
+      logger?.debug?.({ converted: true }, "Voice synthesis completed")
       return { filePath: result.outputPath }
     },
   }

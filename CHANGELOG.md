@@ -4,6 +4,10 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- Added comprehensive safe debug logging across runtime startup, OpenCode server ownership, gateway session and permission lifecycle, Telegram prompt routing, media, voice, sticker, and state-store milestones. (#30)
+
 ## [0.9.0] - 2026-05-29
 
 ### Added

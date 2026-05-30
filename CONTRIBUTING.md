@@ -26,6 +26,7 @@ If you are changing architecture, OpenCode integration, Telegram behavior, confi
 - Prefer the smallest correct change over speculative abstractions.
 - Add or update tests for behavior changes.
 - Update public docs when user-visible behavior changes.
+- Add safe structured debug logs for new features when behavior has meaningful runtime decisions, external calls, cleanup, or failure modes.
 - Keep command definitions centralized in `src/core/commands/commands.js`.
 - Keep messenger-neutral logic out of Telegram adapter code and Telegram-specific UX out of core code.
 - Do not add new runtime services, HTTP frameworks, adapters, or provider configuration unless the contribution is explicitly about that feature.

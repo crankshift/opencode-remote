@@ -146,7 +146,7 @@ Group behavior is managed from a private DM with the bot using `/group`. The DM 
 
 `voice` controls optional Telegram voice input and spoken replies. `mode="on"` sends voice-note replies only after voice prompts, `mode="all"` sends voice-note replies after text, photo, and voice prompts, and `mode="off"` disables voice. By default, successful voice-note replies are voice-only. Set `voice.captions=true` or use `/voice captions on` to include short assistant text as the voice caption, or send longer assistant text as a companion text message. If speech generation or sending fails, the bot falls back to text once. Voice mode requires `voice.groqApiKey` and local `ffmpeg` when enabled.
 
-`logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`.
+`logLevel` controls structured log verbosity. Supported values are `fatal`, `error`, `warn`, `info`, `debug`, `trace`, and `silent`. Use `debug` when diagnosing routing, prompt delivery, OpenCode startup, permission, media, voice, sticker, or state issues. Debug logs are structured and intentionally use safe diagnostic metadata such as message kinds, chat types, booleans, counts, modes, and lifecycle stages instead of message text, transcripts, bot tokens, raw Telegram IDs, raw provider payloads, local file paths, or API keys.
 
 Set individual config values from the CLI:
 

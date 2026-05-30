@@ -12,16 +12,26 @@ export function createGatewayController({
   async function getActiveSessionId() {
     const settings = await store.read()
     if (settings.activeSessionId) {
+      logger?.debug?.({ hasActiveSession: true }, "Using active OpenCode session")
       return settings.activeSessionId
     }
+    logger?.debug?.({ hasActiveSession: false }, "No active OpenCode session selected")
     const session = await createSession()
     return session.id
   }
 
   async function createSession(options = {}) {
+    logger?.debug?.(
+      {
+        hasAdditionalContext: Boolean(options.context),
+        hasGatewayContext: Boolean(gatewayContext),
+      },
+      "Creating OpenCode session",
+    )
     const session = await opencode.createSession()
     await store.write({ activeSessionId: session.id })
     await primeSession(session.id, options.context)
+    logger?.debug?.({ hasAdditionalContext: Boolean(options.context) }, "OpenCode session selected")
     return session
   }
 
@@ -76,11 +86,20 @@ export function createGatewayController({
 
     async selectSession(sessionId) {
       await store.write({ activeSessionId: sessionId })
+      logger?.debug?.({ selected: true }, "OpenCode session selected")
       return { activeSessionId: sessionId }
     },
 
     async sendPrompt(prompt, options) {
       const sessionId = await getActiveSessionId()
+      logger?.debug?.(
+        {
+          hasOptions: options !== undefined,
+          hasProgressHandler: typeof options?.onProgress === "function",
+          promptKind: typeof prompt,
+        },
+        "Sending prompt to OpenCode",
+      )
       if (options === undefined) {
         return opencode.sendPrompt(sessionId, prompt)
       }
@@ -88,15 +107,19 @@ export function createGatewayController({
     },
 
     async respondToPermission(sessionId, permissionId, decision) {
+      logger?.debug?.({ decision }, "Responding to OpenCode permission request")
       return opencode.respondToPermission(sessionId, permissionId, decision)
     },
 
     async stop() {
       const settings = await store.read()
       if (!settings.activeSessionId) {
+        logger?.debug?.({ hasActiveSession: false }, "No active OpenCode session to stop")
         return { stopped: false, reason: "no_active_session" }
       }
+      logger?.debug?.({ hasActiveSession: true }, "Stopping active OpenCode session")
       const result = await opencode.stopSession(settings.activeSessionId)
+      logger?.debug?.({ stopped: true }, "OpenCode stop requested")
       return { stopped: true, result }
     },
   }

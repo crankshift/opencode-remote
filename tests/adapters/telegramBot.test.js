@@ -1203,8 +1203,7 @@ describe("createTelegramBot", () => {
     )
     expect(reply).toHaveBeenCalledWith("answer")
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
-    expect(logger.debug).toHaveBeenNthCalledWith(
-      1,
+    expect(logger.debug).toHaveBeenCalledWith(
       {
         chatType: "unknown",
         hasThread: false,
@@ -1217,8 +1216,7 @@ describe("createTelegramBot", () => {
       },
       "Telegram message reaction updated",
     )
-    expect(logger.debug).toHaveBeenNthCalledWith(
-      2,
+    expect(logger.debug).toHaveBeenCalledWith(
       {
         chatType: "unknown",
         hasThread: false,
@@ -1231,6 +1229,52 @@ describe("createTelegramBot", () => {
       },
       "Telegram message reaction updated",
     )
+  })
+
+  test("text prompt lifecycle logs safe metadata", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "answer"),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger,
+      botFactory: FakeBot,
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "private prompt text",
+        chat: { id: 456, type: "private" },
+        from: { id: 123, is_bot: false, first_name: "Authorized" },
+      },
+      chat: { id: 456, type: "private" },
+      api: { sendChatAction: vi.fn(async () => undefined), setMessageReaction: vi.fn() },
+      reply: vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "answer" })),
+    })
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatType: "private",
+        isGroup: false,
+        messageKind: "text",
+        promptStage: "received",
+        senderKind: "human",
+      }),
+      "Telegram prompt lifecycle",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ messageKind: "text", promptStage: "opencode_completed" }),
+      "Telegram prompt lifecycle",
+    )
+    for (const [metadata] of logger.debug.mock.calls) {
+      expect(JSON.stringify(metadata)).not.toContain("private prompt text")
+      expect(metadata).not.toHaveProperty("chatId")
+      expect(metadata).not.toHaveProperty("userId")
+    }
   })
 
   test("forwarded text prompts include forwarded author context", async () => {
@@ -1614,11 +1658,12 @@ describe("createTelegramBot", () => {
       }),
       respondToPermission: vi.fn(async () => true),
     }
+    const logger = { warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
     const bot = createTelegramBot({
       token: "token",
       telegram: testTelegram(),
       controller,
-      logger: { warn: vi.fn(), error: vi.fn() },
+      logger,
       botFactory: FakeBot,
     })
     const reply = vi.fn(async (text, options) => {
@@ -1646,6 +1691,18 @@ describe("createTelegramBot", () => {
     })
 
     expect(controller.respondToPermission).toHaveBeenCalledWith("ses_1", "perm_1", "always")
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasDescription: false, hasTool: false },
+      "Telegram permission request sent",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { decision: "always" },
+      "Telegram permission decision selected",
+    )
+    for (const [metadata] of logger.debug.mock.calls) {
+      expect(metadata).not.toHaveProperty("sessionId")
+      expect(metadata).not.toHaveProperty("permissionId")
+    }
   })
 
   test("text prompts fall back to text when voice reply fails", async () => {
@@ -1902,8 +1959,7 @@ describe("createTelegramBot", () => {
       { type: "emoji", emoji: "👀" },
     ])
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, -1001, 12, [])
-    expect(logger.debug).toHaveBeenNthCalledWith(
-      1,
+    expect(logger.debug).toHaveBeenCalledWith(
       {
         chatType: "supergroup",
         chatScope: "chat:1",
@@ -1924,8 +1980,7 @@ describe("createTelegramBot", () => {
       },
       "Telegram group memory decision",
     )
-    expect(logger.debug).toHaveBeenNthCalledWith(
-      2,
+    expect(logger.debug).toHaveBeenCalledWith(
       expect.objectContaining({
         chatScope: "chat:1",
         contextCandidateEntries: 0,
@@ -1938,8 +1993,7 @@ describe("createTelegramBot", () => {
       }),
       "Telegram group memory decision",
     )
-    expect(logger.debug).toHaveBeenNthCalledWith(
-      3,
+    expect(logger.debug).toHaveBeenCalledWith(
       expect.objectContaining({
         chatScope: "chat:1",
         contextCandidateEntries: 2,
@@ -3281,6 +3335,7 @@ describe("createTelegramBot", () => {
       token: "token",
       photo: large,
       directory: undefined,
+      logger,
     })
     expect(controller.sendPrompt).toHaveBeenCalledWith(
       {
@@ -3391,6 +3446,7 @@ describe("createTelegramBot", () => {
       token: "token",
       voice: { file_id: "voice-1" },
       directory: undefined,
+      logger: expect.any(Object),
     })
     expect(voiceService.transcribe).toHaveBeenCalledWith("/tmp/voice.ogg")
     expect(controller.sendPrompt).toHaveBeenCalledWith(

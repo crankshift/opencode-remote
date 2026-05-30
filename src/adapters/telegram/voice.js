@@ -10,6 +10,7 @@ export async function downloadTelegramVoice({
   voice,
   directory = tmpdir(),
   fetchFn = fetch,
+  logger,
 } = {}) {
   const file = await api.getFile(voice.file_id)
   if (!file?.file_path) {
@@ -28,6 +29,10 @@ export async function downloadTelegramVoice({
 
   await mkdir(directory, { recursive: true })
   await writeFile(filePath, buffer)
+  logger?.debug?.(
+    { duration: voice.duration ?? null, fileSize: voice.file_size ?? null, mime },
+    "Telegram voice downloaded",
+  )
 
   return { mime, filePath }
 }

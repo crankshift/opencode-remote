@@ -27,6 +27,16 @@ export async function runGateway({
   const loadRuntimeConfig = dependencies.loadConfig ?? loadConfig
   const resolvedConfig = config ?? (await loadRuntimeConfig())
   const resolvedLogger = logger ?? createLogger(resolvedConfig.logLevel)
+  resolvedLogger.debug?.(
+    {
+      hasConfigPath: Boolean(resolvedConfig.configPath),
+      logLevel: resolvedConfig.logLevel,
+      progressVerbosity: resolvedConfig.progressVerbosity,
+      voiceEnabled: resolvedConfig.voice.enabled,
+      voiceMode: resolvedConfig.voice.mode,
+    },
+    "Gateway config resolved",
+  )
   const ensureOpenCodeServer = dependencies.ensureOpenCodeServer ?? defaultEnsureOpenCodeServer
   const createOpenCodeClient = dependencies.createOpenCodeClient ?? defaultCreateOpenCodeClient
   const resolveProjectIdentity =
@@ -49,13 +59,26 @@ export async function runGateway({
   const setConfigValuesAtPath = dependencies.setConfigValuesAtPath ?? defaultSetConfigValuesAtPath
 
   if (resolvedConfig.voice.enabled && resolvedConfig.voice.mode !== "off") {
+    resolvedLogger.debug?.({ voiceMode: resolvedConfig.voice.mode }, "Checking voice dependencies")
     await assertFfmpegAvailable()
   }
 
-  const server = await ensureOpenCodeServer(resolvedConfig.opencode)
+  const server = await ensureOpenCodeServer({ ...resolvedConfig.opencode, logger: resolvedLogger })
+  resolvedLogger.debug?.(
+    { opencodeServerStarted: server.started === true },
+    "OpenCode server ready",
+  )
   const opencode = createOpenCodeClient({ apiUrl: resolvedConfig.opencode.apiUrl })
   const project = await resolveProjectIdentity({ directory: resolvedConfig.opencode.workdir })
-  const store = createProjectStateStore({ project, ...(stateSuffix ? { stateSuffix } : {}) })
+  resolvedLogger.debug?.(
+    { projectScoped: project.id !== "global", vcs: project.vcs ?? null },
+    "Project identity resolved",
+  )
+  const store = createProjectStateStore({
+    project,
+    logger: resolvedLogger,
+    ...(stateSuffix ? { stateSuffix } : {}),
+  })
   const controller = createGatewayController({
     opencode,
     store,
@@ -67,6 +90,7 @@ export async function runGateway({
   })
   const voiceService = createVoiceService({
     config: resolvedConfig.voice,
+    logger: resolvedLogger,
     saveConfig: async (values) => {
       if (!resolvedConfig.configPath) {
         return
@@ -80,6 +104,7 @@ export async function runGateway({
   })
   const stickerStore = openTelegramStickerStore()
   const groupStore = openTelegramGroupStore()
+  resolvedLogger.debug?.({ stickerStore: true, groupStore: true }, "Gateway stores opened")
   const groupRegistry = createTelegramGroupRegistry({
     telegram: resolvedConfig.telegram,
     store: groupStore,
@@ -105,21 +130,25 @@ export async function runGateway({
     }
     stopping = true
     resolvedLogger.info({ signal }, "Shutting down gateway")
+    resolvedLogger.debug?.({ signal }, "Gateway shutdown starting")
     await bot.stop()
     await server.stop()
     stickerStore.close?.()
     groupStore.close?.()
+    resolvedLogger.debug?.({ signal }, "Gateway shutdown completed")
   }
 
   processLike.once("SIGINT", shutdown)
   processLike.once("SIGTERM", shutdown)
 
   await registerTelegramBotCommands(bot, resolvedLogger)
+  resolvedLogger.debug?.("Telegram commands registered")
   await groupRegistry.refreshAllowedGroups?.()
+  resolvedLogger.debug?.("Telegram group registry refreshed")
   resolvedLogger.info("Starting Telegram polling")
-  await bot.start({
-    allowed_updates: ["message", "callback_query", "message_reaction", "my_chat_member"],
-  })
+  const allowedUpdates = ["message", "callback_query", "message_reaction", "my_chat_member"]
+  resolvedLogger.debug?.({ allowedUpdates }, "Telegram polling starting")
+  await bot.start({ allowed_updates: allowedUpdates })
 }
 
 function prefixVoiceConfigValues(values) {

@@ -198,11 +198,13 @@ export function createTelegramBot({
     const token = ctx.match[2]
     const request = permissionResponseTokens.get(token)
     if (!request) {
+      logger.debug?.({ decision }, "Telegram permission decision expired")
       await ctx.answerCallbackQuery({ text: "Permission request expired" })
       return
     }
 
     permissionResponseTokens.delete(token)
+    logger.debug?.({ decision }, "Telegram permission decision selected")
     await controller.respondToPermission(request.sessionId, request.permissionId, decision)
     await ctx.answerCallbackQuery({ text: formatPermissionDecisionAnswer(decision) })
     if (ctx.reply) {
@@ -621,6 +623,7 @@ export function createTelegramBot({
     if (ctx.message.text.startsWith("/")) {
       return
     }
+    logTelegramPromptLifecycle(ctx, { stage: "received", source: "text" })
 
     let groupScope = null
     let groupCurrentRecord = null
@@ -628,6 +631,7 @@ export function createTelegramBot({
     if (!isPrivateTelegramChat(ctx)) {
       const groupResult = await groupPrompts.prepareText(ctx)
       if (!groupResult.route) {
+        logTelegramPromptLifecycle(ctx, { stage: "group_routing_skipped", source: "text" })
         return
       }
       groupScope = groupResult.scope
@@ -642,6 +646,7 @@ export function createTelegramBot({
     const progress = await createPromptProgressRenderer(ctx)
     try {
       await setEmojiReaction(ctx, chatId, messageId, "👀", logger)
+      logTelegramPromptLifecycle(ctx, { stage: "prompt_started", source: "text" })
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
           text: groupPrompts.withContext(ctx.message.text, groupContextText),
@@ -650,11 +655,13 @@ export function createTelegramBot({
         progress,
         ctx,
       )
+      logTelegramPromptLifecycle(ctx, { stage: "opencode_completed", source: "text" })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       requestedReaction = parsedResponse.requestedReaction
       const requestedSticker = parsedResponse.requestedSticker
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "text")
+      logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "text" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (requestedSticker) {
         await sendRequestedSticker(ctx, requestedSticker)
@@ -664,6 +671,7 @@ export function createTelegramBot({
       await progress.flush()
       await clearMessageReaction(ctx, chatId, messageId, logger)
       stopTyping()
+      logTelegramPromptLifecycle(ctx, { stage: "cleanup_completed", source: "text" })
     }
     if (requestedReaction) {
       await handleRequestedReaction(ctx, chatId, messageId, requestedReaction)
@@ -690,12 +698,22 @@ export function createTelegramBot({
   return bot
 
   async function handlePhotoMessages(ctx, messages) {
+    logTelegramPromptLifecycle(ctx, {
+      stage: "received",
+      source: "photo",
+      albumSize: messages.length,
+    })
     let groupScope = null
     let groupCurrentRecord = null
     let groupContextText = ""
     if (!isPrivateTelegramChat(ctx)) {
       const groupResult = await groupPrompts.preparePhoto(ctx, messages)
       if (!groupResult.route) {
+        logTelegramPromptLifecycle(ctx, {
+          stage: "group_routing_skipped",
+          source: "photo",
+          albumSize: messages.length,
+        })
         return
       }
       groupScope = groupResult.scope
@@ -718,6 +736,7 @@ export function createTelegramBot({
             token,
             photo,
             directory: mediaDirectory,
+            logger,
           }),
         )
       }
@@ -728,6 +747,12 @@ export function createTelegramBot({
       }
 
       const progress = await createPromptProgressRenderer(ctx)
+      logTelegramPromptLifecycle(ctx, {
+        stage: "prompt_started",
+        source: "photo",
+        albumSize: messages.length,
+        attachmentCount: attachments.length,
+      })
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
           text: groupPrompts.withContext(captionFromMessages(messages), groupContextText),
@@ -737,9 +762,16 @@ export function createTelegramBot({
         progress,
         ctx,
       )
+      logTelegramPromptLifecycle(ctx, {
+        stage: "opencode_completed",
+        source: "photo",
+        albumSize: messages.length,
+        attachmentCount: attachments.length,
+      })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "photo")
+      logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "photo" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
         await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
@@ -754,6 +786,11 @@ export function createTelegramBot({
     } finally {
       stopTyping()
       await cleanupMediaAttachments(attachments, logger)
+      logTelegramPromptLifecycle(ctx, {
+        stage: "cleanup_completed",
+        source: "photo",
+        attachmentCount: attachments.length,
+      })
     }
   }
 
@@ -784,13 +821,16 @@ export function createTelegramBot({
     const attachments = []
     const stopTyping = startTypingIndicator(ctx, logger)
     try {
+      logTelegramPromptLifecycle(ctx, { stage: "received", source: "voice" })
       const attachment = await downloadVoice({
         api: ctx.api,
         token,
         voice: ctx.message.voice,
         directory: mediaDirectory,
+        logger,
       })
       attachments.push(attachment)
+      logTelegramPromptLifecycle(ctx, { stage: "downloaded", source: "voice" })
 
       const transcript = await voiceService.transcribe(attachment.filePath)
       let groupScope = null
@@ -799,6 +839,7 @@ export function createTelegramBot({
       if (!isPrivateTelegramChat(ctx)) {
         const groupResult = await groupPrompts.prepareVoice(ctx, transcript)
         if (!groupResult.route) {
+          logTelegramPromptLifecycle(ctx, { stage: "group_routing_skipped", source: "voice" })
           return
         }
         groupScope = groupResult.scope
@@ -806,6 +847,7 @@ export function createTelegramBot({
         groupContextText = groupResult.contextText
       }
       const progress = await createPromptProgressRenderer(ctx)
+      logTelegramPromptLifecycle(ctx, { stage: "prompt_started", source: "voice" })
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
           text: groupPrompts.withContext(transcript, groupContextText),
@@ -814,9 +856,11 @@ export function createTelegramBot({
         progress,
         ctx,
       )
+      logTelegramPromptLifecycle(ctx, { stage: "opencode_completed", source: "voice" })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "voice")
+      logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "voice" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
         await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
@@ -824,16 +868,19 @@ export function createTelegramBot({
     } finally {
       stopTyping()
       await cleanupMediaAttachments(attachments, logger)
+      logTelegramPromptLifecycle(ctx, { stage: "cleanup_completed", source: "voice" })
     }
   }
 
   async function handleStickerMessage(ctx) {
+    logTelegramPromptLifecycle(ctx, { stage: "received", source: "sticker" })
     let groupScope = null
     let groupCurrentRecord = null
     let groupContextText = ""
     if (!isPrivateTelegramChat(ctx)) {
       const groupResult = await groupPrompts.prepareSticker(ctx)
       if (!groupResult.route) {
+        logTelegramPromptLifecycle(ctx, { stage: "group_routing_skipped", source: "sticker" })
         return
       }
       groupScope = groupResult.scope
@@ -855,6 +902,7 @@ export function createTelegramBot({
       cleanupFiles = result.cleanupFiles ?? []
 
       const progress = await createPromptProgressRenderer(ctx)
+      logTelegramPromptLifecycle(ctx, { stage: "prompt_started", source: "sticker" })
       const response = await sendPromptWithProgress(
         await formatPromptForTelegramGateway({
           ...result.prompt,
@@ -864,9 +912,11 @@ export function createTelegramBot({
         progress,
         ctx,
       )
+      logTelegramPromptLifecycle(ctx, { stage: "opencode_completed", source: "sticker" })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       await replyWithPreferredMode(ctx, parsedResponse.visibleText, "sticker")
+      logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "sticker" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
         await sendRequestedSticker(ctx, parsedResponse.requestedSticker)
@@ -882,6 +932,7 @@ export function createTelegramBot({
     } finally {
       stopTyping()
       await cleanupStickerFiles(cleanupFiles, logger)
+      logTelegramPromptLifecycle(ctx, { stage: "cleanup_completed", source: "sticker" })
     }
   }
 
@@ -897,6 +948,23 @@ export function createTelegramBot({
   function clearGroupMemory(reason) {
     groupMemory.clearAll?.()
     logger.debug?.({ reason }, "Telegram group memory cleared")
+  }
+
+  function logTelegramPromptLifecycle(ctx, { stage, source, albumSize, attachmentCount } = {}) {
+    logger.debug?.(
+      {
+        chatType: telegramChatType(ctx),
+        hasThread: Number.isInteger(ctx?.message?.message_thread_id),
+        isGroup: !isPrivateTelegramChat(ctx),
+        messageKind: source ?? telegramMessageKind(ctx),
+        promptStage: stage,
+        senderKind: telegramSenderKind(ctx),
+        voiceEnabled: Boolean(voiceService?.isEnabled?.()),
+        ...(Number.isInteger(albumSize) ? { albumSize } : {}),
+        ...(Number.isInteger(attachmentCount) ? { attachmentCount } : {}),
+      },
+      "Telegram prompt lifecycle",
+    )
   }
 
   async function replyWithPreferredMode(ctx, text, source) {
@@ -1160,6 +1228,10 @@ export function createTelegramBot({
       .text("Deny", `perm:reject:${token}`)
 
     await ctx.reply(formatPermissionRequest(event), { reply_markup: keyboard })
+    logger.debug?.(
+      { hasDescription: Boolean(event.description), hasTool: Boolean(event.tool) },
+      "Telegram permission request sent",
+    )
   }
 
   async function getActiveProgressVerbosity() {
