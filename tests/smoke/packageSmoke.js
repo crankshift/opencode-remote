@@ -69,6 +69,10 @@ for (const required of [
   "README.md",
   "LICENSE",
   "bundled-skills/meme-generation/SKILL.md",
+  "bundled-skills/opencode-remote-troubleshooting/SKILL.md",
+  "bundled-skills/telegram-sticker-behavior/SKILL.md",
+  "bundled-skills/opencode-remote-gateway-capabilities/SKILL.md",
+  "bundled-skills/opencode-remote-skill-creator/SKILL.md",
 ]) {
   assert(packed.includes(required), `package includes ${required}`)
 }

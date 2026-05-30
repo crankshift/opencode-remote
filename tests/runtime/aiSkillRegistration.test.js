@@ -13,7 +13,7 @@ const developmentSkillPaths = [
   "skills/development/opencode-remote-gateway-capabilities/SKILL.md",
   "skills/development/opencode-remote-skill-creator/SKILL.md",
 ]
-const bundledSkillPaths = [
+const bundledMediaSkillPaths = [
   "bundled-skills/p5js/SKILL.md",
   "bundled-skills/claude-design/SKILL.md",
   "bundled-skills/design-md/SKILL.md",
@@ -24,6 +24,12 @@ const bundledSkillPaths = [
   "bundled-skills/concept-diagrams/SKILL.md",
   "bundled-skills/hyperframes/SKILL.md",
   "bundled-skills/meme-generation/SKILL.md",
+]
+const bundledGuidanceSkillPaths = [
+  "bundled-skills/opencode-remote-troubleshooting/SKILL.md",
+  "bundled-skills/telegram-sticker-behavior/SKILL.md",
+  "bundled-skills/opencode-remote-gateway-capabilities/SKILL.md",
+  "bundled-skills/opencode-remote-skill-creator/SKILL.md",
 ]
 const canonicalAgentPath = ".opencode/agent/opencode-remote-diagnostician.md"
 
@@ -96,7 +102,7 @@ describe("repository AI skill registration", () => {
   })
 
   test("ships bundled media producer skills outside the development skill path", async () => {
-    for (const skillPath of bundledSkillPaths) {
+    for (const skillPath of bundledMediaSkillPaths) {
       const skill = await readRepoFile(skillPath)
       const folderName = skillPath.split("/").at(-2)
 
@@ -106,6 +112,20 @@ describe("repository AI skill registration", () => {
       expect(skill).not.toMatch(/\nauthor:/u)
       expect(skill).toContain("MEDIA:/absolute/path/to/file")
       expect(skill).toContain("cache/generated-media")
+      expect(skill).toContain("OpenCode Remote")
+    }
+  })
+
+  test("ships bundled OpenCode Remote guidance skills outside the development skill path", async () => {
+    for (const skillPath of bundledGuidanceSkillPaths) {
+      const skill = await readRepoFile(skillPath)
+      const folderName = skillPath.split("/").at(-2)
+
+      expect(skill).toMatch(/^---\n/m)
+      expect(skill).toContain(`name: ${folderName}`)
+      expect(skill).toMatch(/\ndescription: .+\n/)
+      expect(skill).not.toMatch(/maintainer board|GitHub Project|project ticket/u)
+      expect(skill).not.toMatch(/raw Telegram IDs|raw local paths|bot tokens/u)
       expect(skill).toContain("OpenCode Remote")
     }
   })
