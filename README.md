@@ -177,6 +177,7 @@ The bot currently supports:
 /progress  Open a tool-progress menu; direct modes still work
 /voice     Open a voice settings menu; direct subcommands still work
 /stickers  Open a saved sticker-pack menu; direct subcommands still work
+/skills    Browse local OpenCode skills and create generated project skills
 /group     Manage Telegram group behavior in a DM menu
 /help      Show available commands
 ```
@@ -206,6 +207,15 @@ Sticker pack commands:
 ```
 
 Use `/stickers` to open the saved-pack menu. Use `/stickers save` as a reply to a sticker to save that sticker pack for future sticker replies. `/stickers list` shows saved packs. `/stickers forget <pack_name>` removes a saved pack and its cached sticker previews. Incoming stickers from unsaved packs may also show a `Save pack` button. Once packs are saved, asking the bot to send a sticker lets OpenCode request one through the gateway without exposing Telegram file identifiers to the model. Saved sticker data is non-secret Telegram file metadata; bot tokens, user IDs, chat IDs, and raw download URLs are not persisted.
+
+OpenCode skill commands:
+
+```text
+/skills
+/skills create
+```
+
+`/skills` lists local skills the gateway can discover from the current OpenCode project, including default `.opencode/skills`, configured `skills.paths` in OpenCode config, compatible `.claude/skills` and `.agents/skills` folders, and generated skills created by OpenCode Remote. Remote `skills.urls` are reported but not listed by the gateway yet. `/skills create` starts a guided flow that writes a project-local generated skill under `.opencode/skills/opencode-remote-generated/<skill-name>/SKILL.md` after preview and confirmation. Generated skills are user-owned project configuration; avoid putting secrets, raw Telegram IDs, raw local paths, raw logs, API keys, or private config values in them. Restart OpenCode if a new skill is not discovered immediately.
 
 Voice commands:
 

@@ -6,6 +6,7 @@ export const publicBotCommands = [
   { command: "progress", description: "Set tool progress visibility" },
   { command: "voice", description: "Show or set voice mode and captions" },
   { command: "stickers", description: "Manage saved sticker packs" },
+  { command: "skills", description: "Browse and create OpenCode skills" },
 ]
 
 export const privateBotCommands = [
