@@ -4,9 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.10.0] - 2026-05-30
+
 ### Added
 
 - Added comprehensive safe debug logging across runtime startup, OpenCode server ownership, gateway session and permission lifecycle, Telegram prompt routing, media, voice, sticker, and state-store milestones. (#30)
+- Added Telegram `/skills` management, OpenCode Remote bundled guidance skills, project-generated skills, and a read-only OpenCode Remote diagnostician agent. (#7)
 
 ## [0.9.0] - 2026-05-29
 
