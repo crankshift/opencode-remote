@@ -1,8 +1,27 @@
 import { describe, expect, test, vi } from "vitest"
 import { privateBotCommands, publicBotCommands } from "../../src/core/commands/commands.js"
-import { runGateway } from "../../src/runtime/bootstrap.js"
+import {
+  runGateway as runGatewayBase,
+  startTelegramBotWithRunner,
+} from "../../src/runtime/bootstrap.js"
 
 describe("runGateway", () => {
+  test("starts Telegram polling with concurrent grammY runner options", () => {
+    const bot = {}
+    const runner = { stop: vi.fn(), task: vi.fn() }
+    const runTelegramBot = vi.fn(() => runner)
+
+    const result = startTelegramBotWithRunner(bot, {
+      allowedUpdates: ["message", "callback_query"],
+      runTelegramBot,
+    })
+
+    expect(result).toBe(runner)
+    expect(runTelegramBot).toHaveBeenCalledWith(bot, {
+      runner: { fetch: { allowed_updates: ["message", "callback_query"] } },
+    })
+  })
+
   test("loads config before creating runtime dependencies", async () => {
     const server = { stop: vi.fn(async () => undefined) }
     const bot = {
@@ -80,6 +99,7 @@ describe("runGateway", () => {
     }
     const ensureOpenCodeServer = vi.fn(async () => server)
     const createBot = vi.fn(() => bot)
+    const startTelegramPolling = vi.fn(() => createTelegramRunner())
     const processLike = { once: vi.fn() }
 
     await runGateway({
@@ -96,6 +116,7 @@ describe("runGateway", () => {
         createProjectStateStore: vi.fn(() => ({})),
         createGatewayController: vi.fn(() => ({})),
         createTelegramBot: createBot,
+        startTelegramPolling,
       },
       processLike,
     })
@@ -109,11 +130,66 @@ describe("runGateway", () => {
         progressVerbosity: "all",
       }),
     )
-    expect(bot.start).toHaveBeenCalledWith({
-      allowed_updates: ["message", "callback_query", "message_reaction", "my_chat_member"],
+    expect(startTelegramPolling).toHaveBeenCalledWith(bot, {
+      allowedUpdates: ["message", "callback_query", "message_reaction", "my_chat_member"],
     })
     expect(processLike.once).toHaveBeenCalledWith("SIGINT", expect.any(Function))
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
+  })
+
+  test("passes bundled meme runtime wrappers scoped to the resolved OpenCode workdir", async () => {
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+    const createTelegramBot = vi.fn(() => bot)
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: true }))
+    const installBundledMemeRuntimeForProject = vi.fn(async () => ({ writtenPaths: [] }))
+    const createGeneratedSkill = vi.fn(async (input) => ({
+      skillName: input.name,
+      filePath: "safe",
+    }))
+    const config = {
+      ...testConfig(),
+      opencode: { ...testConfig().opencode, workdir: "/resolved/workdir" },
+    }
+
+    await runGateway({
+      config,
+      logger: testLogger(),
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => ({ stop: vi.fn() })),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/resolved/workdir",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot,
+        bundledMemeRuntimeStatus,
+        installBundledMemeRuntimeForProject,
+        createGeneratedSkill,
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    const botOptions = createTelegramBot.mock.calls[0][0]
+    await botOptions.bundledMemeRuntimeStatus()
+    await botOptions.installBundledMemeRuntimeForProject()
+    await botOptions.createGeneratedSkill({ name: "demo", body: "body" })
+
+    expect(bundledMemeRuntimeStatus).toHaveBeenCalledWith({ projectRoot: "/resolved/workdir" })
+    expect(installBundledMemeRuntimeForProject).toHaveBeenCalledWith({
+      projectRoot: "/resolved/workdir",
+    })
+    expect(createGeneratedSkill).toHaveBeenCalledWith({
+      projectRoot: "/resolved/workdir",
+      name: "demo",
+      body: "body",
+    })
   })
 
   test("logs safe startup milestones", async () => {
@@ -216,6 +292,7 @@ describe("runGateway", () => {
     const logger = testLogger()
     const server = { stop: vi.fn(async () => undefined) }
     const error = new Error("telegram unavailable")
+    const startTelegramPolling = vi.fn(() => createTelegramRunner())
     const bot = {
       api: {
         setMyCommands: vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined),
@@ -238,6 +315,7 @@ describe("runGateway", () => {
         createProjectStateStore: vi.fn(() => ({})),
         createGatewayController: vi.fn(() => ({})),
         createTelegramBot: vi.fn(() => bot),
+        startTelegramPolling,
       },
       processLike: { once: vi.fn() },
     })
@@ -247,8 +325,8 @@ describe("runGateway", () => {
     expect(bot.api.setMyCommands).toHaveBeenNthCalledWith(2, privateBotCommands, {
       scope: { type: "all_private_chats" },
     })
-    expect(bot.start).toHaveBeenCalledWith({
-      allowed_updates: ["message", "callback_query", "message_reaction", "my_chat_member"],
+    expect(startTelegramPolling).toHaveBeenCalledWith(bot, {
+      allowedUpdates: ["message", "callback_query", "message_reaction", "my_chat_member"],
     })
   })
 
@@ -492,6 +570,7 @@ describe("runGateway", () => {
       start: vi.fn(async () => undefined),
       stop: vi.fn(async () => undefined),
     }
+    const runner = createTelegramRunner()
     const handlers = new Map()
     const processLike = { once: vi.fn((signal, handler) => handlers.set(signal, handler)) }
 
@@ -511,18 +590,41 @@ describe("runGateway", () => {
         openTelegramStickerStore: vi.fn(() => stickerStore),
         openTelegramGroupStore: vi.fn(() => groupStore),
         createTelegramBot: vi.fn(() => bot),
+        startTelegramPolling: vi.fn(() => runner),
       },
       processLike,
     })
 
     await handlers.get("SIGINT")("SIGINT")
 
-    expect(bot.stop).toHaveBeenCalled()
+    expect(runner.stop).toHaveBeenCalled()
     expect(server.stop).toHaveBeenCalled()
     expect(stickerStore.close).toHaveBeenCalled()
     expect(groupStore.close).toHaveBeenCalled()
   })
 })
+
+function runGateway(options = {}) {
+  const dependencies = options.dependencies ?? {}
+  const startTelegramPolling =
+    dependencies.startTelegramPolling ??
+    vi.fn((bot, { allowedUpdates } = {}) => {
+      bot.start?.({ allowed_updates: allowedUpdates })
+      return createTelegramRunner()
+    })
+
+  return runGatewayBase({
+    ...options,
+    dependencies: { ...dependencies, startTelegramPolling },
+  })
+}
+
+function createTelegramRunner() {
+  return {
+    stop: vi.fn(async () => undefined),
+    task: vi.fn(async () => undefined),
+  }
+}
 
 function testConfig() {
   return {

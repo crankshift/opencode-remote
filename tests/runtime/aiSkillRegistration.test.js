@@ -113,6 +113,25 @@ describe("repository AI skill registration", () => {
       expect(skill).toContain("MEDIA:/absolute/path/to/file")
       expect(skill).toContain("cache/generated-media")
       expect(skill).toContain("OpenCode Remote")
+      if (skillPath === "bundled-skills/meme-generation/SKILL.md") {
+        expect(skill).toContain("Do not send private Telegram/user prompt text")
+        expect(skill).toContain("Search only generic template names or themes")
+        expect(skill).toContain("Use Imgflip templates as the primary source")
+        expect(skill).toContain("Trigger strongly for meme keyphrases")
+        expect(skill).toContain("meme, memes, мем, мемасік, мемас, мемчик, мемчік")
+        expect(skill).toContain("Only use design or image-generation skills as fallback")
+        expect(skill).toContain(
+          "Use the exact render command from the current OpenCode Remote gateway instructions",
+        )
+        expect(skill).toContain(
+          "Do not replace the render helper with custom curl, canvas, SVG, or image-generation scripts",
+        )
+        expect(skill).not.toContain("This skill is the complete workflow")
+        expect(skill).toContain("template.url")
+        expect(skill).not.toContain("template.imageUrl")
+        expect(skill).toContain("render command")
+        expect(skill).not.toContain("opencode-remote-meme")
+      }
     }
   })
 

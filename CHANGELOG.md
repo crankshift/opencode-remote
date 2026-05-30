@@ -4,6 +4,16 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.10.3] - 2026-05-31
+
+### Added
+
+- Added project-local bundled meme runtime assets and a local meme render helper for OpenCode Remote media delivery. (#43)
+
+### Fixed
+
+- Fixed OpenCode permission callbacks to respond while prompts are running and remove Telegram inline approval buttons after a decision. (#43)
+
 ## [0.10.2] - 2026-05-30
 
 ### Added

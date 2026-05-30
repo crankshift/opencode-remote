@@ -44,9 +44,7 @@ export function createOpenCodeClient({
         const response = toData(
           await client.session.prompt({
             path: { id: sessionId },
-            body: {
-              parts: toPromptParts(prompt),
-            },
+            body: toPromptBody(prompt),
           }),
         )
         return extractText(response)
@@ -76,10 +74,32 @@ export function createOpenCodeClient({
     async respondToPermission(sessionId, permissionId, decision) {
       const body = toPermissionResponseBody(decision)
       try {
-        if (typeof client.postSessionByIdPermissionsByPermissionId === "function") {
+        if (typeof client.permission?.reply === "function") {
           return toData(
-            await client.postSessionByIdPermissionsByPermissionId({
-              path: { id: sessionId, permissionId },
+            await client.permission.reply({
+              requestID: permissionId,
+              reply: decision,
+            }),
+          )
+        }
+        if (typeof fetchImpl === "function" && apiUrl) {
+          const currentResponse = await postCurrentPermissionReply({
+            apiUrl,
+            fetchImpl,
+            permissionId,
+            decision,
+          })
+          if (currentResponse.ok) {
+            return currentResponse.data
+          }
+          if (!shouldFallbackToSessionPermissionResponse(currentResponse.status)) {
+            throw new Error(`OpenCode permission API returned ${currentResponse.status}`)
+          }
+        }
+        if (typeof client.postSessionIdPermissionsPermissionId === "function") {
+          return toData(
+            await client.postSessionIdPermissionsPermissionId({
+              path: { id: sessionId, permissionID: permissionId },
               body,
             }),
           )
@@ -210,6 +230,10 @@ function noopProgressStream() {
   return { stop: async () => undefined }
 }
 
+function toPromptBody(prompt) {
+  return { parts: toPromptParts(prompt) }
+}
+
 function normalizeOpenCodeProgressEvent(event, expectedSessionId) {
   if (event?.type !== "message.part.updated") {
     return null
@@ -254,7 +278,7 @@ function normalizeOpenCodeSystemEvent(event, expectedSessionId) {
 }
 
 function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
-  if (event?.type !== "permission.updated") {
+  if (event?.type !== "permission.updated" && event?.type !== "permission.asked") {
     return null
   }
 
@@ -276,8 +300,10 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
     permission.permissionID,
     permission.permissionId,
     permission.id,
+    permission.requestID,
     properties.permissionID,
     properties.permissionId,
+    properties.requestID,
     properties.id,
   )
   if (!permissionId) {
@@ -297,6 +323,7 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
     permission.message,
     properties.description,
     properties.message,
+    formatPermissionPatterns(permission.patterns ?? properties.patterns),
   )
   if (description) {
     systemEvent.description = description
@@ -305,8 +332,10 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
   const tool = firstString(
     permission.tool,
     permission.toolName,
+    permission.permission,
     properties.tool,
     properties.toolName,
+    properties.permission,
   )
   if (tool) {
     systemEvent.tool = tool
@@ -315,6 +344,13 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
     systemEvent.metadata = metadata
   }
   return systemEvent
+}
+
+function formatPermissionPatterns(patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return undefined
+  }
+  return patterns.filter((pattern) => typeof pattern === "string" && pattern.trim()).join("\n")
 }
 
 function extractToolTitle(part, input, metadata, tool) {
@@ -414,14 +450,42 @@ function toData(result) {
   return result
 }
 
+async function postCurrentPermissionReply({ apiUrl, fetchImpl, permissionId, decision }) {
+  const response = await fetchImpl(
+    `${apiUrl.replace(/\/$/u, "")}/permission/${encodeURIComponent(permissionId)}/reply`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reply: decision }),
+    },
+  )
+  if (!response.ok) {
+    return { ok: false, status: response.status }
+  }
+  return { ok: true, data: await readJsonResponse(response) }
+}
+
+function shouldFallbackToSessionPermissionResponse(status) {
+  return status === 400 || status === 404 || status === 405
+}
+
+async function readJsonResponse(response) {
+  if (typeof response.json !== "function") {
+    return true
+  }
+  try {
+    return await response.json()
+  } catch {
+    return true
+  }
+}
+
 function toPermissionResponseBody(decision) {
   switch (decision) {
     case "once":
-      return { response: "accept", remember: false }
     case "always":
-      return { response: "accept", remember: true }
     case "reject":
-      return { response: "deny", remember: false }
+      return { response: decision }
     default:
       throw new Error(`Invalid permission decision: ${decision}`)
   }

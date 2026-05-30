@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { describe, expect, test, vi } from "vitest"
 import { createGatewayProgram } from "../../src/bin/program.js"
 
@@ -332,6 +334,31 @@ describe("opencode-remote CLI program", () => {
 
     expect(clearVoiceCache).toHaveBeenCalledWith()
     expect(output.write).toHaveBeenCalledWith("Cleared voice cache: /cache/voice\n")
+  })
+
+  test("hidden meme render command reads a spec and writes the media marker", async () => {
+    const directory = join(tmpdir(), `opencode-remote-cli-test-${process.pid}-${Date.now()}`)
+    await mkdir(directory, { recursive: true })
+    const specPath = join(directory, "spec.json")
+    await writeFile(specPath, JSON.stringify({ texts: ["cli meme"] }), "utf8")
+    const renderMemeFromSpec = vi.fn(async () => ({
+      filePath: join(directory, "meme.png"),
+      mediaMarker: `MEDIA:${join(directory, "meme.png")}`,
+    }))
+    const output = { write: vi.fn() }
+    const program = createGatewayProgram({ renderMemeFromSpec, output })
+
+    await program.parseAsync(["node", "opencode-remote", "meme", "render", "--spec", specPath])
+
+    expect(renderMemeFromSpec).toHaveBeenCalledWith({ spec: { texts: ["cli meme"] } })
+    expect(output.write).toHaveBeenCalledWith(`MEDIA:${join(directory, "meme.png")}\n`)
+  })
+
+  test("meme command is hidden from top-level help", () => {
+    const program = createGatewayProgram()
+    const help = program.helpInformation()
+
+    expect(help).not.toContain("meme")
   })
 })
 

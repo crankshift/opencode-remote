@@ -11,10 +11,19 @@ import {
   PROGRESS_VERBOSITIES,
   recordProgressEvent,
 } from "../../core/formatting/progressText.js"
+import {
+  bundledMemeRuntimeStatus as defaultBundledMemeRuntimeStatus,
+  installBundledMemeRuntimeForProject as defaultInstallBundledMemeRuntimeForProject,
+} from "../../core/opencode/bundledRuntimeAssets.js"
 import { createGeneratedSkill as defaultCreateGeneratedSkill } from "../../core/opencode/generatedSkills.js"
 import { discoverOpenCodeSkills as defaultDiscoverSkills } from "../../core/opencode/skillDiscovery.js"
 import { isAuthorizedTelegramUser } from "./auth.js"
 import { authorContextFromTelegramMessage } from "./author.js"
+import {
+  deliverGeneratedMedia as defaultDeliverGeneratedMedia,
+  getDefaultGeneratedMediaDirectory,
+  parseGeneratedMediaMarkers,
+} from "./generatedMedia.js"
 import { createGroupMemory as defaultCreateGroupMemory } from "./groupMemory.js"
 import { createTelegramGroupMenu } from "./groupMenu.js"
 import { createTelegramGroupPromptHelper } from "./groupPrompts.js"
@@ -81,6 +90,11 @@ export function createTelegramBot({
   groupNoticeCooldownMs,
   discoverSkills = defaultDiscoverSkills,
   createGeneratedSkill = defaultCreateGeneratedSkill,
+  bundledMemeRuntimeStatus = defaultBundledMemeRuntimeStatus,
+  installBundledMemeRuntimeForProject = defaultInstallBundledMemeRuntimeForProject,
+  deliverGeneratedMedia = defaultDeliverGeneratedMedia,
+  generatedMediaDirectory = getDefaultGeneratedMediaDirectory(),
+  memeRenderCommand = getDefaultMemeRenderCommand(),
 }) {
   const bot = new botFactory(token)
   let fallbackProgressVerbosity = progressVerbosity
@@ -93,6 +107,8 @@ export function createTelegramBot({
   const skillsMenu = createTelegramSkillsMenu({
     discoverSkills,
     createGeneratedSkill,
+    bundledMemeRuntimeStatus,
+    installBundledMemeRuntimeForProject,
     logger,
     shouldStartFromText: isPrivateTelegramChat,
     reply: async (ctx, text, options) => replyAndRemember(ctx, text, botMessageMemory, options),
@@ -219,6 +235,13 @@ export function createTelegramBot({
     logger.debug?.({ decision }, "Telegram permission decision selected")
     await controller.respondToPermission(request.sessionId, request.permissionId, decision)
     await ctx.answerCallbackQuery({ text: formatPermissionDecisionAnswer(decision) })
+    if (typeof ctx.editMessageReplyMarkup === "function") {
+      try {
+        await ctx.editMessageReplyMarkup()
+      } catch (error) {
+        logger.warn?.({ error }, "Could not remove Telegram permission buttons")
+      }
+    }
     if (ctx.reply) {
       await ctx.reply(formatPermissionDecisionText(decision))
     }
@@ -625,10 +648,8 @@ export function createTelegramBot({
         ctx,
       )
       await progress.flush()
-      const { visibleText } = parseTelegramGatewayMarkers(response, progress)
-      for (const chunk of chunkText(visibleText)) {
-        await replyAndRemember(ctx, chunk, botMessageMemory)
-      }
+      const parsedResponse = parseTelegramGatewayMarkers(response, progress)
+      await replyToParsedResponse(ctx, parsedResponse, "text")
     }
   })
 
@@ -683,7 +704,7 @@ export function createTelegramBot({
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
       requestedReaction = parsedResponse.requestedReaction
       const requestedSticker = parsedResponse.requestedSticker
-      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "text")
+      await replyToParsedResponse(ctx, parsedResponse, "text")
       logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "text" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (requestedSticker) {
@@ -793,7 +814,7 @@ export function createTelegramBot({
       })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
-      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "photo")
+      await replyToParsedResponse(ctx, parsedResponse, "photo")
       logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "photo" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
@@ -882,7 +903,7 @@ export function createTelegramBot({
       logTelegramPromptLifecycle(ctx, { stage: "opencode_completed", source: "voice" })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
-      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "voice")
+      await replyToParsedResponse(ctx, parsedResponse, "voice")
       logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "voice" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
@@ -938,7 +959,7 @@ export function createTelegramBot({
       logTelegramPromptLifecycle(ctx, { stage: "opencode_completed", source: "sticker" })
       await progress.flush()
       const parsedResponse = parseTelegramGatewayMarkers(response, progress)
-      await replyWithPreferredMode(ctx, parsedResponse.visibleText, "sticker")
+      await replyToParsedResponse(ctx, parsedResponse, "sticker")
       logTelegramPromptLifecycle(ctx, { stage: "reply_sent", source: "sticker" })
       groupPrompts.complete(groupScope, groupCurrentRecord, parsedResponse.visibleText)
       if (parsedResponse.requestedSticker) {
@@ -1020,6 +1041,24 @@ export function createTelegramBot({
     botMessageMemory.remember(chatId, sentMessage?.message_id, text)
     if (voiceService?.shouldCaption?.() && !caption) {
       await sendTextReply(ctx, text)
+    }
+  }
+
+  async function replyToParsedResponse(ctx, parsedResponse, source) {
+    await replyWithPreferredMode(ctx, parsedResponse.visibleText, source)
+
+    if (parsedResponse.mediaPaths.length === 0) {
+      return
+    }
+
+    const mediaResult = await deliverGeneratedMedia({
+      ctx,
+      mediaPaths: parsedResponse.mediaPaths,
+      allowedDirectories: [generatedMediaDirectory],
+      logger,
+    })
+    if (mediaResult.sent === 0 && mediaResult.failed > 0) {
+      await sendTextReply(ctx, "The generated media file was not available to send.")
     }
   }
 
@@ -1204,7 +1243,12 @@ export function createTelegramBot({
   }
 
   async function formatPromptForTelegramGateway(prompt) {
-    return formatPromptWithTelegramGatewayInstructions(prompt, { stickerStore, logger })
+    return formatPromptWithTelegramGatewayInstructions(prompt, {
+      stickerStore,
+      generatedMediaDirectory,
+      memeRenderCommand,
+      logger,
+    })
   }
 
   async function describeStickerVisual({ sticker, attachment, visualDescription }) {
@@ -1214,20 +1258,21 @@ export function createTelegramBot({
     })
   }
 
-  async function sendPromptWithProgress(prompt, progress, ctx) {
-    const promptOptions = createPromptOptions(progress, ctx)
+  async function sendPromptWithProgress(prompt, progress, ctx, extraOptions = {}) {
+    const promptOptions = createPromptOptions(progress, ctx, extraOptions)
     if (promptOptions === undefined) {
       return controller.sendPrompt(prompt)
     }
     return controller.sendPrompt(prompt, promptOptions)
   }
 
-  function createPromptOptions(progress, ctx) {
+  function createPromptOptions(progress, ctx, extraOptions = {}) {
+    const mergedOptions = { ...(progress.promptOptions ?? {}), ...extraOptions }
     if (!ctx) {
-      return progress.promptOptions
+      return Object.keys(mergedOptions).length > 0 ? mergedOptions : undefined
     }
     return {
-      ...(progress.promptOptions ?? {}),
+      ...mergedOptions,
       onSystemEvent: (event) => handleSystemEvent(ctx, event),
     }
   }
@@ -1964,8 +2009,19 @@ const TELEGRAM_REACTION_INSTRUCTION = [
   "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
 ].join("\n")
 
-async function formatPromptWithTelegramGatewayInstructions(prompt, { stickerStore, logger } = {}) {
-  const instructions = [TELEGRAM_REACTION_INSTRUCTION]
+async function formatPromptWithTelegramGatewayInstructions(
+  prompt,
+  {
+    stickerStore,
+    generatedMediaDirectory = getDefaultGeneratedMediaDirectory(),
+    memeRenderCommand = getDefaultMemeRenderCommand(),
+    logger,
+  } = {},
+) {
+  const instructions = [
+    TELEGRAM_REACTION_INSTRUCTION,
+    createGeneratedMediaInstruction(generatedMediaDirectory, { memeRenderCommand }),
+  ]
   const stickerInstruction = await createTelegramStickerReplyInstruction(stickerStore, logger)
   if (stickerInstruction) {
     instructions.push(stickerInstruction)
@@ -1981,6 +2037,40 @@ function appendPromptInstruction(prompt, instruction) {
     }
   }
   return [prompt, "", instruction].join("\n")
+}
+
+function createGeneratedMediaInstruction(directory, { memeRenderCommand } = {}) {
+  const renderCommand = normalizeMemeRenderCommand(memeRenderCommand)
+  return [
+    "Generated media delivery capability:",
+    `If you create a local image to send back, write it under this exact directory: ${directory}`,
+    "Do the image work directly in this OpenCode session. Do not call the task tool, delegate to subagents, or load brainstorming/planning skills for generated media.",
+    "For meme requests, use the meme-generation skill and Imgflip template discovery as the primary path. Do not hand-write custom poster art or raw image scripts instead of using a meme template.",
+    "For meme files, call opencode-remote meme render --spec with an Imgflip template.url or allowed local template.imagePath. Use fallback design or image-generation skills only after template discovery fails.",
+    ...(renderCommand
+      ? [
+          `Use this exact render command for meme specs: ${renderCommand} /absolute/path/to/spec.json`,
+        ]
+      : []),
+    `Create the directory first if needed. Return the image marker on its own line as MEDIA:${directory}/<filename>.png, .jpg, .jpeg, or .webp.`,
+    "The gateway rejects MEDIA paths outside that directory.",
+  ].join("\n")
+}
+
+function getDefaultMemeRenderCommand() {
+  const entryPoint = process.argv?.[1]
+  if (!entryPoint) {
+    return "opencode-remote meme render --spec"
+  }
+  return `node ${JSON.stringify(entryPoint)} meme render --spec`
+}
+
+function normalizeMemeRenderCommand(command) {
+  if (typeof command !== "string") {
+    return null
+  }
+  const normalized = command.trim()
+  return normalized || null
 }
 
 async function createTelegramStickerReplyInstruction(stickerStore, logger) {
@@ -2051,7 +2141,7 @@ function formatStickerInstructionPack(pack) {
 function parseTelegramGatewayMarkers(text, progress) {
   let requestedReaction = null
   let requestedSticker = null
-  const visibleText = String(text)
+  const textWithoutTelegramMarkers = String(text)
     .replace(TELEGRAM_REACTION_MARKER, (_match, emoji) => {
       requestedReaction ??= emoji.trim()
       return ""
@@ -2060,9 +2150,11 @@ function parseTelegramGatewayMarkers(text, progress) {
       requestedSticker ??= normalizeStickerSelector(sticker)
       return ""
     })
+  const generatedMedia = parseGeneratedMediaMarkers(textWithoutTelegramMarkers)
 
   return {
-    visibleText: stripToolingAnnouncements(visibleText, progress?.toolingTerms),
+    visibleText: stripToolingAnnouncements(generatedMedia.visibleText, progress?.toolingTerms),
+    mediaPaths: generatedMedia.mediaPaths,
     requestedReaction,
     requestedSticker,
   }
