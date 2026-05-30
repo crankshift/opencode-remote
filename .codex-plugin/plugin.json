@@ -9,7 +9,7 @@
   "repository": "https://github.com/crankshift/opencode-remote",
   "license": "MIT",
   "keywords": ["opencode", "telegram", "gateway", "workflow"],
-  "skills": "./skills/",
+  "skills": "./skills/development/",
   "interface": {
     "displayName": "OpenCode Remote",
     "shortDescription": "Development workflow skills for OpenCode Remote",

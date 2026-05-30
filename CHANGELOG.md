@@ -4,6 +4,8 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+- Separated repository development skills from user-facing bundled skills, with OpenCode dev config loading only `skills/development/` and media/design skill assets living under `bundled-skills/`.
+
 ## [0.10.0] - 2026-05-30
 
 ### Added
