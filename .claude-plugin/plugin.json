@@ -10,5 +10,5 @@
   "repository": "https://github.com/crankshift/opencode-remote",
   "license": "MIT",
   "keywords": ["opencode", "telegram", "gateway", "workflow"],
-  "skills": "./skills/"
+  "skills": "./skills/development/"
 }

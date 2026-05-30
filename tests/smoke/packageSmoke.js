@@ -68,6 +68,7 @@ for (const required of [
   "package.json",
   "README.md",
   "LICENSE",
+  "bundled-skills/meme-generation/SKILL.md",
 ]) {
   assert(packed.includes(required), `package includes ${required}`)
 }

@@ -5,13 +5,25 @@ import { describe, expect, test } from "vitest"
 
 const repoRoot = new URL("../../", import.meta.url)
 const repoRootPath = fileURLToPath(repoRoot)
-const canonicalSkillPath = "skills/github-project-task-workflow/SKILL.md"
-const canonicalSkillPaths = [
-  canonicalSkillPath,
-  "skills/opencode-remote-troubleshooting/SKILL.md",
-  "skills/telegram-sticker-behavior/SKILL.md",
-  "skills/opencode-remote-gateway-capabilities/SKILL.md",
-  "skills/opencode-remote-skill-creator/SKILL.md",
+const developmentSkillPath = "skills/development/github-project-task-workflow/SKILL.md"
+const developmentSkillPaths = [
+  developmentSkillPath,
+  "skills/development/opencode-remote-troubleshooting/SKILL.md",
+  "skills/development/telegram-sticker-behavior/SKILL.md",
+  "skills/development/opencode-remote-gateway-capabilities/SKILL.md",
+  "skills/development/opencode-remote-skill-creator/SKILL.md",
+]
+const bundledSkillPaths = [
+  "bundled-skills/p5js/SKILL.md",
+  "bundled-skills/claude-design/SKILL.md",
+  "bundled-skills/design-md/SKILL.md",
+  "bundled-skills/popular-web-designs/SKILL.md",
+  "bundled-skills/architecture-diagram/SKILL.md",
+  "bundled-skills/comfyui/SKILL.md",
+  "bundled-skills/gif-search/SKILL.md",
+  "bundled-skills/concept-diagrams/SKILL.md",
+  "bundled-skills/hyperframes/SKILL.md",
+  "bundled-skills/meme-generation/SKILL.md",
 ]
 const canonicalAgentPath = ".opencode/agent/opencode-remote-diagnostician.md"
 
@@ -20,7 +32,7 @@ const readRepoJson = async (path) => JSON.parse(await readRepoFile(path))
 
 describe("repository AI skill registration", () => {
   test("ships a canonical GitHub issue task workflow skill", async () => {
-    const skill = await readRepoFile(canonicalSkillPath)
+    const skill = await readRepoFile(developmentSkillPath)
 
     expect(skill).toMatch(/^---\nname: github-project-task-workflow\n/m)
     expect(skill).toContain("# GitHub Issue Task Workflow")
@@ -29,11 +41,15 @@ describe("repository AI skill registration", () => {
     expect(skill).toContain("bump `package.json` version and update `CHANGELOG.md`")
   })
 
-  test("ships bundled gateway support skills with trigger descriptions", async () => {
-    const troubleshooting = await readRepoFile("skills/opencode-remote-troubleshooting/SKILL.md")
-    const stickers = await readRepoFile("skills/telegram-sticker-behavior/SKILL.md")
-    const capabilities = await readRepoFile("skills/opencode-remote-gateway-capabilities/SKILL.md")
-    const creator = await readRepoFile("skills/opencode-remote-skill-creator/SKILL.md")
+  test("ships development gateway support skills with trigger descriptions", async () => {
+    const troubleshooting = await readRepoFile(
+      "skills/development/opencode-remote-troubleshooting/SKILL.md",
+    )
+    const stickers = await readRepoFile("skills/development/telegram-sticker-behavior/SKILL.md")
+    const capabilities = await readRepoFile(
+      "skills/development/opencode-remote-gateway-capabilities/SKILL.md",
+    )
+    const creator = await readRepoFile("skills/development/opencode-remote-skill-creator/SKILL.md")
 
     expect(troubleshooting).toMatch(/^---\nname: opencode-remote-troubleshooting\n/m)
     expect(troubleshooting).toContain(
@@ -60,8 +76,8 @@ describe("repository AI skill registration", () => {
     expect(creator).toContain(".opencode/skills/opencode-remote-generated/<skill-name>/SKILL.md")
   })
 
-  test("all canonical skills have required OpenCode skill frontmatter", async () => {
-    for (const skillPath of canonicalSkillPaths) {
+  test("all development skills have required OpenCode skill frontmatter", async () => {
+    for (const skillPath of developmentSkillPaths) {
       const skill = await readRepoFile(skillPath)
       const folderName = skillPath.split("/").at(-2)
 
@@ -72,11 +88,26 @@ describe("repository AI skill registration", () => {
     }
   })
 
-  test("registers the canonical skill folder with OpenCode", async () => {
+  test("registers only development skills with the repo OpenCode config", async () => {
     const config = await readRepoJson("opencode.jsonc")
 
     expect(config.$schema).toBe("https://opencode.ai/config.json")
-    expect(config.skills).toEqual({ paths: ["./skills"] })
+    expect(config.skills).toEqual({ paths: ["./skills/development"] })
+  })
+
+  test("ships bundled media producer skills outside the development skill path", async () => {
+    for (const skillPath of bundledSkillPaths) {
+      const skill = await readRepoFile(skillPath)
+      const folderName = skillPath.split("/").at(-2)
+
+      expect(skill).toMatch(/^---\n/m)
+      expect(skill).toContain(`name: ${folderName}`)
+      expect(skill).toMatch(/\ndescription: .+\n/)
+      expect(skill).not.toMatch(/\nauthor:/u)
+      expect(skill).toContain("MEDIA:/absolute/path/to/file")
+      expect(skill).toContain("cache/generated-media")
+      expect(skill).toContain("OpenCode Remote")
+    }
   })
 
   test("ships a read-only OpenCode Remote diagnostician agent", async () => {
@@ -96,7 +127,7 @@ describe("repository AI skill registration", () => {
     const pluginManifest = await readRepoJson(".claude-plugin/plugin.json")
 
     expect(pluginManifest.name).toBe("opencode-remote")
-    expect(pluginManifest.skills).toBe("./skills/")
+    expect(pluginManifest.skills).toBe("./skills/development/")
     await expect(
       readRepoFile(".claude/skills/github-project-task-workflow/SKILL.md"),
     ).rejects.toMatchObject({ code: "ENOENT" })
@@ -112,6 +143,6 @@ describe("repository AI skill registration", () => {
     expect(marketplaceSource).toEqual({ source: "local", path: "./" })
     expect(resolve(repoRootPath, marketplaceSource.path)).toBe(resolve(repoRootPath))
     expect(pluginManifest.name).toBe("opencode-remote")
-    expect(pluginManifest.skills).toBe("./skills/")
+    expect(pluginManifest.skills).toBe("./skills/development/")
   })
 })

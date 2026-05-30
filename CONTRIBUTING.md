@@ -84,10 +84,11 @@ It is recommended if you plan to do ongoing development in this repository, espe
 
 This repository also ships AI-agent workflow skills for contributors:
 
-- Canonical skills live in `skills/`.
-- OpenCode reads `skills/` through `opencode.jsonc`.
-- Claude Code plugin metadata lives in `.claude-plugin/plugin.json` and loads canonical skills from `skills/`.
+- Development-only skills live in `skills/development/`.
+- OpenCode reads only `skills/development/` through `opencode.jsonc` so product-facing bundled skills do not pollute the repository development context.
+- Claude Code plugin metadata lives in `.claude-plugin/plugin.json` and loads development skills from `skills/development/`.
 - Codex-compatible plugin metadata lives in `.codex-plugin/plugin.json`, and `.agents/plugins/marketplace.json` points to this repository as a local plugin source.
+- User-facing bundled skills live in `bundled-skills/` and are package assets for OpenCode Remote users, not contributor workflow guidance.
 
 These files are public repo configuration. They should not require maintainer-private home-directory config or board access.
 

@@ -1,7 +1,7 @@
 {
   "name": "@crankshift/opencode-remote",
   "description": "A messenger-based chat interface for OpenCode, starting with Telegram.",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,6 +22,7 @@
     "FEATURES.md",
     "CHANGELOG.md",
     "TODO.md",
+    "bundled-skills/",
     "LICENSE"
   ],
   "bin": {

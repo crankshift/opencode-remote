@@ -16,7 +16,7 @@ Use this skill when helping a user design a generated OpenCode skill through Ope
 
 - Project-local generated skills belong under `.opencode/skills/opencode-remote-generated/<skill-name>/SKILL.md`.
 - Use global generated skills only when the user explicitly asks for a global user skill.
-- Do not write generated skills into this repository's canonical `skills/` directory.
+- Do not write generated skills into this repository's `skills/development/` or `bundled-skills/` directories.
 - Generated skills are user-owned OpenCode configuration, not runtime gateway protocol code.
 
 ## Skill Shape

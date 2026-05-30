@@ -50,7 +50,7 @@
    - Evaluate whether these should stay adapter-owned strings or become built-in gateway skills invoked through OpenCode.
    - Preserve messenger-neutral core boundaries and avoid shipping a noisy default skill set unless the skills are isolated and clearly useful.
    - Document how Telegram-specific context would be passed without leaking Telegram concerns into core.
-   - Added bundled repo guidance skills, `/skills` discovery, and project-local generated skill creation under `.opencode/skills/opencode-remote-generated/`; deterministic runtime marker/context prompts remain adapter-owned code.
+   - Added repo development guidance skills, `/skills` discovery, and project-local generated skill creation under `.opencode/skills/opencode-remote-generated/`; deterministic runtime marker/context prompts remain adapter-owned code.
 
 8. [ ] Change OpenCode startup behavior.
    - When `opencode-remote run` starts and OpenCode is not running, prompt the CLI user before starting `opencode serve`.
