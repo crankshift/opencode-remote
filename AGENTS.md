@@ -148,6 +148,10 @@ pnpm run check
 - Claude Code plugin metadata lives in `.claude-plugin/plugin.json` and loads canonical skills from `skills/`; do not duplicate canonical skills under `.claude/skills/`.
 - Codex plugin metadata lives in `.codex-plugin/plugin.json`, with the repo-local marketplace at `.agents/plugins/marketplace.json` pointing to this repository as the local plugin source.
 - `tests/runtime/aiSkillRegistration.test.js` verifies the registration layout.
+- Runtime gateway prompt strings that encode Telegram markers, sticker catalogs, reaction feedback, captionless image behavior, or group context are protocol code, not skills. Keep them in adapter/core prompt builders unless OpenCode later exposes reliable gateway-controlled skill invocation.
+- Gateway-generated user/project skills belong to the target OpenCode project under `.opencode/skills/opencode-remote-generated/<skill-name>/SKILL.md`, or a global user scope when explicitly requested. Never write generated skills into this repository's canonical `skills/` directory.
+- Repo-local OpenCode agents live under `.opencode/agent/`. `opencode-remote-diagnostician` is a read-only subagent for safe gateway failure investigation; do not use it for edits, commits, live service mutation, or runtime prompt behavior.
+- Future agents should be added only for concrete recurring development workflows. Do not add broad runtime agents for gateway behavior without a specific bounded job and tests.
 
 ## GitHub Issue Task Workflow
 

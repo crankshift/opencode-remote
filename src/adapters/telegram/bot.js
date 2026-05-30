@@ -11,6 +11,8 @@ import {
   PROGRESS_VERBOSITIES,
   recordProgressEvent,
 } from "../../core/formatting/progressText.js"
+import { createGeneratedSkill as defaultCreateGeneratedSkill } from "../../core/opencode/generatedSkills.js"
+import { discoverOpenCodeSkills as defaultDiscoverSkills } from "../../core/opencode/skillDiscovery.js"
 import { isAuthorizedTelegramUser } from "./auth.js"
 import { authorContextFromTelegramMessage } from "./author.js"
 import { createGroupMemory as defaultCreateGroupMemory } from "./groupMemory.js"
@@ -24,6 +26,7 @@ import {
   selectLargestPhoto,
 } from "./media.js"
 import { createMediaGroupBuffer } from "./mediaGroupBuffer.js"
+import { createTelegramSkillsMenu } from "./skillsMenu.js"
 import {
   createStickerPrompt as defaultCreateStickerPrompt,
   stickerToStoreMetadata,
@@ -76,6 +79,8 @@ export function createTelegramBot({
   cleanupStickerFiles = defaultCleanupStickerFiles,
   random = Math.random,
   groupNoticeCooldownMs,
+  discoverSkills = defaultDiscoverSkills,
+  createGeneratedSkill = defaultCreateGeneratedSkill,
 }) {
   const bot = new botFactory(token)
   let fallbackProgressVerbosity = progressVerbosity
@@ -85,6 +90,13 @@ export function createTelegramBot({
   const stickerPackTokens = createBoundedTokenStore(200)
   const voiceSelectionTokens = createBoundedTokenStore(300)
   const botMessageMemory = createBotMessageMemory(200)
+  const skillsMenu = createTelegramSkillsMenu({
+    discoverSkills,
+    createGeneratedSkill,
+    logger,
+    shouldStartFromText: isPrivateTelegramChat,
+    reply: async (ctx, text, options) => replyAndRemember(ctx, text, botMessageMemory, options),
+  })
   const groupMenu = createTelegramGroupMenu({
     store: groupStore,
     memory: groupMemory,
@@ -578,12 +590,20 @@ export function createTelegramBot({
     await handleStickersCommand(ctx)
   })
 
+  bot.command("skills", async (ctx) => {
+    await skillsMenu.handleCommand(ctx)
+  })
+
   bot.command("group", async (ctx) => {
     await groupMenu.handleCommand(ctx)
   })
 
   bot.callbackQuery(/^group:(.+)$/u, async (ctx) => {
     await groupMenu.handleCallback(ctx)
+  })
+
+  bot.callbackQuery(/^skills:(.+)$/u, async (ctx) => {
+    await skillsMenu.handleCallback(ctx)
   })
 
   bot.on("message_reaction", async (ctx) => {
@@ -617,6 +637,9 @@ export function createTelegramBot({
   })
 
   bot.on("message:text", async (ctx) => {
+    if (await skillsMenu.handlePendingText(ctx)) {
+      return
+    }
     if (await groupMenu.handlePendingText?.(ctx)) {
       return
     }
