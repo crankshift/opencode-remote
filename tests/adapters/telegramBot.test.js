@@ -136,6 +136,7 @@ describe("createTelegramBot", () => {
       ],
       remoteSkillUrls: ["https://example.com/.well-known/skills/"],
     }))
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: false }))
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const bot = createTelegramBot({
       token: "token",
@@ -144,12 +145,14 @@ describe("createTelegramBot", () => {
       logger,
       botFactory: FakeBot,
       discoverSkills,
+      bundledMemeRuntimeStatus,
     })
     const reply = vi.fn(async () => undefined)
 
     await bot.commands.get("skills")({ reply })
 
     expect(discoverSkills).toHaveBeenCalled()
+    expect(bundledMemeRuntimeStatus).toHaveBeenCalled()
     expect(logger.debug).toHaveBeenCalledWith(
       {
         generatedSkillCount: 1,
@@ -167,6 +170,8 @@ describe("createTelegramBot", () => {
     )
     expect(reply).toHaveBeenCalledWith(
       [
+        "Bundled meme skill: disabled",
+        "",
         "<b>Project skills</b>",
         "📚 project-helper - Use when helping this project.",
         "",
@@ -188,11 +193,109 @@ describe("createTelegramBot", () => {
       ].join("\n"),
       expect.any(Object),
     )
+    expect(reply.mock.calls[0][0]).toContain("Bundled meme skill: disabled")
     expect(reply.mock.calls[0][1]).toEqual(
       expect.objectContaining({ parse_mode: "HTML", reply_markup: expect.any(Object) }),
     )
     const keyboard = reply.mock.calls[0][1].reply_markup
     expect(keyboard.inline_keyboard.flat().map((button) => button.text)).toContain("New skill")
+  })
+
+  test("skills command shows disabled bundled meme runtime and enable action", async () => {
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: false }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      discoverSkills: vi.fn(async () => ({ skills: [], remoteSkillUrls: [] })),
+      bundledMemeRuntimeStatus,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("skills")({ reply })
+
+    expect(bundledMemeRuntimeStatus).toHaveBeenCalled()
+    expect(reply.mock.calls[0][0]).toContain("Bundled meme skill: disabled")
+    const buttons = reply.mock.calls[0][1].reply_markup.inline_keyboard.flat()
+    expect(buttons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: "Enable meme skill",
+          callback_data: "skills:enable_meme_skill",
+        }),
+      ]),
+    )
+  })
+
+  test("skills command shows update action when legacy meme agent is installed", async () => {
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({
+      enabled: true,
+      legacyAgent: { enabled: true },
+    }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      discoverSkills: vi.fn(async () => ({ skills: [], remoteSkillUrls: [] })),
+      bundledMemeRuntimeStatus,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("skills")({ reply })
+
+    expect(reply.mock.calls[0][0]).toContain(
+      "Bundled meme skill: enabled (legacy agent cleanup needed)",
+    )
+    const buttons = reply.mock.calls[0][1].reply_markup.inline_keyboard.flat()
+    expect(buttons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: "Update meme skill",
+          callback_data: "skills:enable_meme_skill",
+        }),
+      ]),
+    )
+  })
+
+  test("skills enable callback installs bundled meme skill and reports legacy agent cleanup", async () => {
+    const installBundledMemeRuntimeForProject = vi.fn(async () => ({
+      writtenPaths: ["/project/.opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md"],
+      removedPaths: ["/project/.opencode/agent/opencode-remote-meme.md"],
+    }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      installBundledMemeRuntimeForProject,
+    })
+    const handler = bot.callbackHandlers.find(({ pattern }) =>
+      pattern.test("skills:enable_meme_skill"),
+    ).handler
+    const reply = vi.fn(async () => undefined)
+
+    await handler({
+      match: ["skills:enable_meme_skill", "enable_meme_skill"],
+      answerCallbackQuery: vi.fn(async () => undefined),
+      reply,
+    })
+
+    expect(installBundledMemeRuntimeForProject).toHaveBeenCalled()
+    expect(reply.mock.calls[0][0]).toContain("Enabled bundled meme skill.")
+    expect(reply.mock.calls[0][0]).toContain(
+      ".opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md",
+    )
+    expect(reply.mock.calls[0][0]).toContain(
+      "Removed legacy meme agent: .opencode/agent/opencode-remote-meme.md",
+    )
+    expect(reply.mock.calls[0][0]).not.toContain("/project")
+    expect(reply.mock.calls[0][0]).not.toContain("/project/.opencode")
+    expect(reply.mock.calls[0][0]).toContain("Restart OpenCode")
   })
 
   test("natural private chat skill creation request starts generated skill flow", async () => {
@@ -296,6 +399,12 @@ describe("createTelegramBot", () => {
       expect.stringContaining("Create generated project skill?"),
       expect.stringContaining("Created generated skill image-style-coach."),
     ])
+    const confirmationText = reply.mock.calls.at(-1)[0]
+    expect(confirmationText).toContain(
+      "Path: .opencode/skills/opencode-remote-generated/image-style-coach/SKILL.md",
+    )
+    expect(confirmationText).not.toContain("/project")
+    expect(confirmationText).not.toContain("/project/.opencode")
   })
 
   test("status command reports progress verbosity", async () => {
@@ -325,6 +434,8 @@ describe("createTelegramBot", () => {
       token: "token",
       telegram: testTelegram(),
       controller,
+      generatedMediaDirectory: "/cache/generated-media",
+      memeRenderCommand: "node /gateway/bin/opencode-remote.js meme render --spec",
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
     })
@@ -376,6 +487,8 @@ describe("createTelegramBot", () => {
       token: "token",
       telegram: testTelegram(),
       controller,
+      generatedMediaDirectory: "/cache/generated-media",
+      memeRenderCommand: "node /gateway/bin/opencode-remote.js meme render --spec",
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
     })
@@ -1449,6 +1562,139 @@ describe("createTelegramBot", () => {
     )
   })
 
+  test("meme request stays on the active OpenCode session when meme runtime is disabled", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "answer") }
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: false }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      bundledMemeRuntimeStatus,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "make a meme about flaky tests",
+        chat: { id: 456, type: "private" },
+        from: { id: 123, is_bot: false, first_name: "Authorized" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(bundledMemeRuntimeStatus).not.toHaveBeenCalled()
+    expect(controller.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining("make a meme") }),
+      expect.not.objectContaining({ agent: expect.any(String) }),
+    )
+    expect(reply).toHaveBeenCalledWith("answer")
+  })
+
+  test("meme request stays on the active OpenCode session when meme runtime is enabled", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "meme answer") }
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: true }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      bundledMemeRuntimeStatus,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "send me a meme",
+        chat: { id: 456, type: "private" },
+        from: { id: 123, is_bot: false, first_name: "Authorized" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(bundledMemeRuntimeStatus).not.toHaveBeenCalled()
+    expect(controller.sendPrompt.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ text: expect.stringContaining("send me a meme") }),
+    )
+    expect(controller.sendPrompt.mock.calls[0][1]).not.toHaveProperty("agent")
+    expect(reply).toHaveBeenCalledWith("meme answer")
+  })
+
+  test("direct meme template request stays on the active OpenCode session", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "template meme answer") }
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: true }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      bundledMemeRuntimeStatus,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "distracted boyfriend meme for code review",
+        chat: { id: 456, type: "private" },
+        from: { id: 123, is_bot: false, first_name: "Authorized" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(bundledMemeRuntimeStatus).not.toHaveBeenCalled()
+    expect(controller.sendPrompt.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ text: expect.stringContaining("distracted boyfriend meme") }),
+    )
+    expect(controller.sendPrompt.mock.calls[0][1]).not.toHaveProperty("agent")
+    expect(reply).toHaveBeenCalledWith("template meme answer")
+  })
+
+  test("normal text prompt does not pass an agent option", async () => {
+    const controller = { sendPrompt: vi.fn(async () => "answer") }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      bundledMemeRuntimeStatus: vi.fn(async () => ({ enabled: true })),
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "explain flaky tests",
+        chat: { id: 456, type: "private" },
+        from: { id: 123, is_bot: false, first_name: "Authorized" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(controller.sendPrompt.mock.calls[0][1]).not.toHaveProperty("agent")
+  })
+
   test("text prompt lifecycle logs safe metadata", async () => {
     const controller = {
       sendPrompt: vi.fn(async () => "answer"),
@@ -1921,6 +2167,58 @@ describe("createTelegramBot", () => {
       expect(metadata).not.toHaveProperty("sessionId")
       expect(metadata).not.toHaveProperty("permissionId")
     }
+  })
+
+  test("permission callbacks remove inline buttons after a decision", async () => {
+    let permissionCallbackData
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        if (typeof options?.onSystemEvent === "function") {
+          await options.onSystemEvent({
+            type: "permission.requested",
+            sessionId: "ses_1",
+            permissionId: "perm_1",
+            title: "Run shell command",
+          })
+        }
+        return "answer"
+      }),
+      respondToPermission: vi.fn(async () => true),
+    }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text, options) => {
+      if (text.startsWith("OpenCode needs permission")) {
+        permissionCallbackData = options.reply_markup.inline_keyboard[0][0].callback_data
+      }
+      return { message_id: 11, chat: { id: 456 }, text }
+    })
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    const handler = bot.callbackHandlers.find(({ pattern }) => pattern.test(permissionCallbackData))
+    const editMessageReplyMarkup = vi.fn(async () => undefined)
+    await handler.handler({
+      match: permissionCallbackData.match(handler.pattern),
+      answerCallbackQuery: vi.fn(async () => undefined),
+      editMessageReplyMarkup,
+      reply: vi.fn(async () => undefined),
+    })
+
+    expect(controller.respondToPermission).toHaveBeenCalledWith("ses_1", "perm_1", "once")
+    expect(editMessageReplyMarkup).toHaveBeenCalledWith()
   })
 
   test("text prompts fall back to text when voice reply fails", async () => {
@@ -2900,6 +3198,8 @@ describe("createTelegramBot", () => {
       token: "token",
       telegram: testTelegram(),
       controller,
+      generatedMediaDirectory: "/cache/generated-media",
+      memeRenderCommand: "node /gateway/bin/opencode-remote.js meme render --spec",
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
     })
@@ -2928,6 +3228,15 @@ describe("createTelegramBot", () => {
           "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
           "[telegram_reaction: 👍]",
           "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
+          "",
+          "Generated media delivery capability:",
+          "If you create a local image to send back, write it under this exact directory: /cache/generated-media",
+          "Do the image work directly in this OpenCode session. Do not call the task tool, delegate to subagents, or load brainstorming/planning skills for generated media.",
+          "For meme requests, use the meme-generation skill and Imgflip template discovery as the primary path. Do not hand-write custom poster art or raw image scripts instead of using a meme template.",
+          "For meme files, call opencode-remote meme render --spec with an Imgflip template.url or allowed local template.imagePath. Use fallback design or image-generation skills only after template discovery fails.",
+          "Use this exact render command for meme specs: node /gateway/bin/opencode-remote.js meme render --spec /absolute/path/to/spec.json",
+          "Create the directory first if needed. Return the image marker on its own line as MEDIA:/cache/generated-media/<filename>.png, .jpg, .jpeg, or .webp.",
+          "The gateway rejects MEDIA paths outside that directory.",
         ].join("\n"),
         author: { name: "Authorized User", source: "sender" },
       },
@@ -3062,6 +3371,98 @@ describe("createTelegramBot", () => {
     expect(setMessageReaction).toHaveBeenNthCalledWith(1, 456, 10, [{ type: "emoji", emoji: "👀" }])
     expect(setMessageReaction).toHaveBeenNthCalledWith(2, 456, 10, [])
     expect(setMessageReaction).toHaveBeenCalledTimes(2)
+  })
+
+  test("generated media markers send photos and strip marker text", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "Here you go.\nMEDIA:/tmp/generated-meme.png"),
+    }
+    const deliverGeneratedMedia = vi.fn(async () => ({ sent: 1, failed: 0 }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      generatedMediaDirectory: "/cache/generated-media",
+      deliverGeneratedMedia,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => ({ message_id: 11, chat: { id: 456 }, text: "Here you go." }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "make meme", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Here you go.")
+    expect(deliverGeneratedMedia).toHaveBeenCalledWith({
+      ctx: expect.objectContaining({ reply }),
+      mediaPaths: ["/tmp/generated-meme.png"],
+      allowedDirectories: ["/cache/generated-media"],
+      logger: expect.any(Object),
+    })
+  })
+
+  test("generated media failures send a safe fallback when no text remains", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "MEDIA:/private/generated-meme.png"),
+    }
+    const deliverGeneratedMedia = vi.fn(async () => ({ sent: 0, failed: 1 }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      deliverGeneratedMedia,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "make meme", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledTimes(1)
+    expect(reply).toHaveBeenCalledWith("The generated media file was not available to send.")
+  })
+
+  test("generated media failures send a safe fallback after visible text", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async () => "Here\nMEDIA:/tmp/missing.png"),
+    }
+    const deliverGeneratedMedia = vi.fn(async () => ({ sent: 0, failed: 1 }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      deliverGeneratedMedia,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 11, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "make meme", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledTimes(2)
+    expect(reply).toHaveBeenNthCalledWith(1, "Here")
+    expect(reply).toHaveBeenNthCalledWith(2, "The generated media file was not available to send.")
+    expect(reply.mock.calls.flat().join("\n")).not.toContain("/tmp/missing.png")
   })
 
   test("any telegram sticker marker sends a saved sticker without empty text", async () => {
@@ -3797,6 +4198,8 @@ describe("createTelegramBot", () => {
       token: "token",
       telegram: testTelegram(),
       controller,
+      generatedMediaDirectory: "/cache/generated-media",
+      memeRenderCommand: "node /gateway/bin/opencode-remote.js meme render --spec",
       logger: { warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
     })
@@ -3834,6 +4237,15 @@ describe("createTelegramBot", () => {
         "If a short emoji reaction to the user's message is appropriate, include exactly one hidden marker anywhere in your response:",
         "[telegram_reaction: 👍]",
         "Use only one standard Telegram emoji, and omit the marker when no reaction is useful. The marker will be removed before the user sees the reply.",
+        "",
+        "Generated media delivery capability:",
+        "If you create a local image to send back, write it under this exact directory: /cache/generated-media",
+        "Do the image work directly in this OpenCode session. Do not call the task tool, delegate to subagents, or load brainstorming/planning skills for generated media.",
+        "For meme requests, use the meme-generation skill and Imgflip template discovery as the primary path. Do not hand-write custom poster art or raw image scripts instead of using a meme template.",
+        "For meme files, call opencode-remote meme render --spec with an Imgflip template.url or allowed local template.imagePath. Use fallback design or image-generation skills only after template discovery fails.",
+        "Use this exact render command for meme specs: node /gateway/bin/opencode-remote.js meme render --spec /absolute/path/to/spec.json",
+        "Create the directory first if needed. Return the image marker on its own line as MEDIA:/cache/generated-media/<filename>.png, .jpg, .jpeg, or .webp.",
+        "The gateway rejects MEDIA paths outside that directory.",
       ].join("\n"),
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )

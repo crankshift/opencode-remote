@@ -31,7 +31,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/progress` opens a private-chat prompt activity visibility menu and still accepts direct `off`, `new`, `all`, or `verbose` modes.
 - `/voice` opens a voice settings menu with mode, captions, paginated country selection, paginated clickable voice selection, and test voice actions. It still accepts direct commands to show status, set mode, toggle captions, list voices by required short country/locale filter, set the active Edge TTS voice, and send a test voice note.
 - `/stickers` opens a saved-pack menu and still accepts direct commands to save, list, and forget sticker packs for future sticker replies.
-- `/skills` lists local OpenCode skills from default skill folders, configured `skills.paths`, compatible Claude/Agents skill folders, OpenCode Remote generated skills, and sanitized bundled skills shipped with the npm package. `/skills create`, the `New skill` menu button, or private chat requests such as "please create a skill" create project-local generated skills under `.opencode/skills/opencode-remote-generated/` after preview and confirmation.
+- `/skills` lists local OpenCode skills from default skill folders, configured `skills.paths`, compatible Claude/Agents skill folders, OpenCode Remote generated skills, and sanitized bundled skills shipped with the npm package. `/skills create`, the `New skill` menu button, or private chat requests such as "please create a skill" create project-local generated skills under `.opencode/skills/opencode-remote-generated/` after preview and confirmation. `/skills` can also enable the bundled meme-generation skill project-locally for OpenCode discovery from `.opencode/` and clean up the legacy experimental meme agent.
 - Telegram command menu buttons perform real actions, open submenus, or start guided text input instead of only returning slash-command usage text.
 - `/group` opens a private-chat grouped management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
 - Per-group custom trigger phrases are managed from the DM `/group` menu.
@@ -51,6 +51,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
 - Telegram voice messages are transcribed and sent to OpenCode when voice mode is enabled.
 - Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with optional text captions and text fallback if speech generation or sending fails.
+- When the optional bundled meme-generation skill is enabled, OpenCode can create local meme files from the active session; generated meme files are delivered back through Telegram through validated `MEDIA:` output.
 
 ## OpenCode Sessions
 
@@ -71,6 +72,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Static stickers use direct WebP image attachments. Video stickers use sampled preview sheets. Animated `.tgs` stickers use `lottie_convert.py` when available, with source-file fallback.
 - Sticker visuals are cached under app-data cache storage and validated with `file_unique_id`, kind, dimensions, file size, and converter version.
 - Cached sticker visuals can be summarized into short safe descriptions for the saved-sticker catalog used by future sticker replies.
+- Generated media delivery is limited to gateway-controlled generated-media cache files and validated local files.
 
 ## Voice Replies
 
@@ -88,6 +90,8 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - The bot ignores group chats outside the configured chat allowlist. Allowed groups authorize all senders in that group, so configure only groups whose members and admins you trust.
 - Group conversation memory is ephemeral, bounded, and cleared on gateway restart or OpenCode session changes. Persistent group state stores settings and known group metadata, not message text.
 - Secrets are configured through private `.opencode-remote/config.json` files, not persisted settings.
+- Bundled OpenCode Remote runtime assets are enabled project-locally under `.opencode/`; global OpenCode config is not modified by default.
+- Generated media delivery is constrained to generated-media cache files and validated local files.
 - The selected active session is persisted as non-secret JSON state.
 - Saved sticker packs persist only non-secret sticker identifiers and metadata.
 - Telegram reaction API failures are best-effort warnings and do not block prompt delivery.

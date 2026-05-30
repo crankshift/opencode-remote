@@ -1,3 +1,4 @@
+import { run as defaultRunTelegramBot } from "@grammyjs/runner"
 import {
   createTelegramBot as defaultCreateTelegramBot,
   registerTelegramBotCommands as defaultRegisterTelegramBotCommands,
@@ -9,7 +10,12 @@ import { loadConfig } from "../config/loadConfig.js"
 import { setConfigValuesAtPath as defaultSetConfigValuesAtPath } from "../config/writeConfig.js"
 import { createGatewayContext } from "../core/gateway/context.js"
 import { createGatewayController as defaultCreateGatewayController } from "../core/gateway/controller.js"
+import {
+  bundledMemeRuntimeStatus as defaultBundledMemeRuntimeStatus,
+  installBundledMemeRuntimeForProject as defaultInstallBundledMemeRuntimeForProject,
+} from "../core/opencode/bundledRuntimeAssets.js"
 import { createOpenCodeClient as defaultCreateOpenCodeClient } from "../core/opencode/client.js"
+import { createGeneratedSkill as defaultCreateGeneratedSkill } from "../core/opencode/generatedSkills.js"
 import { ensureOpenCodeServer as defaultEnsureOpenCodeServer } from "../core/opencode/serverManager.js"
 import { resolveProjectIdentity as defaultResolveProjectIdentity } from "../core/state/projectIdentity.js"
 import { createProjectStateStore as defaultCreateProjectStateStore } from "../core/state/stateDb.js"
@@ -46,6 +52,7 @@ export async function runGateway({
   const createGatewayController =
     dependencies.createGatewayController ?? defaultCreateGatewayController
   const createTelegramBot = dependencies.createTelegramBot ?? defaultCreateTelegramBot
+  const startTelegramPolling = dependencies.startTelegramPolling ?? startTelegramBotWithRunner
   const registerTelegramBotCommands =
     dependencies.registerTelegramBotCommands ?? defaultRegisterTelegramBotCommands
   const createVoiceService = dependencies.createVoiceService ?? defaultCreateVoiceService
@@ -57,6 +64,11 @@ export async function runGateway({
     dependencies.createTelegramGroupRegistry ?? defaultCreateTelegramGroupRegistry
   const assertFfmpegAvailable = dependencies.assertFfmpegAvailable ?? defaultAssertFfmpegAvailable
   const setConfigValuesAtPath = dependencies.setConfigValuesAtPath ?? defaultSetConfigValuesAtPath
+  const bundledMemeRuntimeStatus =
+    dependencies.bundledMemeRuntimeStatus ?? defaultBundledMemeRuntimeStatus
+  const installBundledMemeRuntimeForProject =
+    dependencies.installBundledMemeRuntimeForProject ?? defaultInstallBundledMemeRuntimeForProject
+  const createGeneratedSkill = dependencies.createGeneratedSkill ?? defaultCreateGeneratedSkill
 
   if (resolvedConfig.voice.enabled && resolvedConfig.voice.mode !== "off") {
     resolvedLogger.debug?.({ voiceMode: resolvedConfig.voice.mode }, "Checking voice dependencies")
@@ -120,10 +132,17 @@ export async function runGateway({
     stickerStore,
     groupStore,
     groupRegistry,
+    createGeneratedSkill: (input) =>
+      createGeneratedSkill({ projectRoot: resolvedConfig.opencode.workdir, ...input }),
+    bundledMemeRuntimeStatus: () =>
+      bundledMemeRuntimeStatus({ projectRoot: resolvedConfig.opencode.workdir }),
+    installBundledMemeRuntimeForProject: () =>
+      installBundledMemeRuntimeForProject({ projectRoot: resolvedConfig.opencode.workdir }),
   })
   groupRegistry.setApi?.(bot.api)
 
   let stopping = false
+  let telegramRunner = null
   async function shutdown(signal) {
     if (stopping) {
       return
@@ -131,7 +150,11 @@ export async function runGateway({
     stopping = true
     resolvedLogger.info({ signal }, "Shutting down gateway")
     resolvedLogger.debug?.({ signal }, "Gateway shutdown starting")
-    await bot.stop()
+    if (telegramRunner) {
+      await telegramRunner.stop()
+    } else {
+      await bot.stop()
+    }
     await server.stop()
     stickerStore.close?.()
     groupStore.close?.()
@@ -148,7 +171,19 @@ export async function runGateway({
   resolvedLogger.info("Starting Telegram polling")
   const allowedUpdates = ["message", "callback_query", "message_reaction", "my_chat_member"]
   resolvedLogger.debug?.({ allowedUpdates }, "Telegram polling starting")
-  await bot.start({ allowed_updates: allowedUpdates })
+  telegramRunner = startTelegramPolling(bot, { allowedUpdates })
+  if (typeof telegramRunner?.task === "function") {
+    await telegramRunner.task()
+  }
+}
+
+export function startTelegramBotWithRunner(
+  bot,
+  { allowedUpdates, runTelegramBot = defaultRunTelegramBot } = {},
+) {
+  return runTelegramBot(bot, {
+    runner: { fetch: { allowed_updates: allowedUpdates } },
+  })
 }
 
 function prefixVoiceConfigValues(values) {

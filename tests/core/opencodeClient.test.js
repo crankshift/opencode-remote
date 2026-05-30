@@ -19,6 +19,32 @@ describe("createOpenCodeClient", () => {
     })
   })
 
+  test("does not pass callback-only or unsupported options in prompt body", async () => {
+    const onProgress = vi.fn()
+    const onSystemEvent = vi.fn()
+    const sdkClient = {
+      session: {
+        prompt: vi.fn(async () => ({ parts: [{ type: "text", text: "answer" }] })),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_1", "hello", {
+        onProgress,
+        onSystemEvent,
+        ignored: "must not reach OpenCode",
+      }),
+    ).resolves.toBe("answer")
+
+    expect(sdkClient.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: {
+        parts: [{ type: "text", text: "hello" }],
+      },
+    })
+  })
+
   test("sends context prompts without requesting an assistant reply", async () => {
     const sdkClient = {
       session: {
@@ -279,18 +305,78 @@ describe("createOpenCodeClient", () => {
     })
   })
 
-  test("responds to permission requests with OpenCode API payloads", async () => {
+  test("streams normalized current permission asked events while a prompt is running", async () => {
+    const stream = createEventStream([
+      {
+        type: "permission.asked",
+        properties: {
+          id: "perm_1",
+          sessionID: "ses_1",
+          permission: "bash",
+          patterns: ["ls /tmp"],
+          metadata: { command: "ls /tmp" },
+          tool: { messageID: "msg_1", callID: "call_1" },
+        },
+      },
+    ])
+    const onSystemEvent = vi.fn()
     const sdkClient = {
-      postSessionByIdPermissionsByPermissionId: vi.fn(async () => true),
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        prompt: vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          return { parts: [{ type: "text", text: "answer" }] }
+        }),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(client.sendPrompt("ses_1", "hello", { onSystemEvent })).resolves.toBe("answer")
+
+    expect(onSystemEvent).toHaveBeenCalledWith({
+      type: "permission.requested",
+      sessionId: "ses_1",
+      permissionId: "perm_1",
+      title: "OpenCode permission request",
+      description: "ls /tmp",
+      tool: "bash",
+      metadata: { command: "ls /tmp" },
+    })
+  })
+
+  test("responds to permission requests with the current OpenCode SDK payload", async () => {
+    const sdkClient = {
+      postSessionIdPermissionsPermissionId: vi.fn(async () => true),
     }
     const client = createOpenCodeClient({ sdkClient })
 
     await expect(client.respondToPermission("ses_1", "perm_1", "always")).resolves.toBe(true)
 
-    expect(sdkClient.postSessionByIdPermissionsByPermissionId).toHaveBeenCalledWith({
-      path: { id: "ses_1", permissionId: "perm_1" },
-      body: { response: "accept", remember: true },
+    expect(sdkClient.postSessionIdPermissionsPermissionId).toHaveBeenCalledWith({
+      path: { id: "ses_1", permissionID: "perm_1" },
+      body: { response: "always" },
     })
+  })
+
+  test("responds to permission asked requests with the current request reply endpoint", async () => {
+    const sdkClient = {
+      postSessionIdPermissionsPermissionId: vi.fn(async () => true),
+    }
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => true }))
+    const client = createOpenCodeClient({
+      apiUrl: "http://localhost:4096",
+      sdkClient,
+      fetchImpl,
+    })
+
+    await expect(client.respondToPermission("ses_1", "request_1", "once")).resolves.toBe(true)
+
+    expect(fetchImpl).toHaveBeenCalledWith("http://localhost:4096/permission/request_1/reply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reply: "once" }),
+    })
+    expect(sdkClient.postSessionIdPermissionsPermissionId).not.toHaveBeenCalled()
   })
 
   test("falls back to event.list when event.subscribe fails", async () => {

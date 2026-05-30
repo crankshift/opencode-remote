@@ -1,7 +1,7 @@
 {
   "name": "@crankshift/opencode-remote",
   "description": "A messenger-based chat interface for OpenCode, starting with Telegram.",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -49,6 +49,7 @@
     "check": "pnpm run lint && pnpm run coverage && pnpm run smoke:package && pnpm run smoke:workflows"
   },
   "dependencies": {
+    "@grammyjs/runner": "^2.0.3",
     "@opencode-ai/sdk": "^1.15.7",
     "commander": "^14.0.3",
     "edge-tts-universal": "^1.4.0",
@@ -56,6 +57,7 @@
     "grammy": "^1.43.0",
     "groq-sdk": "^1.2.0",
     "pino": "^10.3.1",
+    "sharp": "^0.34.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

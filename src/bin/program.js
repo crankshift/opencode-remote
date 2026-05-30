@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { Command } from "commander"
 import { loadConfig as defaultLoadConfig } from "../config/loadConfig.js"
 import {
@@ -5,6 +6,7 @@ import {
   loadOrCreateConfig as defaultLoadOrCreateConfig,
 } from "../config/setupConfig.js"
 import { setConfigValue as defaultSetConfigValue } from "../config/writeConfig.js"
+import { renderMemeFromSpec as defaultRenderMemeFromSpec } from "../core/memes/renderer.js"
 import { clearVoiceCache as defaultClearVoiceCache } from "../core/voice/cache.js"
 import {
   getGatewayBackgroundStatus as defaultGetGatewayBackgroundStatus,
@@ -31,12 +33,13 @@ export function createGatewayProgram({
   getGatewayStartupStatus = defaultGetGatewayStartupStatus,
   setConfigValue = defaultSetConfigValue,
   clearVoiceCache = defaultClearVoiceCache,
+  renderMemeFromSpec = defaultRenderMemeFromSpec,
   output = process.stdout,
 } = {}) {
   const program = new Command()
   const afterCreate = createStartupAfterConfigHook({ enableGatewayStartup, output })
 
-  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.10.2")
+  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.10.3")
 
   program
     .command("setup")
@@ -134,7 +137,23 @@ export function createGatewayProgram({
       output.write(formatStartupStatusResult(result))
     })
 
+  const meme = program.command("meme", { hidden: true }).description("Render local meme assets")
+
+  meme
+    .command("render")
+    .description("Render a meme from a JSON spec")
+    .requiredOption("--spec <path>", "Path to the meme render spec JSON")
+    .action(async (options) => {
+      const spec = JSON.parse(await readTextFile(options.spec))
+      const result = await renderMemeFromSpec({ spec })
+      output.write(`${result.mediaMarker}\n`)
+    })
+
   return program
+}
+
+async function readTextFile(filePath) {
+  return readFile(filePath, "utf8")
 }
 
 function createStartupAfterConfigHook({ enableGatewayStartup, output }) {
