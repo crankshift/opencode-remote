@@ -13,6 +13,7 @@ const canonicalSkillPaths = [
   "skills/opencode-remote-gateway-capabilities/SKILL.md",
   "skills/opencode-remote-skill-creator/SKILL.md",
 ]
+const canonicalAgentPath = ".opencode/agent/opencode-remote-diagnostician.md"
 
 const readRepoFile = (path) => readFile(new URL(path, repoRoot), "utf8")
 const readRepoJson = async (path) => JSON.parse(await readRepoFile(path))
@@ -76,6 +77,19 @@ describe("repository AI skill registration", () => {
 
     expect(config.$schema).toBe("https://opencode.ai/config.json")
     expect(config.skills).toEqual({ paths: ["./skills"] })
+  })
+
+  test("ships a read-only OpenCode Remote diagnostician agent", async () => {
+    const agent = await readRepoFile(canonicalAgentPath)
+
+    expect(agent).toMatch(/^---\n/m)
+    expect(agent).toContain(
+      "description: Read-only subagent for diagnosing OpenCode Remote Telegram, OpenCode startup, voice, sticker, group routing, and safe debug log issues.",
+    )
+    expect(agent).toContain("mode: subagent")
+    expect(agent).toContain("edit: deny")
+    expect(agent).toContain("Never modify files, commit, push, or change runtime state")
+    expect(agent).toContain("Do not ask for Telegram bot tokens")
   })
 
   test("exposes the skill to Claude Code plugin loading without duplicate project skills", async () => {
