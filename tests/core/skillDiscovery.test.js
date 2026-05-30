@@ -53,6 +53,32 @@ describe("OpenCode skill discovery", () => {
     )
   })
 
+  test("discovers bundled skills and skips repo development skills", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "opencode-remote-repo-skills-"))
+    const bundledSkillsDirectory = join(projectRoot, "bundled-skills")
+    await writeFile(
+      join(projectRoot, "opencode.jsonc"),
+      JSON.stringify({ skills: { paths: ["./skills/development"] } }),
+    )
+    await writeSkill(join(projectRoot, "skills", "development"), "github-project-task-workflow")
+    await writeSkill(bundledSkillsDirectory, "meme-generation")
+
+    const result = await discoverOpenCodeSkills({
+      projectRoot,
+      homeDirectory: projectRoot,
+      bundledSkillsDirectory,
+    })
+
+    expect(result.skills).toEqual([
+      expect.objectContaining({
+        name: "meme-generation",
+        scope: "bundled",
+        source: "opencode-remote-bundled",
+        generated: false,
+      }),
+    ])
+  })
+
   test("discovers global config skill paths and compatible external skills", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "opencode-remote-project-"))
     const homeDirectory = await mkdtemp(join(tmpdir(), "opencode-remote-home-"))

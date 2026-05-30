@@ -1,16 +1,32 @@
 import { readdir, readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
+import { fileURLToPath } from "node:url"
 import { GENERATED_SKILL_PARENT } from "./generatedSkills.js"
 
 const PROJECT_CONFIG_FILES = ["opencode.json", "opencode.jsonc", join(".opencode", "opencode.json")]
+const BUNDLED_SKILLS_SOURCE = "opencode-remote-bundled"
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
+const DEFAULT_BUNDLED_SKILLS_DIRECTORY = join(PACKAGE_ROOT, "bundled-skills")
 
 export async function discoverOpenCodeSkills({
   projectRoot = process.cwd(),
   homeDirectory = homedir(),
+  bundledSkillsDirectory = DEFAULT_BUNDLED_SKILLS_DIRECTORY,
 } = {}) {
   const sources = []
   const remoteSkillUrls = []
+  const ignoredConfigDirectories = bundledSkillsDirectory
+    ? [join(dirname(bundledSkillsDirectory), "skills", "development")]
+    : []
+
+  if (bundledSkillsDirectory) {
+    sources.push({
+      scope: "bundled",
+      source: BUNDLED_SKILLS_SOURCE,
+      directory: bundledSkillsDirectory,
+    })
+  }
 
   sources.push(
     { scope: "project", source: "default", directory: join(projectRoot, ".opencode", "skills") },
@@ -40,7 +56,14 @@ export async function discoverOpenCodeSkills({
   for (const configPath of PROJECT_CONFIG_FILES.map((path) => join(projectRoot, path))) {
     const config = await readConfig(configPath)
     if (config) {
-      addConfigSkillSources({ sources, remoteSkillUrls, config, configPath, scope: "project" })
+      addConfigSkillSources({
+        sources,
+        remoteSkillUrls,
+        config,
+        configPath,
+        scope: "project",
+        ignoredDirectories: ignoredConfigDirectories,
+      })
     }
   }
 
@@ -75,7 +98,14 @@ export async function discoverOpenCodeSkills({
   }
 }
 
-function addConfigSkillSources({ sources, remoteSkillUrls, config, configPath, scope }) {
+function addConfigSkillSources({
+  sources,
+  remoteSkillUrls,
+  config,
+  configPath,
+  scope,
+  ignoredDirectories = [],
+}) {
   const skillConfig = config.skills
   if (!skillConfig || typeof skillConfig !== "object") {
     return
@@ -85,10 +115,14 @@ function addConfigSkillSources({ sources, remoteSkillUrls, config, configPath, s
     if (typeof path !== "string" || !path.trim()) {
       continue
     }
+    const directory = resolve(dirname(configPath), path)
+    if (isIgnoredDirectory(directory, ignoredDirectories)) {
+      continue
+    }
     sources.push({
       scope,
       source: "config-path",
-      directory: resolve(dirname(configPath), path),
+      directory,
     })
   }
 
@@ -97,6 +131,13 @@ function addConfigSkillSources({ sources, remoteSkillUrls, config, configPath, s
       remoteSkillUrls.push(url)
     }
   }
+}
+
+function isIgnoredDirectory(directory, ignoredDirectories = []) {
+  const normalizedDirectory = resolve(directory)
+  return ignoredDirectories.some(
+    (ignoredDirectory) => resolve(ignoredDirectory) === normalizedDirectory,
+  )
 }
 
 async function readConfig(filePath) {
