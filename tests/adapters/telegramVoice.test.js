@@ -12,6 +12,7 @@ describe("telegram voice helpers", () => {
       ok: true,
       arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
     }))
+    const logger = { debug: vi.fn() }
 
     try {
       const attachment = await downloadTelegramVoice({
@@ -20,6 +21,7 @@ describe("telegram voice helpers", () => {
         voice: { file_id: "voice-1", mime_type: "audio/ogg" },
         directory,
         fetchFn,
+        logger,
       })
 
       expect(api.getFile).toHaveBeenCalledWith("voice-1")
@@ -29,6 +31,12 @@ describe("telegram voice helpers", () => {
       expect(attachment.mime).toBe("audio/ogg")
       expect(attachment.filePath).toMatch(/telegram-voice-.+\.ogg$/u)
       expect(attachment.filePath).not.toContain("secret-token")
+      expect(logger.debug).toHaveBeenCalledWith(
+        { duration: null, fileSize: null, mime: "audio/ogg" },
+        "Telegram voice downloaded",
+      )
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("secret-token")
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain(directory)
       await expect(readFile(attachment.filePath)).resolves.toEqual(Buffer.from([1, 2, 3]))
     } finally {
       await rm(directory, { recursive: true, force: true })

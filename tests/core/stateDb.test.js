@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { createProjectStateStore, openStateDb } from "../../src/core/state/stateDb.js"
 
 const tempDirs = []
@@ -121,6 +121,35 @@ describe("stateDb", () => {
     expect(db.path).toBe(join(dir, "opencode-remote", "opencode-remote-dev.db"))
   })
 
+  test("logs safe state database and project lifecycle", async () => {
+    const logger = { debug: vi.fn() }
+    const db = await tempDb({ logger })
+    const store = createProjectStateStore({
+      db,
+      logger,
+      project: { id: "project-1", worktree: "/private/project", vcs: "git" },
+    })
+
+    await store.write({ activeSessionId: "ses_private", progressVerbosity: "verbose" })
+    await store.read()
+
+    expect(logger.debug).toHaveBeenCalledWith({ hasCustomPath: true }, "State database opened")
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasPreviousProject: false, projectScoped: true, vcs: "git" },
+      "Project state store initialized",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasActiveSession: true, hasProgressVerbosity: true },
+      "Project state written",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasActiveSession: true, hasProgressVerbosity: true },
+      "Project state read",
+    )
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("/private/project")
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("ses_private")
+  })
+
   test("clears migrated active session when the migrated project moved", async () => {
     const db = await tempDb()
     const oldStore = createProjectStateStore({
@@ -146,10 +175,10 @@ describe("stateDb", () => {
   })
 })
 
-async function tempDb() {
+async function tempDb(options = {}) {
   const dir = await mkdtemp(join(tmpdir(), "opencode-remote-state-db-"))
   tempDirs.push(dir)
-  const db = openStateDb(join(dir, "nested", "opencode-remote.db"))
+  const db = openStateDb(join(dir, "nested", "opencode-remote.db"), options)
   openDbs.push(db)
   return db
 }

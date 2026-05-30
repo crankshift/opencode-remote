@@ -39,7 +39,8 @@ describe("voiceService", () => {
 
   test("transcribes with configured Groq model and API key", async () => {
     const transcribe = vi.fn(async () => "hello bot")
-    const service = createVoiceService({ config: baseConfig, transcribe })
+    const logger = { debug: vi.fn() }
+    const service = createVoiceService({ config: baseConfig, transcribe, logger })
 
     await expect(service.transcribe("/voice.ogg")).resolves.toBe("hello bot")
 
@@ -48,11 +49,22 @@ describe("voiceService", () => {
       apiKey: "gsk_test",
       model: "whisper-large-v3-turbo",
     })
+    expect(logger.debug).toHaveBeenCalledWith(
+      { model: "whisper-large-v3-turbo" },
+      "Voice transcription starting",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasTranscript: true },
+      "Voice transcription completed",
+    )
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("gsk_test")
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("/voice.ogg")
   })
 
   test("synthesizes a Telegram voice file through mp3 and ogg steps", async () => {
     const synthesizeMp3 = vi.fn(async ({ outputPath }) => ({ outputPath }))
     const convertToOgg = vi.fn(async ({ outputPath }) => ({ outputPath }))
+    const logger = { debug: vi.fn() }
     const service = createVoiceService({
       config: baseConfig,
       cacheDirectory: "/cache/voice",
@@ -60,6 +72,7 @@ describe("voiceService", () => {
       assertFfmpeg: vi.fn(async () => ({ available: true })),
       synthesizeMp3,
       convertToOgg,
+      logger,
     })
 
     await expect(service.synthesizeTelegramVoice("hello reply")).resolves.toEqual({
@@ -74,6 +87,13 @@ describe("voiceService", () => {
       inputPath: "/cache/voice/reply-1.mp3",
       outputPath: "/cache/voice/reply-1.ogg",
     })
+    expect(logger.debug).toHaveBeenCalledWith(
+      { voice: "en-US-AndrewNeural" },
+      "Voice synthesis starting",
+    )
+    expect(logger.debug).toHaveBeenCalledWith({ converted: true }, "Voice synthesis completed")
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("hello reply")
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("/cache/voice")
   })
 
   test("persists mode changes", async () => {

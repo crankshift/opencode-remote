@@ -67,6 +67,7 @@ export async function createStickerPrompt({
 
   const cacheRecord = await store?.readCacheRecord?.(sticker.file_unique_id, kind)
   if (await isStickerCacheRecordUsable({ sticker, record: cacheRecord })) {
+    logger?.debug?.({ cacheHit: true, stickerKind: kind }, "Telegram sticker cache checked")
     const mime = kind === "static" ? "image/webp" : "image/png"
     return finalizeStickerPromptResult({
       sticker,
@@ -78,6 +79,7 @@ export async function createStickerPrompt({
       logger,
     })
   }
+  logger?.debug?.({ cacheHit: false, stickerKind: kind }, "Telegram sticker cache checked")
 
   const extension = kind === "static" ? "webp" : "png"
   const outputPath = cachedStickerFilePath(

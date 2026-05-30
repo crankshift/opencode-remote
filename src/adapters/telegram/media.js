@@ -38,6 +38,7 @@ export async function downloadTelegramPhoto({
   photo,
   directory = tmpdir(),
   fetchFn = fetch,
+  logger,
 }) {
   const file = await api.getFile(photo.file_id)
   if (!file?.file_path) {
@@ -56,6 +57,7 @@ export async function downloadTelegramPhoto({
 
   await mkdir(directory, { recursive: true })
   await writeFile(filePath, buffer)
+  logger?.debug?.({ fileSize: photo.file_size ?? null, mime }, "Telegram photo downloaded")
 
   return {
     mime,

@@ -23,7 +23,7 @@ AI operating guide for `opencode-remote`. Keep this file short: preserve critica
 - Language: JavaScript ESM.
 - Tests: Vitest.
 - Lint/format: Biome. Do not add ESLint or Prettier without a concrete need.
-- Logging: use the project logger in feature code. Avoid raw `console.*` except CLI boundary startup/error reporting.
+- Logging: use the project logger in feature code. Avoid raw `console.*` except CLI boundary startup/error reporting. New feature behavior should include safe structured debug logs when it has meaningful runtime decisions, external calls, cleanup, or failure modes.
 
 ## Open Source And Privacy
 

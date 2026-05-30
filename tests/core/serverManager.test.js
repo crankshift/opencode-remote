@@ -28,6 +28,7 @@ describe("ensureOpenCodeServer", () => {
   })
 
   test("does not start a child process when server is already reachable", async () => {
+    const logger = { debug: vi.fn() }
     const processFactory = vi.fn()
     const manager = await ensureOpenCodeServer({
       apiUrl: "http://localhost:4096",
@@ -36,11 +37,16 @@ describe("ensureOpenCodeServer", () => {
       workdir: process.cwd(),
       isReachable: vi.fn().mockResolvedValue(true),
       processFactory,
+      logger,
       waitMs: 0,
     })
 
     expect(manager.started).toBe(false)
     expect(processFactory).not.toHaveBeenCalled()
+    expect(logger.debug).toHaveBeenCalledWith(
+      { autoStart: true, serverStarted: false },
+      "OpenCode server already reachable",
+    )
   })
 
   test("does not start a child process when a reachable server responds after 100ms", async () => {
@@ -63,6 +69,7 @@ describe("ensureOpenCodeServer", () => {
   })
 
   test("starts opencode serve on the configured localhost port", async () => {
+    const logger = { debug: vi.fn() }
     const child = { kill: vi.fn(), stdout: null, stderr: null }
     const processFactory = vi.fn().mockReturnValue(child)
     const isReachable = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
@@ -74,6 +81,7 @@ describe("ensureOpenCodeServer", () => {
       workdir: "/tmp/project",
       isReachable,
       processFactory,
+      logger,
       waitMs: 5,
       maxAttempts: 5,
     })
@@ -87,6 +95,18 @@ describe("ensureOpenCodeServer", () => {
 
     await manager.stop()
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
+    expect(logger.debug).toHaveBeenCalledWith(
+      { autoStart: true, hasCommand: true, portConfigured: true },
+      "Starting OpenCode server",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { serverStarted: true },
+      "OpenCode server became reachable",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { serverStarted: true },
+      "Stopping owned OpenCode server",
+    )
   })
 
   test("starts opencode serve on the configured loopback IP port", async () => {

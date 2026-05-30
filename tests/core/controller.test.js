@@ -107,6 +107,48 @@ describe("gatewayController", () => {
     expect(opencode.respondToPermission).toHaveBeenCalledWith("ses_1", "perm_1", "always")
   })
 
+  test("logs safe session, prompt, permission, and stop lifecycle", async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn() }
+    const store = createStore()
+    const opencode = {
+      createSession: vi.fn(async () => ({ id: "ses_2", title: "Auto" })),
+      sendPrompt: vi.fn(async () => "answer"),
+      respondToPermission: vi.fn(async () => true),
+      stopSession: vi.fn(async () => ({ ok: true })),
+    }
+    const controller = createGatewayController({ opencode, store, logger })
+
+    await controller.sendPrompt("private prompt text", { onProgress: vi.fn() })
+    await controller.respondToPermission("ses_2", "perm_1", "once")
+    await controller.stop()
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasActiveSession: false },
+      "No active OpenCode session selected",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasAdditionalContext: false, hasGatewayContext: false },
+      "Creating OpenCode session",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasOptions: true, hasProgressHandler: true, promptKind: "string" },
+      "Sending prompt to OpenCode",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { decision: "once" },
+      "Responding to OpenCode permission request",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { hasActiveSession: true },
+      "Stopping active OpenCode session",
+    )
+    for (const [metadata] of logger.debug.mock.calls) {
+      expect(JSON.stringify(metadata)).not.toContain("private prompt text")
+      expect(metadata).not.toHaveProperty("sessionId")
+      expect(metadata).not.toHaveProperty("permissionId")
+    }
+  })
+
   test("creates a session before first prompt when none is active", async () => {
     const store = createStore()
     const opencode = {

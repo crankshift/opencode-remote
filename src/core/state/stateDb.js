@@ -7,11 +7,13 @@ const defaultState = {
   activeSessionId: null,
 }
 
-export function openStateDb(dbPath, { Database = DatabaseSync, pathOptions = {} } = {}) {
+export function openStateDb(dbPath, { Database = DatabaseSync, pathOptions = {}, logger } = {}) {
+  const hasCustomPath = Boolean(dbPath)
   dbPath ??= getDefaultStateDbPath(pathOptions)
   mkdirSync(dirname(dbPath), { recursive: true })
   const database = new Database(dbPath)
   initialize(database)
+  logger?.debug?.({ hasCustomPath }, "State database opened")
 
   return {
     path: dbPath,
@@ -38,23 +40,46 @@ export function openStateDb(dbPath, { Database = DatabaseSync, pathOptions = {} 
   }
 }
 
-export function createProjectStateStore({ db, dbPath, project, stateSuffix } = {}) {
+export function createProjectStateStore({ db, dbPath, project, stateSuffix, logger } = {}) {
   if (!project?.id) {
     throw new Error("Project state store requires a project identity")
   }
 
-  const database = db ?? openStateDb(dbPath, { pathOptions: { suffix: stateSuffix } })
+  const database = db ?? openStateDb(dbPath, { pathOptions: { suffix: stateSuffix }, logger })
   database.upsertProject(project)
   database.migrateProject(project.previous, project.id)
   database.upsertProject(project)
+  logger?.debug?.(
+    {
+      hasPreviousProject: Boolean(project.previous),
+      projectScoped: project.id !== "global",
+      vcs: project.vcs ?? null,
+    },
+    "Project state store initialized",
+  )
 
   return {
     async read() {
-      return database.readProjectState(project.id)
+      const state = database.readProjectState(project.id)
+      logger?.debug?.(
+        {
+          hasActiveSession: Boolean(state.activeSessionId),
+          hasProgressVerbosity: Boolean(state.progressVerbosity),
+        },
+        "Project state read",
+      )
+      return state
     },
 
     async write(settings) {
       database.writeProjectState(project.id, settings)
+      logger?.debug?.(
+        {
+          hasActiveSession: Boolean(settings.activeSessionId),
+          hasProgressVerbosity: Boolean(settings.progressVerbosity),
+        },
+        "Project state written",
+      )
     },
   }
 }

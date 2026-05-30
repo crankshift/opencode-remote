@@ -36,7 +36,9 @@ describe("runGateway", () => {
     expect(resolveProjectIdentity).toHaveBeenCalledWith({
       directory: testConfig().opencode.workdir,
     })
-    expect(createProjectStateStore).toHaveBeenCalledWith({ project })
+    expect(createProjectStateStore).toHaveBeenCalledWith(
+      expect.objectContaining({ project, logger: expect.any(Object) }),
+    )
   })
 
   test("passes the state suffix to the project state store", async () => {
@@ -64,7 +66,9 @@ describe("runGateway", () => {
       processLike: { once: vi.fn() },
     })
 
-    expect(createProjectStateStore).toHaveBeenCalledWith({ project, stateSuffix: "dev" })
+    expect(createProjectStateStore).toHaveBeenCalledWith(
+      expect.objectContaining({ project, stateSuffix: "dev", logger: expect.any(Object) }),
+    )
   })
 
   test("starts OpenCode server before Telegram polling", async () => {
@@ -96,7 +100,9 @@ describe("runGateway", () => {
       processLike,
     })
 
-    expect(ensureOpenCodeServer).toHaveBeenCalledWith(testConfig().opencode)
+    expect(ensureOpenCodeServer).toHaveBeenCalledWith(
+      expect.objectContaining({ ...testConfig().opencode, logger: expect.any(Object) }),
+    )
     expect(createBot).toHaveBeenCalledWith(
       expect.objectContaining({
         telegram: testConfig().telegram,
@@ -108,6 +114,62 @@ describe("runGateway", () => {
     })
     expect(processLike.once).toHaveBeenCalledWith("SIGINT", expect.any(Function))
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
+  })
+
+  test("logs safe startup milestones", async () => {
+    const logger = testLogger()
+    const server = { started: false, stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+
+    await runGateway({
+      config: testConfig(),
+      logger,
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/private/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => bot),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      {
+        hasConfigPath: false,
+        logLevel: "silent",
+        progressVerbosity: "all",
+        voiceEnabled: false,
+        voiceMode: "on",
+      },
+      "Gateway config resolved",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { opencodeServerStarted: false },
+      "OpenCode server ready",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { projectScoped: true, vcs: "git" },
+      "Project identity resolved",
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      { allowedUpdates: ["message", "callback_query", "message_reaction", "my_chat_member"] },
+      "Telegram polling starting",
+    )
+    for (const [metadata] of logger.debug.mock.calls) {
+      expect(metadata).not.toHaveProperty("workdir")
+      expect(metadata).not.toHaveProperty("configPath")
+      expect(metadata).not.toHaveProperty("botToken")
+    }
   })
 
   test("registers Telegram commands before polling starts", async () => {
@@ -487,6 +549,7 @@ function testConfig() {
 
 function testLogger() {
   return {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
   }

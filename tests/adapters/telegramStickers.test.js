@@ -157,6 +157,7 @@ describe("telegram sticker helpers", () => {
       filePath: cachedPath,
     })
     const fetchFn = vi.fn()
+    const logger = { debug: vi.fn() }
 
     try {
       const result = await createStickerPrompt({
@@ -166,12 +167,18 @@ describe("telegram sticker helpers", () => {
         store,
         cacheDirectory: directory,
         fetchFn,
+        logger,
       })
 
       expect(fetchFn).not.toHaveBeenCalled()
       expect(result.prompt.attachments[0]).toEqual(
         expect.objectContaining({ mime: "image/webp", filePath: cachedPath }),
       )
+      expect(logger.debug).toHaveBeenCalledWith(
+        { cacheHit: true, stickerKind: "static" },
+        "Telegram sticker cache checked",
+      )
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain(cachedPath)
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
