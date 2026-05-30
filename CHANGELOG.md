@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.10.2] - 2026-05-30
+
+### Added
+
+- Added bundled OpenCode Remote guidance skills for troubleshooting, gateway capabilities, sticker behavior, and generated skill creation. (#40)
+
 ## [0.10.1] - 2026-05-30
 
 ### Changed
