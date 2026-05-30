@@ -1,6 +1,12 @@
 import { InlineKeyboard } from "grammy"
 
-export function createTelegramSkillsMenu({ discoverSkills, createGeneratedSkill, reply, logger }) {
+export function createTelegramSkillsMenu({
+  discoverSkills,
+  createGeneratedSkill,
+  reply,
+  logger,
+  shouldStartFromText = () => true,
+}) {
   const creationStates = new Map()
 
   return {
@@ -19,7 +25,7 @@ export function createTelegramSkillsMenu({ discoverSkills, createGeneratedSkill,
       const keyboard = new InlineKeyboard()
         .text("Refresh", "skills:refresh")
         .row()
-        .text("Create generated skill", "skills:create")
+        .text("New skill", "skills:create")
       await reply(ctx, formatSkillsList(result), { reply_markup: keyboard })
     },
 
@@ -41,7 +47,17 @@ export function createTelegramSkillsMenu({ discoverSkills, createGeneratedSkill,
       const key = pendingSkillKey(ctx)
       const state = creationStates.get(key)
       if (!state) {
-        return false
+        const text = String(ctx.message?.text ?? "").trim()
+        if (!shouldStartFromText(ctx) || !isSkillCreationRequest(text)) {
+          return false
+        }
+        creationStates.set(key, { step: "name" })
+        logger?.debug?.(
+          { trigger: "natural_text" },
+          "OpenCode generated skill creation started from Telegram text",
+        )
+        await reply(ctx, "Skill name? Send a short name, or /cancel.")
+        return true
       }
 
       const text = String(ctx.message?.text ?? "").trim()
@@ -168,6 +184,11 @@ function formatGeneratedSkillPreview({ name, description, body }) {
 
 function isAffirmative(text) {
   return /^(yes|y)$/iu.test(String(text ?? "").trim())
+}
+
+function isSkillCreationRequest(text) {
+  const normalized = String(text ?? "").toLowerCase()
+  return /\b(create|make|generate|add|draft)\b[\s\S]*\bskill\b/u.test(normalized)
 }
 
 function pendingSkillKey(ctx) {

@@ -94,6 +94,7 @@ export function createTelegramBot({
     discoverSkills,
     createGeneratedSkill,
     logger,
+    shouldStartFromText: isPrivateTelegramChat,
     reply: async (ctx, text, options) => replyAndRemember(ctx, text, botMessageMemory, options),
   })
   const groupMenu = createTelegramGroupMenu({

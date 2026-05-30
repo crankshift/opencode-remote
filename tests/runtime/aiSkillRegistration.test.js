@@ -11,6 +11,7 @@ const canonicalSkillPaths = [
   "skills/opencode-remote-troubleshooting/SKILL.md",
   "skills/telegram-sticker-behavior/SKILL.md",
   "skills/opencode-remote-gateway-capabilities/SKILL.md",
+  "skills/opencode-remote-skill-creator/SKILL.md",
 ]
 
 const readRepoFile = (path) => readFile(new URL(path, repoRoot), "utf8")
@@ -31,6 +32,7 @@ describe("repository AI skill registration", () => {
     const troubleshooting = await readRepoFile("skills/opencode-remote-troubleshooting/SKILL.md")
     const stickers = await readRepoFile("skills/telegram-sticker-behavior/SKILL.md")
     const capabilities = await readRepoFile("skills/opencode-remote-gateway-capabilities/SKILL.md")
+    const creator = await readRepoFile("skills/opencode-remote-skill-creator/SKILL.md")
 
     expect(troubleshooting).toMatch(/^---\nname: opencode-remote-troubleshooting\n/m)
     expect(troubleshooting).toContain(
@@ -49,6 +51,12 @@ describe("repository AI skill registration", () => {
       "Use when designing or changing opencode-remote gateway capabilities, Telegram behavior, voice replies, Activity messages, permission UI, reactions, stickers, or gateway-authored prompts.",
     )
     expect(capabilities).toContain("Do not move Telegram-specific behavior into core services")
+
+    expect(creator).toMatch(/^---\nname: opencode-remote-skill-creator\n/m)
+    expect(creator).toContain(
+      "Use when a user asks OpenCode Remote to create, generate, draft, or improve a user/project OpenCode skill.",
+    )
+    expect(creator).toContain(".opencode/skills/opencode-remote-generated/<skill-name>/SKILL.md")
   })
 
   test("all canonical skills have required OpenCode skill frontmatter", async () => {

@@ -142,6 +142,37 @@ describe("createTelegramBot", () => {
       ].join("\n"),
       expect.any(Object),
     )
+    const keyboard = reply.mock.calls[0][1].reply_markup
+    expect(keyboard.inline_keyboard.flat().map((button) => button.text)).toContain("New skill")
+  })
+
+  test("natural private chat skill creation request starts generated skill flow", async () => {
+    const controller = { sendPrompt: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.messageHandlers.get("message:text")({
+      message: {
+        message_id: 10,
+        text: "hey please create skill for my image prompt style",
+        chat: { id: 456, type: "private" },
+        from: { id: 123, is_bot: false, first_name: "Authorized" },
+      },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(reply).toHaveBeenCalledWith("Skill name? Send a short name, or /cancel.")
+    expect(controller.sendPrompt).not.toHaveBeenCalled()
   })
 
   test("skills create flow previews and writes generated project skills", async () => {
