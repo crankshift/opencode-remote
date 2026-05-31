@@ -128,6 +128,48 @@ describe("bundled meme runtime assets", () => {
     ).resolves.toBe("# opencode-remote-troubleshooting\n")
   })
 
+  test("install uses the first project-local skills.paths directory when configured", async () => {
+    const projectRoot = await tempDir("runtime-project")
+    const sources = await createSourceAssets()
+    await writeFile(
+      join(projectRoot, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        instructions: ["AGENTS.md", "personality/INNA_RUNTIME.md"],
+        skills: { paths: ["personality/skills"] },
+      }),
+    )
+
+    const result = await installBundledRuntimeSkillsForProject({ projectRoot, ...sources })
+
+    const configuredSkillPath = join(
+      projectRoot,
+      "personality",
+      "skills",
+      "opencode-remote-bundled",
+      BUNDLED_MEME_SKILL_NAME,
+      "SKILL.md",
+    )
+    expect(result.enabled).toBe(true)
+    expect(result.skill.projectPath).toBe(configuredSkillPath)
+    expect(result.writtenPaths).toEqual([configuredSkillPath])
+    await expect(readFile(configuredSkillPath, "utf8")).resolves.toBe(
+      `# ${BUNDLED_MEME_SKILL_NAME}\n`,
+    )
+    await expect(
+      stat(
+        join(
+          projectRoot,
+          ".opencode",
+          "skills",
+          "opencode-remote-bundled",
+          BUNDLED_MEME_SKILL_NAME,
+          "SKILL.md",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   test("install does not write global opencode config paths", async () => {
     const projectRoot = await tempDir("runtime-project")
     const homeDirectory = await tempDir("runtime-home")

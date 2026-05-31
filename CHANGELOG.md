@@ -4,9 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.10.4] - 2026-05-31
+
 ### Changed
 
 - Changed bundled skill installation to run during gateway startup and `/skills` refresh, removing the manual meme enable/update action. (#46)
+- Changed bundled skill installation to respect the first project-local `skills.paths` directory in project OpenCode config before falling back to `.opencode/skills`. (#46)
 
 ## [0.10.3] - 2026-05-31
 

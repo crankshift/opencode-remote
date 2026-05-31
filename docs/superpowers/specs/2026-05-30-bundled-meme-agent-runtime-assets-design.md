@@ -36,8 +36,9 @@ OpenCode Remote package assets remain canonical in the repository and package:
 
 - `bundled-skills/meme-generation/SKILL.md`
 
-When the gateway starts for a project, OpenCode Remote syncs bundled skills into namespaced project-local OpenCode locations:
+When the gateway starts for a project, OpenCode Remote syncs bundled skills into namespaced project-local OpenCode locations. If the project OpenCode config has a project-local `skills.paths` entry, the first such directory is used. Otherwise the default project skill directory is used:
 
+- `<configured-skills-path>/opencode-remote-bundled/<skill-name>/SKILL.md`
 - `.opencode/skills/opencode-remote-bundled/<skill-name>/SKILL.md`
 
 The sync is automatic and project-local, not a global OpenCode config mutation. Gateway startup installs or updates bundled skills before ensuring the OpenCode server so auto-started servers can discover them. Telegram `/skills` refresh also re-runs the sync. There is no separate `Enable meme skill` action. The sync also removes the legacy experimental `.opencode/agent/opencode-remote-meme.md` path if present. A separate CLI command is deferred.

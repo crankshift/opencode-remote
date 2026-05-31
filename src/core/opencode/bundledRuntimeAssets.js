@@ -1,9 +1,10 @@
-import { access, copyFile, mkdir, readdir, rm, stat } from "node:fs/promises"
-import { dirname, join, resolve } from "node:path"
+import { access, copyFile, mkdir, readdir, readFile, rm, stat } from "node:fs/promises"
+import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 const DEFAULT_BUNDLED_SKILLS_DIRECTORY = join(PACKAGE_ROOT, "bundled-skills")
+const PROJECT_CONFIG_FILES = ["opencode.json", "opencode.jsonc", join(".opencode", "opencode.json")]
 
 export const BUNDLED_MEME_SKILL_NAME = "meme-generation"
 const BUNDLED_RUNTIME_SKILLS_PARENT = "opencode-remote-bundled"
@@ -12,10 +13,12 @@ const LEGACY_BUNDLED_MEME_AGENT_NAME = "opencode-remote-meme"
 export function bundledMemeRuntimeAssetPaths({
   projectRoot = process.cwd(),
   bundledSkillsDirectory = DEFAULT_BUNDLED_SKILLS_DIRECTORY,
+  runtimeSkillsDirectory,
 } = {}) {
   const skill = bundledSkillRuntimeAssetPaths({
     projectRoot,
     bundledSkillsDirectory,
+    runtimeSkillsDirectory,
     skillName: BUNDLED_MEME_SKILL_NAME,
   })
   return {
@@ -29,23 +32,18 @@ export function bundledMemeRuntimeAssetPaths({
 function bundledSkillRuntimeAssetPaths({
   projectRoot = process.cwd(),
   bundledSkillsDirectory = DEFAULT_BUNDLED_SKILLS_DIRECTORY,
+  runtimeSkillsDirectory = defaultRuntimeSkillsDirectory(projectRoot),
   skillName,
 } = {}) {
   return {
     sourcePath: join(bundledSkillsDirectory, skillName, "SKILL.md"),
-    projectPath: join(
-      projectRoot,
-      ".opencode",
-      "skills",
-      BUNDLED_RUNTIME_SKILLS_PARENT,
-      skillName,
-      "SKILL.md",
-    ),
+    projectPath: join(runtimeSkillsDirectory, BUNDLED_RUNTIME_SKILLS_PARENT, skillName, "SKILL.md"),
   }
 }
 
 export async function bundledMemeRuntimeStatus(options = {}) {
-  const paths = bundledMemeRuntimeAssetPaths(options)
+  const runtimeSkillsDirectory = await resolveRuntimeSkillsDirectory(options)
+  const paths = bundledMemeRuntimeAssetPaths({ ...options, runtimeSkillsDirectory })
   const skillEnabled = await fileExists(paths.skill.projectPath)
   const legacyAgentEnabled = await fileExists(paths.legacyAgent.projectPath)
 
@@ -57,7 +55,8 @@ export async function bundledMemeRuntimeStatus(options = {}) {
 }
 
 export async function installBundledRuntimeSkillsForProject(options = {}) {
-  const paths = bundledMemeRuntimeAssetPaths(options)
+  const runtimeSkillsDirectory = await resolveRuntimeSkillsDirectory(options)
+  const paths = bundledMemeRuntimeAssetPaths({ ...options, runtimeSkillsDirectory })
   await assertReadableFile(paths.skill.sourcePath)
 
   const writtenPaths = []
@@ -65,7 +64,11 @@ export async function installBundledRuntimeSkillsForProject(options = {}) {
     options.bundledSkillsDirectory ?? DEFAULT_BUNDLED_SKILLS_DIRECTORY,
   )
   for (const skillName of skillNames) {
-    const skillPaths = bundledSkillRuntimeAssetPaths({ ...options, skillName })
+    const skillPaths = bundledSkillRuntimeAssetPaths({
+      ...options,
+      runtimeSkillsDirectory,
+      skillName,
+    })
     await assertReadableFile(skillPaths.sourcePath)
     await mkdir(dirname(skillPaths.projectPath), { recursive: true })
     await copyFile(skillPaths.sourcePath, skillPaths.projectPath)
@@ -83,6 +86,50 @@ export async function installBundledRuntimeSkillsForProject(options = {}) {
     writtenPaths,
     removedPaths,
   }
+}
+
+async function resolveRuntimeSkillsDirectory({ projectRoot = process.cwd() } = {}) {
+  for (const configPath of PROJECT_CONFIG_FILES.map((path) => join(projectRoot, path))) {
+    const config = await readOpenCodeConfig(configPath)
+    const paths = config?.skills?.paths
+    if (!Array.isArray(paths)) {
+      continue
+    }
+    for (const path of paths) {
+      if (typeof path !== "string" || !path.trim()) {
+        continue
+      }
+      const directory = resolve(dirname(configPath), path)
+      if (isProjectLocalPath(directory, projectRoot)) {
+        return directory
+      }
+    }
+  }
+  return defaultRuntimeSkillsDirectory(projectRoot)
+}
+
+async function readOpenCodeConfig(filePath) {
+  try {
+    return JSON.parse(stripJsonComments(await readFile(filePath, "utf8")))
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return null
+    }
+    throw error
+  }
+}
+
+function stripJsonComments(text) {
+  return String(text).replace(/(^|\s)\/\/.*$/gmu, "$1")
+}
+
+function isProjectLocalPath(filePath, projectRoot) {
+  const relativePath = relative(resolve(projectRoot), resolve(filePath))
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))
+}
+
+function defaultRuntimeSkillsDirectory(projectRoot = process.cwd()) {
+  return join(projectRoot, ".opencode", "skills")
 }
 
 async function listBundledSkillNames(bundledSkillsDirectory) {
