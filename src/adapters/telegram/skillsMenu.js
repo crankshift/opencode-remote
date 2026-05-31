@@ -4,7 +4,7 @@ export function createTelegramSkillsMenu({
   discoverSkills,
   createGeneratedSkill,
   bundledMemeRuntimeStatus,
-  installBundledMemeRuntimeForProject,
+  installBundledRuntimeSkillsForProject,
   reply,
   logger,
   shouldStartFromText = () => true,
@@ -26,14 +26,6 @@ export function createTelegramSkillsMenu({
         "OpenCode skills discovered for Telegram menu",
       )
       const keyboard = new InlineKeyboard().text("Refresh", "skills:refresh").row()
-      if (!bundledMemeStatus.enabled || bundledMemeStatus.legacyAgent?.enabled) {
-        keyboard
-          .text(
-            bundledMemeStatus.enabled ? "Update meme skill" : "Enable meme skill",
-            "skills:enable_meme_skill",
-          )
-          .row()
-      }
       keyboard.text("New skill", "skills:create")
       await reply(ctx, formatSkillsList(result, { bundledMemeStatus }), {
         parse_mode: "HTML",
@@ -43,12 +35,6 @@ export function createTelegramSkillsMenu({
 
     async handleCallback(ctx) {
       const action = ctx.match?.[1]
-      if (action === "enable_meme_skill") {
-        await ctx.answerCallbackQuery?.({ text: "Enabling meme skill" })
-        const result = await installBundledMemeRuntimeForProject()
-        await reply(ctx, formatBundledMemeInstallResult(result))
-        return
-      }
       if (action === "create") {
         creationStates.set(pendingSkillKey(ctx), { step: "name" })
         await ctx.answerCallbackQuery?.({ text: "Creating generated skill" })
@@ -57,6 +43,7 @@ export function createTelegramSkillsMenu({
       }
       if (action === "refresh") {
         await ctx.answerCallbackQuery?.({ text: "Refreshing skills" })
+        await installBundledRuntimeSkillsForProject()
         await this.handleCommand(ctx)
       }
     },
@@ -183,19 +170,6 @@ function formatBundledMemeStatus(status) {
   const state = status?.enabled ? "enabled" : "disabled"
   const legacySuffix = status?.legacyAgent?.enabled ? " (legacy agent cleanup needed)" : ""
   return `Bundled meme skill: ${state}${legacySuffix}`
-}
-
-function formatBundledMemeInstallResult(result = {}) {
-  const lines = [
-    "Enabled bundled meme skill.",
-    "Written paths:",
-    "- .opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md",
-  ]
-  if (result.removedPaths?.length > 0) {
-    lines.push("Removed legacy meme agent: .opencode/agent/opencode-remote-meme.md")
-  }
-  lines.push("Restart OpenCode or start a fresh OpenCode process so it can discover the skill.")
-  return lines.join("\n")
 }
 
 function isCompatibleSkill(skill) {

@@ -31,7 +31,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - `/progress` opens a private-chat prompt activity visibility menu and still accepts direct `off`, `new`, `all`, or `verbose` modes.
 - `/voice` opens a voice settings menu with mode, captions, paginated country selection, paginated clickable voice selection, and test voice actions. It still accepts direct commands to show status, set mode, toggle captions, list voices by required short country/locale filter, set the active Edge TTS voice, and send a test voice note.
 - `/stickers` opens a saved-pack menu and still accepts direct commands to save, list, and forget sticker packs for future sticker replies.
-- `/skills` lists local OpenCode skills from default skill folders, configured `skills.paths`, compatible Claude/Agents skill folders, OpenCode Remote generated skills, and sanitized bundled skills shipped with the npm package. `/skills create`, the `New skill` menu button, or private chat requests such as "please create a skill" create project-local generated skills under `.opencode/skills/opencode-remote-generated/` after preview and confirmation. `/skills` can also enable the bundled meme-generation skill project-locally for OpenCode discovery from `.opencode/` and clean up the legacy experimental meme agent.
+- `/skills` lists local OpenCode skills from default skill folders, configured `skills.paths`, compatible Claude/Agents skill folders, OpenCode Remote generated skills, and sanitized bundled skills shipped with the npm package. `/skills create`, the `New skill` menu button, or private chat requests such as "please create a skill" create project-local generated skills under `.opencode/skills/opencode-remote-generated/` after preview and confirmation. Gateway startup and `/skills` refresh install or update bundled skills under the first project-local configured `skills.paths` directory, falling back to `.opencode/skills`, and clean up the legacy experimental meme agent.
 - Telegram command menu buttons perform real actions, open submenus, or start guided text input instead of only returning slash-command usage text.
 - `/group` opens a private-chat grouped management menu for known allowed groups. In groups, `/group` replies with a short DM-only notice.
 - Per-group custom trigger phrases are managed from the DM `/group` menu.
@@ -51,7 +51,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - User emoji reactions to recent bot messages are sent back to OpenCode as feedback prompts.
 - Telegram voice messages are transcribed and sent to OpenCode when voice mode is enabled.
 - Voice replies replace text replies after voice prompts in `/voice on` mode and after text, photo, and voice prompts in `/voice all` mode, with optional text captions and text fallback if speech generation or sending fails.
-- When the optional bundled meme-generation skill is enabled, OpenCode can create local meme files from the active session; generated meme files are delivered back through Telegram through validated `MEDIA:` output.
+- When the bundled meme-generation skill is installed, OpenCode can create local meme files from the active session; generated meme files are delivered back through Telegram through validated `MEDIA:` output.
 
 ## OpenCode Sessions
 

@@ -201,7 +201,7 @@ describe("createTelegramBot", () => {
     expect(keyboard.inline_keyboard.flat().map((button) => button.text)).toContain("New skill")
   })
 
-  test("skills command shows disabled bundled meme runtime and enable action", async () => {
+  test("skills command does not show an enable action when bundled meme runtime is disabled", async () => {
     const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: false }))
     const bot = createTelegramBot({
       token: "token",
@@ -219,17 +219,11 @@ describe("createTelegramBot", () => {
     expect(bundledMemeRuntimeStatus).toHaveBeenCalled()
     expect(reply.mock.calls[0][0]).toContain("Bundled meme skill: disabled")
     const buttons = reply.mock.calls[0][1].reply_markup.inline_keyboard.flat()
-    expect(buttons).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          text: "Enable meme skill",
-          callback_data: "skills:enable_meme_skill",
-        }),
-      ]),
-    )
+    expect(buttons.map((button) => button.text)).not.toContain("Enable meme skill")
+    expect(buttons.map((button) => button.callback_data)).not.toContain("skills:enable_meme_skill")
   })
 
-  test("skills command shows update action when legacy meme agent is installed", async () => {
+  test("skills command does not show an update action when legacy meme agent is installed", async () => {
     const bundledMemeRuntimeStatus = vi.fn(async () => ({
       enabled: true,
       legacyAgent: { enabled: true },
@@ -251,51 +245,53 @@ describe("createTelegramBot", () => {
       "Bundled meme skill: enabled (legacy agent cleanup needed)",
     )
     const buttons = reply.mock.calls[0][1].reply_markup.inline_keyboard.flat()
-    expect(buttons).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          text: "Update meme skill",
-          callback_data: "skills:enable_meme_skill",
-        }),
-      ]),
-    )
+    expect(buttons.map((button) => button.text)).not.toContain("Update meme skill")
+    expect(buttons.map((button) => button.callback_data)).not.toContain("skills:enable_meme_skill")
   })
 
-  test("skills enable callback installs bundled meme skill and reports legacy agent cleanup", async () => {
-    const installBundledMemeRuntimeForProject = vi.fn(async () => ({
-      writtenPaths: ["/project/.opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md"],
-      removedPaths: ["/project/.opencode/agent/opencode-remote-meme.md"],
-    }))
+  test("skills refresh callback installs bundled meme runtime before rediscovering skills", async () => {
+    const events = []
+    const installBundledRuntimeSkillsForProject = vi.fn(async () => {
+      events.push("install")
+      return {
+        enabled: true,
+        writtenPaths: [
+          "/project/.opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md",
+        ],
+        removedPaths: ["/project/.opencode/agent/opencode-remote-meme.md"],
+      }
+    })
+    const discoverSkills = vi.fn(async () => {
+      events.push("discover")
+      return { skills: [], remoteSkillUrls: [] }
+    })
+    const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: true }))
     const bot = createTelegramBot({
       token: "token",
       telegram: testTelegram(),
       controller: {},
       logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
       botFactory: FakeBot,
-      installBundledMemeRuntimeForProject,
+      discoverSkills,
+      bundledMemeRuntimeStatus,
+      installBundledRuntimeSkillsForProject,
     })
     const handler = bot.callbackHandlers.find(({ pattern }) =>
-      pattern.test("skills:enable_meme_skill"),
+      pattern.test("skills:refresh"),
     ).handler
     const reply = vi.fn(async () => undefined)
+    const answerCallbackQuery = vi.fn(async () => undefined)
 
     await handler({
-      match: ["skills:enable_meme_skill", "enable_meme_skill"],
-      answerCallbackQuery: vi.fn(async () => undefined),
+      match: ["skills:refresh", "refresh"],
+      answerCallbackQuery,
       reply,
     })
 
-    expect(installBundledMemeRuntimeForProject).toHaveBeenCalled()
-    expect(reply.mock.calls[0][0]).toContain("Enabled bundled meme skill.")
-    expect(reply.mock.calls[0][0]).toContain(
-      ".opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md",
-    )
-    expect(reply.mock.calls[0][0]).toContain(
-      "Removed legacy meme agent: .opencode/agent/opencode-remote-meme.md",
-    )
-    expect(reply.mock.calls[0][0]).not.toContain("/project")
-    expect(reply.mock.calls[0][0]).not.toContain("/project/.opencode")
-    expect(reply.mock.calls[0][0]).toContain("Restart OpenCode")
+    expect(installBundledRuntimeSkillsForProject).toHaveBeenCalled()
+    expect(events).toEqual(["install", "discover"])
+    expect(answerCallbackQuery).toHaveBeenCalledWith({ text: "Refreshing skills" })
+    expect(reply.mock.calls[0][0]).toContain("Bundled meme skill: enabled")
   })
 
   test("natural private chat skill creation request starts generated skill flow", async () => {

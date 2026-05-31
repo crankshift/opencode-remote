@@ -12,7 +12,7 @@ import { createGatewayContext } from "../core/gateway/context.js"
 import { createGatewayController as defaultCreateGatewayController } from "../core/gateway/controller.js"
 import {
   bundledMemeRuntimeStatus as defaultBundledMemeRuntimeStatus,
-  installBundledMemeRuntimeForProject as defaultInstallBundledMemeRuntimeForProject,
+  installBundledRuntimeSkillsForProject as defaultInstallBundledRuntimeSkillsForProject,
 } from "../core/opencode/bundledRuntimeAssets.js"
 import { createOpenCodeClient as defaultCreateOpenCodeClient } from "../core/opencode/client.js"
 import { createGeneratedSkill as defaultCreateGeneratedSkill } from "../core/opencode/generatedSkills.js"
@@ -66,14 +66,27 @@ export async function runGateway({
   const setConfigValuesAtPath = dependencies.setConfigValuesAtPath ?? defaultSetConfigValuesAtPath
   const bundledMemeRuntimeStatus =
     dependencies.bundledMemeRuntimeStatus ?? defaultBundledMemeRuntimeStatus
-  const installBundledMemeRuntimeForProject =
-    dependencies.installBundledMemeRuntimeForProject ?? defaultInstallBundledMemeRuntimeForProject
+  const installBundledRuntimeSkillsForProject =
+    dependencies.installBundledRuntimeSkillsForProject ??
+    defaultInstallBundledRuntimeSkillsForProject
   const createGeneratedSkill = dependencies.createGeneratedSkill ?? defaultCreateGeneratedSkill
 
   if (resolvedConfig.voice.enabled && resolvedConfig.voice.mode !== "off") {
     resolvedLogger.debug?.({ voiceMode: resolvedConfig.voice.mode }, "Checking voice dependencies")
     await assertFfmpegAvailable()
   }
+
+  const bundledRuntimeInstall = await installBundledRuntimeSkillsForProject({
+    projectRoot: resolvedConfig.opencode.workdir,
+  })
+  resolvedLogger.debug?.(
+    {
+      bundledMemeRuntimeEnabled: bundledRuntimeInstall.enabled === true,
+      bundledMemeRuntimeRemovedLegacy: (bundledRuntimeInstall.removedPaths?.length ?? 0) > 0,
+      bundledRuntimeSkillsWritten: bundledRuntimeInstall.writtenPaths?.length ?? 0,
+    },
+    "Bundled runtime skills installed",
+  )
 
   const server = await ensureOpenCodeServer({ ...resolvedConfig.opencode, logger: resolvedLogger })
   resolvedLogger.debug?.(
@@ -136,8 +149,8 @@ export async function runGateway({
       createGeneratedSkill({ projectRoot: resolvedConfig.opencode.workdir, ...input }),
     bundledMemeRuntimeStatus: () =>
       bundledMemeRuntimeStatus({ projectRoot: resolvedConfig.opencode.workdir }),
-    installBundledMemeRuntimeForProject: () =>
-      installBundledMemeRuntimeForProject({ projectRoot: resolvedConfig.opencode.workdir }),
+    installBundledRuntimeSkillsForProject: () =>
+      installBundledRuntimeSkillsForProject({ projectRoot: resolvedConfig.opencode.workdir }),
   })
   groupRegistry.setApi?.(bot.api)
 
