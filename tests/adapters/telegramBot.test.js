@@ -201,6 +201,50 @@ describe("createTelegramBot", () => {
     expect(keyboard.inline_keyboard.flat().map((button) => button.text)).toContain("New skill")
   })
 
+  test("skills command splits long skill lists into Telegram-safe messages", async () => {
+    const skills = Array.from({ length: 45 }, (_, index) => ({
+      name: `project-skill-${index}`,
+      description:
+        "Use when listing enough project skills to exceed a single Telegram sendMessage text payload safely.",
+      scope: "project",
+      source: "config-path",
+      generated: false,
+      filePath: `/project/skills/project-skill-${index}/SKILL.md`,
+    }))
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      botFactory: FakeBot,
+      discoverSkills: vi.fn(async () => ({ skills, remoteSkillUrls: [] })),
+      bundledMemeRuntimeStatus: vi.fn(async () => ({ enabled: true })),
+    })
+    const reply = vi.fn(async () => undefined)
+
+    await bot.commands.get("skills")({ reply })
+
+    expect(reply.mock.calls.length).toBeGreaterThan(1)
+    for (const [text, options] of reply.mock.calls) {
+      expect(text.length).toBeLessThanOrEqual(3900)
+      expect(options).toEqual(expect.objectContaining({ parse_mode: "HTML" }))
+    }
+    for (const [text] of reply.mock.calls.slice(0, -1)) {
+      expect(text.endsWith("\n")).toBe(true)
+      expect(text.match(/<b>/gu)?.length ?? 0).toBe(text.match(/<\/b>/gu)?.length ?? 0)
+    }
+    const deliveredText = reply.mock.calls.map(([text]) => text).join("")
+    for (const skill of skills) {
+      expect(deliveredText).toContain(skill.name)
+    }
+    expect(reply.mock.calls.at(-1)[1].reply_markup.inline_keyboard.flat()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ text: "Refresh" })]),
+    )
+    for (const [, options] of reply.mock.calls.slice(0, -1)) {
+      expect(options.reply_markup).toBeUndefined()
+    }
+  })
+
   test("skills command does not show an enable action when bundled meme runtime is disabled", async () => {
     const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: false }))
     const bot = createTelegramBot({

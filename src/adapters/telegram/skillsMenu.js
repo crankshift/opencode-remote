@@ -1,4 +1,7 @@
 import { InlineKeyboard } from "grammy"
+import { chunkText } from "../../core/formatting/chunkText.js"
+
+const MAX_TELEGRAM_MESSAGE_LENGTH = 3900
 
 export function createTelegramSkillsMenu({
   discoverSkills,
@@ -27,10 +30,16 @@ export function createTelegramSkillsMenu({
       )
       const keyboard = new InlineKeyboard().text("Refresh", "skills:refresh").row()
       keyboard.text("New skill", "skills:create")
-      await reply(ctx, formatSkillsList(result, { bundledMemeStatus }), {
-        parse_mode: "HTML",
-        reply_markup: keyboard,
-      })
+      const chunks = chunkHtmlTextByLines(
+        formatSkillsList(result, { bundledMemeStatus }),
+        MAX_TELEGRAM_MESSAGE_LENGTH,
+      )
+      for (const [index, chunk] of chunks.entries()) {
+        await reply(ctx, chunk, {
+          parse_mode: "HTML",
+          ...(index === chunks.length - 1 ? { reply_markup: keyboard } : {}),
+        })
+      }
     },
 
     async handleCallback(ctx) {
@@ -132,6 +141,42 @@ function skillsDiscoveryLogContext({ skills = [], remoteSkillUrls = [] } = {}) {
     skillScopes: uniqueSorted(skills.map((skill) => skill.scope)),
     skillSources: uniqueSorted(skills.map((skill) => skill.source)),
   }
+}
+
+function chunkHtmlTextByLines(text, maxLength) {
+  const chunks = []
+  let current = ""
+
+  for (const segment of text.match(/[^\n]*(?:\n|$)/gu) ?? []) {
+    if (segment.length === 0) {
+      continue
+    }
+
+    if (segment.length > maxLength) {
+      if (current.length > 0) {
+        chunks.push(current)
+        current = ""
+      }
+      chunks.push(...chunkText(segment, maxLength))
+      continue
+    }
+
+    if (current.length + segment.length <= maxLength) {
+      current += segment
+      continue
+    }
+
+    if (current.length > 0) {
+      chunks.push(current)
+    }
+    current = segment
+  }
+
+  if (current.length > 0) {
+    chunks.push(current)
+  }
+
+  return chunks
 }
 
 function uniqueSorted(values) {
