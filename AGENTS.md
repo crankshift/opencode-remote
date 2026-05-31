@@ -152,7 +152,7 @@ pnpm run check
 - Runtime gateway prompt strings that encode Telegram markers, sticker catalogs, reaction feedback, captionless image behavior, or group context are protocol code, not skills. Keep them in adapter/core prompt builders unless OpenCode later exposes reliable gateway-controlled skill invocation.
 - Gateway-generated user/project skills belong to the target OpenCode project under `.opencode/skills/opencode-remote-generated/<skill-name>/SKILL.md`, or a global user scope when explicitly requested. Never write generated skills into this repository's `skills/development/` or `bundled-skills/` directories.
 - User-facing bundled OpenCode runtime assets may live under `bundled-skills/`, but OpenCode sees them only after project-local install into `.opencode/`.
-- Install the bundled meme workflow as a project-local skill and clean up the legacy `.opencode/agent/opencode-remote-meme.md` path if present.
+- Gateway startup and `/skills` refresh install bundled skills as project-local skills and clean up the legacy `.opencode/agent/opencode-remote-meme.md` path if present.
 - Telegram should not force prompts into a bundled OpenCode agent; the active OpenCode session decides whether to invoke discoverable agents and skills.
 - Do not write bundled runtime assets to global OpenCode config by default.
 - Generated media markers must stay constrained to gateway-controlled generated-media files.

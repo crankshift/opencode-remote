@@ -4,6 +4,10 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Changed bundled skill installation to run during gateway startup and `/skills` refresh, removing the manual meme enable/update action. (#46)
+
 ## [0.10.3] - 2026-05-31
 
 ### Added

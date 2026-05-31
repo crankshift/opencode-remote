@@ -137,6 +137,52 @@ describe("runGateway", () => {
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
   })
 
+  test("installs bundled meme runtime before ensuring the OpenCode server", async () => {
+    const events = []
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+    const installBundledRuntimeSkillsForProject = vi.fn(async () => {
+      events.push("install")
+      return { enabled: true, writtenPaths: [] }
+    })
+    const ensureOpenCodeServer = vi.fn(async () => {
+      events.push("server")
+      return server
+    })
+    const config = {
+      ...testConfig(),
+      opencode: { ...testConfig().opencode, workdir: "/resolved/workdir" },
+    }
+
+    await runGateway({
+      config,
+      logger: testLogger(),
+      dependencies: {
+        installBundledRuntimeSkillsForProject,
+        ensureOpenCodeServer,
+        createOpenCodeClient: vi.fn(() => ({})),
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/resolved/workdir",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => bot),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(installBundledRuntimeSkillsForProject).toHaveBeenCalledWith({
+      projectRoot: "/resolved/workdir",
+    })
+    expect(events).toEqual(["install", "server"])
+  })
+
   test("passes bundled meme runtime wrappers scoped to the resolved OpenCode workdir", async () => {
     const bot = {
       api: { setMyCommands: vi.fn(async () => undefined) },
@@ -145,7 +191,7 @@ describe("runGateway", () => {
     }
     const createTelegramBot = vi.fn(() => bot)
     const bundledMemeRuntimeStatus = vi.fn(async () => ({ enabled: true }))
-    const installBundledMemeRuntimeForProject = vi.fn(async () => ({ writtenPaths: [] }))
+    const installBundledRuntimeSkillsForProject = vi.fn(async () => ({ writtenPaths: [] }))
     const createGeneratedSkill = vi.fn(async (input) => ({
       skillName: input.name,
       filePath: "safe",
@@ -170,7 +216,7 @@ describe("runGateway", () => {
         createGatewayController: vi.fn(() => ({})),
         createTelegramBot,
         bundledMemeRuntimeStatus,
-        installBundledMemeRuntimeForProject,
+        installBundledRuntimeSkillsForProject,
         createGeneratedSkill,
       },
       processLike: { once: vi.fn() },
@@ -178,11 +224,11 @@ describe("runGateway", () => {
 
     const botOptions = createTelegramBot.mock.calls[0][0]
     await botOptions.bundledMemeRuntimeStatus()
-    await botOptions.installBundledMemeRuntimeForProject()
+    await botOptions.installBundledRuntimeSkillsForProject()
     await botOptions.createGeneratedSkill({ name: "demo", body: "body" })
 
     expect(bundledMemeRuntimeStatus).toHaveBeenCalledWith({ projectRoot: "/resolved/workdir" })
-    expect(installBundledMemeRuntimeForProject).toHaveBeenCalledWith({
+    expect(installBundledRuntimeSkillsForProject).toHaveBeenCalledWith({
       projectRoot: "/resolved/workdir",
     })
     expect(createGeneratedSkill).toHaveBeenCalledWith({
@@ -606,6 +652,9 @@ describe("runGateway", () => {
 
 function runGateway(options = {}) {
   const dependencies = options.dependencies ?? {}
+  const installBundledRuntimeSkillsForProject =
+    dependencies.installBundledRuntimeSkillsForProject ??
+    vi.fn(async () => ({ enabled: true, removedPaths: [], writtenPaths: [] }))
   const startTelegramPolling =
     dependencies.startTelegramPolling ??
     vi.fn((bot, { allowedUpdates } = {}) => {
@@ -615,7 +664,7 @@ function runGateway(options = {}) {
 
   return runGatewayBase({
     ...options,
-    dependencies: { ...dependencies, startTelegramPolling },
+    dependencies: { installBundledRuntimeSkillsForProject, ...dependencies, startTelegramPolling },
   })
 }
 

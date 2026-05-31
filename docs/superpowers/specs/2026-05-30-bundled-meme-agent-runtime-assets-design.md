@@ -36,13 +36,13 @@ OpenCode Remote package assets remain canonical in the repository and package:
 
 - `bundled-skills/meme-generation/SKILL.md`
 
-When enabled for a project, OpenCode Remote syncs the skill into a namespaced project-local OpenCode location:
+When the gateway starts for a project, OpenCode Remote syncs bundled skills into namespaced project-local OpenCode locations:
 
-- `.opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md`
+- `.opencode/skills/opencode-remote-bundled/<skill-name>/SKILL.md`
 
-The sync should be explicit, not silent global mutation. The initial UI should live in the existing Telegram `/skills` menu because that is where OpenCode Remote already exposes bundled AI capabilities. The menu should show a bundled runtime assets section with an `Enable meme skill for this project` action. The enable action should also remove the legacy experimental `.opencode/agent/opencode-remote-meme.md` path if present. A separate CLI command is deferred.
+The sync is automatic and project-local, not a global OpenCode config mutation. Gateway startup installs or updates bundled skills before ensuring the OpenCode server so auto-started servers can discover them. Telegram `/skills` refresh also re-runs the sync. There is no separate `Enable meme skill` action. The sync also removes the legacy experimental `.opencode/agent/opencode-remote-meme.md` path if present. A separate CLI command is deferred.
 
-The sync operation should report what it wrote or removed and remind the user that OpenCode may need to be restarted if the running server does not discover newly added skills immediately.
+If OpenCode was already running before the gateway and does not discover newly installed skills immediately, the user may need to restart OpenCode.
 
 The synced files are generated from package assets and should be easy to identify. A disable/remove command is deferred for the first implementation; users can delete the namespaced project-local files manually if needed.
 
@@ -60,7 +60,7 @@ OpenCode Remote installs the project-local bundled meme skill so the active Open
 
 Telegram should not force meme-like prompts to a specific OpenCode workflow. The gateway should send normal prompt parts, media attachments, author context, progress handling, permission handling, and response delivery through the active session unchanged.
 
-If a user asks for a meme before enabling the project-local skill, OpenCode may still respond normally. The gateway should not block the prompt with an enable message; `/skills` remains the explicit place to enable bundled runtime assets.
+If a user asks for a meme before OpenCode discovers the project-local skill, OpenCode may still respond normally. The gateway should not block the prompt with an enable message; startup and `/skills` refresh are responsible for keeping bundled runtime assets installed.
 
 ## Meme Skill Responsibilities
 

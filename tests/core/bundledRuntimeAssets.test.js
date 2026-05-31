@@ -6,7 +6,7 @@ import {
   BUNDLED_MEME_SKILL_NAME,
   bundledMemeRuntimeAssetPaths,
   bundledMemeRuntimeStatus,
-  installBundledMemeRuntimeForProject,
+  installBundledRuntimeSkillsForProject,
 } from "../../src/core/opencode/bundledRuntimeAssets.js"
 
 const tempDirs = []
@@ -17,14 +17,13 @@ async function tempDir(name = "runtime-assets") {
   return dir
 }
 
-async function createSourceAssets() {
+async function createSourceAssets(skillNames = [BUNDLED_MEME_SKILL_NAME]) {
   const root = await tempDir("runtime-source")
   const bundledSkillsDirectory = join(root, "bundled-skills")
-  await mkdir(join(bundledSkillsDirectory, BUNDLED_MEME_SKILL_NAME), { recursive: true })
-  await writeFile(
-    join(bundledSkillsDirectory, BUNDLED_MEME_SKILL_NAME, "SKILL.md"),
-    `# ${BUNDLED_MEME_SKILL_NAME}\n`,
-  )
+  for (const skillName of skillNames) {
+    await mkdir(join(bundledSkillsDirectory, skillName), { recursive: true })
+    await writeFile(join(bundledSkillsDirectory, skillName, "SKILL.md"), `# ${skillName}\n`)
+  }
   return { bundledSkillsDirectory }
 }
 
@@ -66,7 +65,7 @@ describe("bundled meme runtime assets", () => {
     await mkdir(join(legacyAgentPath, ".."), { recursive: true })
     await writeFile(legacyAgentPath, "# stale opencode-remote-meme\n")
 
-    const result = await installBundledMemeRuntimeForProject({ projectRoot, ...sources })
+    const result = await installBundledRuntimeSkillsForProject({ projectRoot, ...sources })
 
     expect(result.enabled).toBe(true)
     expect(result.writtenPaths).toEqual([
@@ -87,12 +86,54 @@ describe("bundled meme runtime assets", () => {
     expect(await readFile(result.skill.projectPath, "utf8")).toBe(`# ${BUNDLED_MEME_SKILL_NAME}\n`)
   })
 
+  test("install copies every bundled skill into the project-local bundled namespace", async () => {
+    const projectRoot = await tempDir("runtime-project")
+    const sources = await createSourceAssets([
+      BUNDLED_MEME_SKILL_NAME,
+      "opencode-remote-troubleshooting",
+    ])
+
+    const result = await installBundledRuntimeSkillsForProject({ projectRoot, ...sources })
+
+    expect(result.writtenPaths).toEqual([
+      join(
+        projectRoot,
+        ".opencode",
+        "skills",
+        "opencode-remote-bundled",
+        BUNDLED_MEME_SKILL_NAME,
+        "SKILL.md",
+      ),
+      join(
+        projectRoot,
+        ".opencode",
+        "skills",
+        "opencode-remote-bundled",
+        "opencode-remote-troubleshooting",
+        "SKILL.md",
+      ),
+    ])
+    await expect(
+      readFile(
+        join(
+          projectRoot,
+          ".opencode",
+          "skills",
+          "opencode-remote-bundled",
+          "opencode-remote-troubleshooting",
+          "SKILL.md",
+        ),
+        "utf8",
+      ),
+    ).resolves.toBe("# opencode-remote-troubleshooting\n")
+  })
+
   test("install does not write global opencode config paths", async () => {
     const projectRoot = await tempDir("runtime-project")
     const homeDirectory = await tempDir("runtime-home")
     const sources = await createSourceAssets()
 
-    await installBundledMemeRuntimeForProject({ projectRoot, homeDirectory, ...sources })
+    await installBundledRuntimeSkillsForProject({ projectRoot, homeDirectory, ...sources })
 
     await expect(stat(join(homeDirectory, ".config", "opencode"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -105,7 +146,7 @@ describe("bundled meme runtime assets", () => {
     const bundledSkillsDirectory = join(root, "bundled-skills")
 
     await expect(
-      installBundledMemeRuntimeForProject({
+      installBundledRuntimeSkillsForProject({
         projectRoot,
         bundledSkillsDirectory,
       }),

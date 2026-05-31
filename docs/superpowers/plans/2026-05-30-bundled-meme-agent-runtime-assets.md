@@ -47,13 +47,13 @@
 
 - [ ] Run focused tests for bundled runtime assets, Telegram behavior, skill registration, and OpenCode client prompt bodies.
 - [ ] Run full verification: `pnpm run lint`, `pnpm test`, and `pnpm run check`.
-- [ ] Optionally live-smoke `/skills` enable/update, restart OpenCode if needed, and confirm a generated meme file under the gateway generated-media cache is delivered through Telegram.
+- [ ] Optionally live-smoke gateway startup or `/skills` refresh, restart OpenCode if an already-running server does not discover the skill, and confirm a generated meme file under the gateway generated-media cache is delivered through Telegram.
 
 ## Acceptance Criteria
 
-- `/skills` offers `Enable meme skill` or `Update meme skill` for the current project.
-- Enabling writes `.opencode/skills/opencode-remote-bundled/meme-generation/SKILL.md` and reports sanitized relative paths.
-- Enabling removes legacy `.opencode/agent/opencode-remote-meme.md` if present.
+- Gateway startup writes bundled skills under `.opencode/skills/opencode-remote-bundled/<skill-name>/SKILL.md` for the current project before ensuring the OpenCode server.
+- `/skills` refresh updates bundled skills under `.opencode/skills/opencode-remote-bundled/<skill-name>/SKILL.md` for the current project.
+- Startup and `/skills` refresh remove legacy `.opencode/agent/opencode-remote-meme.md` if present.
 - Telegram prompts never pass a forced agent option for meme requests.
 - The meme skill uses local rendering and never calls Imgflip `/caption_image` or another public meme creation endpoint.
 - `MEDIA:` markers are removed from visible text and only validated generated-media files are sent.

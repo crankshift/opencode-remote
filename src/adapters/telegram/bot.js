@@ -13,7 +13,7 @@ import {
 } from "../../core/formatting/progressText.js"
 import {
   bundledMemeRuntimeStatus as defaultBundledMemeRuntimeStatus,
-  installBundledMemeRuntimeForProject as defaultInstallBundledMemeRuntimeForProject,
+  installBundledRuntimeSkillsForProject as defaultInstallBundledRuntimeSkillsForProject,
 } from "../../core/opencode/bundledRuntimeAssets.js"
 import { createGeneratedSkill as defaultCreateGeneratedSkill } from "../../core/opencode/generatedSkills.js"
 import { discoverOpenCodeSkills as defaultDiscoverSkills } from "../../core/opencode/skillDiscovery.js"
@@ -91,7 +91,7 @@ export function createTelegramBot({
   discoverSkills = defaultDiscoverSkills,
   createGeneratedSkill = defaultCreateGeneratedSkill,
   bundledMemeRuntimeStatus = defaultBundledMemeRuntimeStatus,
-  installBundledMemeRuntimeForProject = defaultInstallBundledMemeRuntimeForProject,
+  installBundledRuntimeSkillsForProject = defaultInstallBundledRuntimeSkillsForProject,
   deliverGeneratedMedia = defaultDeliverGeneratedMedia,
   generatedMediaDirectory = getDefaultGeneratedMediaDirectory(),
   memeRenderCommand = getDefaultMemeRenderCommand(),
@@ -108,7 +108,7 @@ export function createTelegramBot({
     discoverSkills,
     createGeneratedSkill,
     bundledMemeRuntimeStatus,
-    installBundledMemeRuntimeForProject,
+    installBundledRuntimeSkillsForProject,
     logger,
     shouldStartFromText: isPrivateTelegramChat,
     reply: async (ctx, text, options) => replyAndRemember(ctx, text, botMessageMemory, options),
