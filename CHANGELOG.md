@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.10.5] - 2026-05-31
+
+### Fixed
+
+- Fixed the Telegram `/skills` menu to split oversized skill lists into Telegram-safe messages while preserving the full list and final action buttons. (#48)
+
 ## [0.10.4] - 2026-05-31
 
 ### Changed
