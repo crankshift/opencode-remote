@@ -306,6 +306,29 @@ describe("createOpenCodeClient", () => {
     }
   })
 
+  test("falls back to synchronous prompts when async admission fails", async () => {
+    const stream = createControlledEventStream()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        promptAsync: vi.fn(async () => {
+          throw new Error("opencode server POST /session/ses_1/prompt_async -> 404")
+        }),
+        prompt: vi.fn(async () => ({ parts: [{ type: "text", text: "fallback answer" }] })),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(client.sendPrompt("ses_1", "research task")).resolves.toBe("fallback answer")
+
+    expect(sdkClient.session.promptAsync).toHaveBeenCalled()
+    expect(sdkClient.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: { parts: [{ type: "text", text: "research task" }] },
+    })
+    expect(stream.controller.abort).toHaveBeenCalled()
+  })
+
   test("uses current SDK event.subscribe stream shape for progress", async () => {
     let subscribeSignal
     const stream = createEventStream([
