@@ -4,11 +4,17 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.11.2] - 2026-06-06
+
+### Fixed
+
+- Fixed Telegram prompt failures on OpenCode servers that reject async prompt admission by falling back to the synchronous prompt endpoint. (#55)
+
 ## [0.11.1] - 2026-06-06
 
 ### Fixed
 
-- Fixed long OpenCode prompt runs by using async prompt admission plus completion events instead of holding the prompt HTTP request open until transport timeout, with synchronous prompt fallback when async admission is not supported. (#53)
+- Fixed long OpenCode prompt runs by using async prompt admission plus completion events instead of holding the prompt HTTP request open until transport timeout. (#53)
 
 ## [0.11.0] - 2026-06-06
 
