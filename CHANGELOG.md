@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.11.1] - 2026-06-06
+
+### Fixed
+
+- Fixed long OpenCode prompt runs by using async prompt admission plus completion events instead of holding the prompt HTTP request open until transport timeout. (#53)
+
 ## [0.11.0] - 2026-06-06
 
 ### Added

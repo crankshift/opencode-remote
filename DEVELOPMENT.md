@@ -70,7 +70,7 @@ Login startup is user-level and project-folder scoped. `opencode-remote startup 
 
 On startup, the gateway checks `opencode.apiUrl`. If it is reachable, the gateway uses that server. If it is not reachable and `opencode.autoStart=true`, the gateway starts `opencode.command serve` and waits for it to become reachable before starting Telegram polling. For local `localhost` and `127.0.0.1` API URLs with a port, auto-start passes that port as `--port` so newer OpenCode CLI versions do not bind a random port. The gateway exits with an error if OpenCode is still unreachable after about 60 seconds. Before polling starts, the gateway refreshes Telegram's slash-command menu for default and private chats.
 
-OpenCode prompt requests use `opencode.promptTimeoutMs`, defaulting to 30 minutes, as the SDK request timeout. The gateway controller serializes prompt sends through the selected active session, and the OpenCode client accepts child subagent session tool, permission, and safe session-error events while that active prompt is running.
+OpenCode prompt requests use async prompt admission when available, then wait for the matching assistant completion event. `opencode.promptTimeoutMs`, defaulting to 30 minutes, is the completion deadline. The gateway controller serializes prompt sends through the selected active session, and the OpenCode client accepts child subagent session tool, permission, and safe session-error events while that active prompt is running.
 
 If the gateway started the OpenCode child process, it stops that child during shutdown. It does not stop an OpenCode server that was already running.
 
