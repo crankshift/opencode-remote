@@ -46,6 +46,8 @@ import {
 } from "./voice.js"
 
 const SAFE_ERROR_REPLY = "OpenCode Remote failed while handling that request."
+const TIMEOUT_ERROR_REPLY =
+  "OpenCode timed out while handling that request. For long research prompts, check the OpenCode provider timeout and opencode.promptTimeoutMs, then try again."
 
 export async function registerTelegramBotCommands(bot, logger) {
   for (const { commands, scope } of [
@@ -156,10 +158,14 @@ export function createTelegramBot({
   if (typeof bot.catch === "function") {
     bot.catch(async (botError) => {
       const logError = logger.error ?? logger.warn
-      logError.call(logger, { error: botError.error }, "Telegram update handling failed")
+      logError.call(
+        logger,
+        safeTelegramErrorLogContext(botError.error),
+        "Telegram update handling failed",
+      )
       try {
         if (botError.ctx?.reply) {
-          await replyAndRemember(botError.ctx, SAFE_ERROR_REPLY, botMessageMemory)
+          await replyAndRemember(botError.ctx, telegramErrorReply(botError.error), botMessageMemory)
         }
       } catch (replyError) {
         logger.warn({ error: replyError }, "Could not send Telegram error reply")
@@ -843,9 +849,13 @@ export function createTelegramBot({
       await handlePhotoMessages(ctx, messages)
     } catch (error) {
       const logError = logger.error ?? logger.warn
-      logError.call(logger, { error }, "Telegram media group handling failed")
+      logError.call(
+        logger,
+        safeTelegramErrorLogContext(error),
+        "Telegram media group handling failed",
+      )
       try {
-        await replyAndRemember(ctx, SAFE_ERROR_REPLY, botMessageMemory)
+        await replyAndRemember(ctx, telegramErrorReply(error), botMessageMemory)
       } catch (replyError) {
         logger.warn({ error: replyError }, "Could not send Telegram error reply")
       }
@@ -1761,6 +1771,67 @@ function voiceCaptionForText(text, voiceService) {
     return null
   }
   return text.length <= TELEGRAM_VOICE_CAPTION_LIMIT ? text : null
+}
+
+function telegramErrorReply(error) {
+  return hasTimeoutError(error) ? TIMEOUT_ERROR_REPLY : SAFE_ERROR_REPLY
+}
+
+function safeTelegramErrorLogContext(error) {
+  const context = {
+    errorName: safeErrorName(error),
+    errorKind: classifyTelegramError(error),
+  }
+  const cause = error?.cause
+  if (cause) {
+    context.causeName = safeErrorName(cause)
+    context.causeKind = classifyTelegramError(cause)
+  }
+  return context
+}
+
+function hasTimeoutError(error) {
+  const seen = new Set()
+  let current = error
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current)
+    if (classifyTelegramError(current) === "timeout") {
+      return true
+    }
+    current = current.cause
+  }
+  return false
+}
+
+function classifyTelegramError(error) {
+  if (safeErrorName(error) === "GatewayOpenCodeError") {
+    return "opencode"
+  }
+  const text = [error?.name, error?.code, error?.message]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLocaleLowerCase("en-US")
+
+  if (text.includes("timeout") || text.includes("timed out")) {
+    return "timeout"
+  }
+  if (text.includes("opencode")) {
+    return "opencode"
+  }
+  return "unknown"
+}
+
+function safeErrorName(error) {
+  return firstNonEmptyString(error?.name, error?.type, error?.code) ?? "UnknownError"
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
 }
 
 function createTelegramProgressRenderer({ ctx, logger, verbosity, editThrottleMs }) {

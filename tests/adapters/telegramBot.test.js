@@ -1399,6 +1399,38 @@ describe("createTelegramBot", () => {
     expect(reply).toHaveBeenCalledWith("OpenCode Remote failed while handling that request.")
   })
 
+  test("error handler classifies timeout failures without raw provider details", async () => {
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller: {},
+      logger,
+      botFactory: FakeBot,
+    })
+    const timeoutCause = new Error("OpenCode assistant message failed: TimeoutError")
+    const error = new Error("Could not send prompt to OpenCode")
+    error.name = "GatewayOpenCodeError"
+    error.cause = timeoutCause
+    const reply = vi.fn(async () => undefined)
+
+    await bot.errorHandler({ ctx: { reply }, error })
+
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        errorName: "GatewayOpenCodeError",
+        errorKind: "opencode",
+        causeName: "Error",
+        causeKind: "timeout",
+      },
+      "Telegram update handling failed",
+    )
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("TimeoutError")
+    expect(reply).toHaveBeenCalledWith(
+      "OpenCode timed out while handling that request. For long research prompts, check the OpenCode provider timeout and opencode.promptTimeoutMs, then try again.",
+    )
+  })
+
   test("sessions command truncates labels and uses bounded callback data", async () => {
     const longTitle = "a".repeat(120)
     const longId = "ses_".padEnd(120, "x")

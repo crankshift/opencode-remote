@@ -4,6 +4,13 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.11.3] - 2026-06-06
+
+### Fixed
+
+- Added timeout-specific Telegram failure replies and safe timeout classifications for nested OpenCode prompt errors. (#57)
+- Increased the default gateway prompt completion timeout to 35 minutes and configured the project OpenCode provider timeout to 30 minutes for long research prompts. (#57)
+
 ## [0.11.2] - 2026-06-06
 
 ### Fixed
