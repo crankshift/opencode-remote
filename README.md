@@ -145,7 +145,7 @@ The config file is JSON:
 
 `opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or `127.0.0.1` with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
 
-`opencode.promptTimeoutMs` controls how long the gateway waits for an OpenCode prompt request before the SDK times out. It defaults to `1800000` milliseconds, or 30 minutes, so slower provider runs and complex subagent workflows have time to finish.
+`opencode.promptTimeoutMs` controls how long the gateway waits for OpenCode to complete a prompt. It defaults to `1800000` milliseconds, or 30 minutes, so slower provider runs and complex subagent workflows have time to finish.
 
 `progressVerbosity` controls the startup default for the prompt activity message in private chats. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime in private chats. Group chats always suppress the `Activity` message.
 

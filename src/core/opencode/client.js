@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 
 export class GatewayOpenCodeError extends Error {
@@ -21,9 +22,6 @@ export function createOpenCodeClient({
       baseUrl: apiUrl,
       responseStyle: "data",
       throwOnError: true,
-      ...(Number.isInteger(promptTimeoutMs) && promptTimeoutMs > 0
-        ? { timeout: promptTimeoutMs }
-        : {}),
     })
 
   return {
@@ -44,12 +42,25 @@ export function createOpenCodeClient({
     },
 
     async sendPrompt(sessionId, prompt, options = {}) {
-      const progressStream = await startPromptEventStream(client, sessionId, options)
+      const promptBody = toPromptBody(prompt)
+      const asyncPrompt = createAsyncPromptCompletion(sessionId, promptTimeoutMs)
+      const progressStream = await startPromptEventStream(client, sessionId, {
+        ...options,
+        onEvent: asyncPrompt.handleEvent,
+      })
       try {
+        if (typeof client.session?.promptAsync === "function" && progressStream.active) {
+          await client.session.promptAsync({
+            path: { id: sessionId },
+            body: { ...promptBody, messageID: asyncPrompt.messageId },
+          })
+          return await asyncPrompt.wait()
+        }
+
         const response = toData(
           await client.session.prompt({
             path: { id: sessionId },
-            body: toPromptBody(prompt),
+            body: promptBody,
           }),
         )
         return extractText(response)
@@ -145,8 +156,12 @@ export function createOpenCodeClient({
 }
 
 async function startPromptEventStream(client, sessionId, options = {}) {
-  const { onProgress, onSystemEvent, includeChildSessionEvents = false } = options
-  if (typeof onProgress !== "function" && typeof onSystemEvent !== "function") {
+  const { onProgress, onSystemEvent, onEvent, includeChildSessionEvents = false } = options
+  if (
+    typeof onProgress !== "function" &&
+    typeof onSystemEvent !== "function" &&
+    typeof onEvent !== "function"
+  ) {
     return noopProgressStream()
   }
   const eventOptions = { includeChildSessionEvents }
@@ -169,6 +184,11 @@ async function startPromptEventStream(client, sessionId, options = {}) {
         if (stopped) {
           break
         }
+        if (typeof onEvent === "function") {
+          activeCallback = runEventCallback(onEvent, event)
+          await activeCallback
+        }
+
         const progress = normalizeOpenCodeProgressEvent(event, sessionId, eventOptions)
         if (progress && typeof onProgress === "function") {
           activeCallback = runEventCallback(onProgress, progress)
@@ -187,6 +207,7 @@ async function startPromptEventStream(client, sessionId, options = {}) {
   })()
 
   return {
+    active: true,
     async stop() {
       stopped = true
       eventStream.abort()
@@ -233,7 +254,139 @@ async function runEventCallback(callback, event) {
 }
 
 function noopProgressStream() {
-  return { stop: async () => undefined }
+  return { active: false, stop: async () => undefined }
+}
+
+function createAsyncPromptCompletion(sessionId, timeoutMs) {
+  const messageId = randomUUID()
+  const textPartsByMessage = new Map()
+  let assistantMessageId = null
+  let settled = false
+  let timeoutId = null
+  let timeoutStarted = false
+  let resolveCompletion
+  let rejectCompletion
+  const completion = new Promise((resolve, reject) => {
+    resolveCompletion = resolve
+    rejectCompletion = reject
+  })
+
+  return {
+    messageId,
+    handleEvent(event) {
+      if (settled) {
+        return
+      }
+      recordAssistantTextPart(event)
+      completeMatchingAssistantMessage(event)
+    },
+    wait() {
+      startTimeout()
+      return completion
+    },
+  }
+
+  function startTimeout() {
+    if (timeoutStarted || !Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+      return
+    }
+    timeoutStarted = true
+    timeoutId = setTimeout(() => {
+      settleReject(new Error("OpenCode prompt did not complete before timeout"))
+    }, timeoutMs)
+    timeoutId.unref?.()
+  }
+
+  function recordAssistantTextPart(event) {
+    if (event?.type !== "message.part.updated") {
+      return
+    }
+    const properties = eventProperties(event)
+    const part = properties.part
+    if (part?.type !== "text" || part.ignored === true) {
+      return
+    }
+    const partSessionId = firstString(part.sessionID, part.sessionId, properties.sessionID)
+    const partMessageId = firstString(part.messageID, part.messageId, properties.messageID)
+    if (!partSessionId || partSessionId !== sessionId || !partMessageId) {
+      return
+    }
+    if (assistantMessageId && partMessageId !== assistantMessageId) {
+      return
+    }
+    const partId = firstString(part.id, part.partID, part.partId) ?? partMessageId
+    const text = typeof part.text === "string" ? part.text : properties.delta
+    if (typeof text !== "string") {
+      return
+    }
+
+    let textParts = textPartsByMessage.get(partMessageId)
+    if (!textParts) {
+      textParts = new Map()
+      textPartsByMessage.set(partMessageId, textParts)
+    }
+    textParts.set(partId, text)
+  }
+
+  function completeMatchingAssistantMessage(event) {
+    if (event?.type !== "message.updated") {
+      return
+    }
+    const info = eventProperties(event).info
+    if (!isMatchingAssistantMessage(info)) {
+      return
+    }
+    assistantMessageId = firstString(info.id, info.messageID, info.messageId)
+    if (info.error) {
+      settleReject(new Error(`OpenCode assistant message failed: ${safeErrorName(info.error)}`))
+      return
+    }
+    if (info.time?.completed === undefined && !firstString(info.finish)) {
+      return
+    }
+    settleResolve(extractAsyncPromptText())
+  }
+
+  function isMatchingAssistantMessage(info) {
+    return (
+      info?.role === "assistant" &&
+      firstString(info.sessionID, info.sessionId) === sessionId &&
+      firstString(info.parentID, info.parentId) === messageId
+    )
+  }
+
+  function extractAsyncPromptText() {
+    const textParts = textPartsByMessage.get(assistantMessageId)
+    if (!textParts) {
+      return "OpenCode returned no text response."
+    }
+    return [...textParts.values()].join("\n") || "OpenCode returned no text response."
+  }
+
+  function settleResolve(text) {
+    if (settled) {
+      return
+    }
+    settled = true
+    clearCompletionTimeout()
+    resolveCompletion(text)
+  }
+
+  function settleReject(error) {
+    if (settled) {
+      return
+    }
+    settled = true
+    clearCompletionTimeout()
+    rejectCompletion(error)
+  }
+
+  function clearCompletionTimeout() {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+  }
 }
 
 function toPromptBody(prompt) {

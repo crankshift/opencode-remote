@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest"
-import { createOpenCodeClient } from "../../src/core/opencode/client.js"
+import { createOpenCodeClient, GatewayOpenCodeError } from "../../src/core/opencode/client.js"
 
 describe("createOpenCodeClient", () => {
-  test("passes prompt timeout to the SDK client factory", () => {
+  test("keeps prompt completion timeout out of the SDK client factory", () => {
     const sdkClient = { session: { list: vi.fn(async () => []) } }
     const sdkFactory = vi.fn(() => sdkClient)
 
@@ -16,7 +16,6 @@ describe("createOpenCodeClient", () => {
       baseUrl: "http://localhost:4096",
       responseStyle: "data",
       throwOnError: true,
-      timeout: 1_800_000,
     })
   })
 
@@ -230,6 +229,81 @@ describe("createOpenCodeClient", () => {
       input: { skill: "brainstorming" },
     })
     expect(stream.controller.abort).toHaveBeenCalled()
+  })
+
+  test("resolves async prompts from the matching completed assistant message", async () => {
+    const stream = createControlledEventStream()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        promptAsync: vi.fn(async (request) => {
+          const userMessageId = request.body.messageID
+          queueMicrotask(() => {
+            stream.push({
+              type: "message.part.updated",
+              properties: {
+                part: {
+                  id: "part_text",
+                  sessionID: "ses_1",
+                  messageID: "msg_assistant",
+                  type: "text",
+                  text: "research result",
+                },
+              },
+            })
+            stream.push({
+              type: "message.updated",
+              properties: {
+                info: {
+                  id: "msg_assistant",
+                  sessionID: "ses_1",
+                  role: "assistant",
+                  parentID: userMessageId,
+                  time: { created: 1, completed: 2 },
+                },
+              },
+            })
+          })
+        }),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(client.sendPrompt("ses_1", "research task")).resolves.toBe("research result")
+
+    expect(sdkClient.session.promptAsync).toHaveBeenCalledWith({
+      path: { id: "ses_1" },
+      body: {
+        messageID: expect.any(String),
+        parts: [{ type: "text", text: "research task" }],
+      },
+    })
+    expect(stream.controller.abort).toHaveBeenCalled()
+  })
+
+  test("times out async prompts when completion is not observed", async () => {
+    vi.useFakeTimers()
+    const stream = createControlledEventStream()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        promptAsync: vi.fn(async () => undefined),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient, promptTimeoutMs: 10 })
+
+    try {
+      const prompt = client.sendPrompt("ses_1", "research task").catch((error) => error)
+      await vi.advanceTimersByTimeAsync(10)
+      const result = await Promise.race([prompt, Promise.resolve("still waiting")])
+
+      expect(result).toBeInstanceOf(GatewayOpenCodeError)
+      expect(result.message).toBe("Could not send prompt to OpenCode")
+      expect(result.cause.message).toBe("OpenCode prompt did not complete before timeout")
+    } finally {
+      stream.controller.abort()
+      vi.useRealTimers()
+    }
   })
 
   test("uses current SDK event.subscribe stream shape for progress", async () => {
@@ -776,5 +850,35 @@ function createEventStream(events) {
     }
   })()
   stream.controller = { abort: vi.fn() }
+  return stream
+}
+
+function createControlledEventStream() {
+  const events = []
+  let wake = null
+  let aborted = false
+  const stream = (async function* streamEvents() {
+    while (!aborted) {
+      if (events.length === 0) {
+        await new Promise((resolve) => {
+          wake = resolve
+        })
+      }
+      while (events.length > 0) {
+        yield events.shift()
+      }
+    }
+  })()
+  stream.controller = {
+    abort: vi.fn(() => {
+      aborted = true
+      wake?.()
+    }),
+  }
+  stream.push = (event) => {
+    events.push(event)
+    wake?.()
+    wake = null
+  }
   return stream
 }
