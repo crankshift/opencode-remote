@@ -50,11 +50,17 @@ export function createOpenCodeClient({
       })
       try {
         if (typeof client.session?.promptAsync === "function" && progressStream.active) {
-          await client.session.promptAsync({
-            path: { id: sessionId },
-            body: { ...promptBody, messageID: asyncPrompt.messageId },
-          })
-          return await asyncPrompt.wait()
+          try {
+            await client.session.promptAsync({
+              path: { id: sessionId },
+              body: { ...promptBody, messageID: asyncPrompt.messageId },
+            })
+            return await asyncPrompt.wait()
+          } catch (error) {
+            if (!shouldFallbackToSynchronousPrompt(error)) {
+              throw error
+            }
+          }
         }
 
         const response = toData(
@@ -255,6 +261,22 @@ async function runEventCallback(callback, event) {
 
 function noopProgressStream() {
   return { active: false, stop: async () => undefined }
+}
+
+function shouldFallbackToSynchronousPrompt(error) {
+  const status = error?.cause?.status
+  if (status === 400 || status === 404 || status === 405) {
+    return true
+  }
+  const text = [error?.name, error?.code, error?.message]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLocaleLowerCase("en-US")
+
+  return (
+    text.includes("prompt_async") &&
+    (text.includes("400") || text.includes("404") || text.includes("405"))
+  )
 }
 
 function createAsyncPromptCompletion(sessionId, timeoutMs) {

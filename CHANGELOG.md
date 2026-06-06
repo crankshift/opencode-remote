@@ -4,6 +4,12 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.11.2] - 2026-06-06
+
+### Fixed
+
+- Fixed Telegram prompt failures on OpenCode servers that reject async prompt admission by falling back to the synchronous prompt endpoint. (#55)
+
 ## [0.11.1] - 2026-06-06
 
 ### Fixed
