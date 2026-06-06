@@ -4,6 +4,18 @@ This project follows Semantic Versioning.
 
 ## Unreleased
 
+## [0.11.0] - 2026-06-06
+
+### Added
+
+- Added configurable `opencode.promptTimeoutMs` for long-running OpenCode prompt requests, defaulting to 30 minutes. (#51)
+- Added active-prompt handling for child subagent session tool, permission, and safe session-error events. (#51)
+
+### Changed
+
+- Changed gateway prompt sends to serialize through the selected active session so complex OpenCode runs do not overlap accidentally. (#51)
+- Removed generated-media guidance that blocked delegated generation work. (#51)
+
 ## [0.10.5] - 2026-05-31
 
 ### Fixed

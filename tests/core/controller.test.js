@@ -78,7 +78,9 @@ describe("gatewayController", () => {
     const controller = createGatewayController({ opencode, store })
 
     await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
-    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello")
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello", {
+      includeChildSessionEvents: true,
+    })
   })
 
   test("passes prompt progress options to OpenCode", async () => {
@@ -92,7 +94,44 @@ describe("gatewayController", () => {
 
     await expect(controller.sendPrompt("hello", options)).resolves.toBe("answer")
 
-    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello", options)
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello", {
+      onProgress,
+      includeChildSessionEvents: true,
+    })
+  })
+
+  test("serializes prompt sends through the active session", async () => {
+    const store = createStore({ activeSessionId: "ses_1" })
+    let releaseFirst
+    const firstPromptBlocker = new Promise((resolve) => {
+      releaseFirst = resolve
+    })
+    const opencode = {
+      sendPrompt: vi.fn(async (_sessionId, prompt) => {
+        if (prompt === "first") {
+          await firstPromptBlocker
+        }
+        return `${prompt} answer`
+      }),
+    }
+    const controller = createGatewayController({ opencode, store })
+
+    const first = controller.sendPrompt("first")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const second = controller.sendPrompt("second")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(opencode.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(opencode.sendPrompt).toHaveBeenNthCalledWith(1, "ses_1", "first", {
+      includeChildSessionEvents: true,
+    })
+
+    releaseFirst()
+    await expect(first).resolves.toBe("first answer")
+    await expect(second).resolves.toBe("second answer")
+    expect(opencode.sendPrompt).toHaveBeenNthCalledWith(2, "ses_1", "second", {
+      includeChildSessionEvents: true,
+    })
   })
 
   test("passes permission decisions to OpenCode", async () => {
@@ -158,7 +197,9 @@ describe("gatewayController", () => {
     const controller = createGatewayController({ opencode, store })
 
     await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
-    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello")
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello", {
+      includeChildSessionEvents: true,
+    })
   })
 
   test("primes newly created sessions with gateway context before the first prompt", async () => {
@@ -220,7 +261,9 @@ describe("gatewayController", () => {
     await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
 
     expect(opencode.sendContext).not.toHaveBeenCalled()
-    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello")
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_1", "hello", {
+      includeChildSessionEvents: true,
+    })
   })
 
   test("continues sending the prompt when gateway context fails", async () => {
@@ -243,7 +286,9 @@ describe("gatewayController", () => {
 
     await expect(controller.sendPrompt("hello")).resolves.toBe("answer")
 
-    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello")
+    expect(opencode.sendPrompt).toHaveBeenCalledWith("ses_2", "hello", {
+      includeChildSessionEvents: true,
+    })
     expect(logger.warn).toHaveBeenCalledWith(
       { error, sessionId: "ses_2" },
       "Could not send OpenCode gateway context",

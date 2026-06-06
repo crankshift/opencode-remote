@@ -3230,6 +3230,55 @@ describe("createTelegramBot", () => {
     )
   })
 
+  test("session error events are logged with safe metadata", async () => {
+    const controller = {
+      sendPrompt: vi.fn(async (_prompt, options) => {
+        await options.onSystemEvent({
+          type: "session.error",
+          sessionId: "ses_child",
+          parentSessionId: "ses_parent",
+          childSession: true,
+          errorName: "ProviderAuthError",
+          errorKind: "provider_auth",
+          message: "secret provider payload",
+        })
+        return "answer"
+      }),
+    }
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const bot = createTelegramBot({
+      token: "token",
+      telegram: testTelegram(),
+      controller,
+      logger,
+      botFactory: FakeBot,
+    })
+    const reply = vi.fn(async (text) => ({ message_id: 20, chat: { id: 456 }, text }))
+
+    await bot.messageHandlers.get("message:text")({
+      message: { message_id: 10, text: "hello", chat: { id: 456 } },
+      api: {
+        sendChatAction: vi.fn(async () => undefined),
+        setMessageReaction: vi.fn(async () => true),
+      },
+      reply,
+    })
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        childSession: true,
+        errorKind: "provider_auth",
+        errorName: "ProviderAuthError",
+        hasParentSessionId: true,
+        hasSessionId: true,
+      },
+      "OpenCode session error reported",
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("ses_child")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret provider payload")
+    expect(reply).toHaveBeenCalledWith("answer")
+  })
+
   test("text prompts tell OpenCode how to request Telegram reactions", async () => {
     const controller = {
       sendPrompt: vi.fn(async () => "answer"),
@@ -3271,7 +3320,6 @@ describe("createTelegramBot", () => {
           "",
           "Generated media delivery capability:",
           "If you create a local image to send back, write it under this exact directory: /cache/generated-media",
-          "Do the image work directly in this OpenCode session. Do not call the task tool, delegate to subagents, or load brainstorming/planning skills for generated media.",
           "For meme requests, use the meme-generation skill and Imgflip template discovery as the primary path. Do not hand-write custom poster art or raw image scripts instead of using a meme template.",
           "For meme files, call opencode-remote meme render --spec with an Imgflip template.url or allowed local template.imagePath. Use fallback design or image-generation skills only after template discovery fails.",
           "Use this exact render command for meme specs: node /gateway/bin/opencode-remote.js meme render --spec /absolute/path/to/spec.json",
@@ -4280,7 +4328,6 @@ describe("createTelegramBot", () => {
         "",
         "Generated media delivery capability:",
         "If you create a local image to send back, write it under this exact directory: /cache/generated-media",
-        "Do the image work directly in this OpenCode session. Do not call the task tool, delegate to subagents, or load brainstorming/planning skills for generated media.",
         "For meme requests, use the meme-generation skill and Imgflip template discovery as the primary path. Do not hand-write custom poster art or raw image scripts instead of using a meme template.",
         "For meme files, call opencode-remote meme render --spec with an Imgflip template.url or allowed local template.imagePath. Use fallback design or image-generation skills only after template discovery fails.",
         "Use this exact render command for meme specs: node /gateway/bin/opencode-remote.js meme render --spec /absolute/path/to/spec.json",

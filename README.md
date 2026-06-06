@@ -119,6 +119,11 @@ The config file is JSON:
     "allowedUserIds": [123456789],
     "allowedChatIds": [-1001234567890]
   },
+  "opencode": {
+    "apiUrl": "http://localhost:4096",
+    "autoStart": true,
+    "promptTimeoutMs": 1800000
+  },
   "voice": {
     "enabled": false,
     "mode": "on",
@@ -140,6 +145,8 @@ The config file is JSON:
 
 `opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or `127.0.0.1` with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
 
+`opencode.promptTimeoutMs` controls how long the gateway waits for an OpenCode prompt request before the SDK times out. It defaults to `1800000` milliseconds, or 30 minutes, so slower provider runs and complex subagent workflows have time to finish.
+
 `progressVerbosity` controls the startup default for the prompt activity message in private chats. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime in private chats. Group chats always suppress the `Activity` message.
 
 Group behavior is managed from a private DM with the bot using `/group`. The DM menu lists known allowed groups, including groups from `telegram.allowedChatIds` and groups the bot has seen. Only configured `allowedUserIds` can use this menu. Running `/group` inside a group replies with a short notice to configure the bot in DM instead. Custom trigger phrases are configured per group from this DM menu; they are plain text, case-insensitive, and match as bounded words or phrases anywhere in text, captions, and voice transcripts.
@@ -155,6 +162,7 @@ opencode-remote config set voice.enabled true
 opencode-remote config set voice.groqApiKey gsk_...
 opencode-remote config set voice.mode all -g
 opencode-remote config set voice.captions true
+opencode-remote config set opencode.promptTimeoutMs 1800000
 ```
 
 Clear generated voice files from the app-data cache:
@@ -192,7 +200,7 @@ Telegram text, photo, album, voice, and sticker prompts include safe author cont
 
 When a new OpenCode session starts, OpenCode Remote sends hidden gateway context with no assistant reply. This helps the agent understand that voice input may arrive as transcripts and that final text can be delivered as voice notes when voice mode is enabled.
 
-When OpenCode requests permission during a prompt, the bot sends a text message with `Allow once`, `Always allow`, and `Deny` buttons. Permission prompts are always text, including when `/voice on` or `/voice all` would make normal assistant replies voice-only.
+When OpenCode requests permission during a prompt, including permission requests from child subagent sessions, the bot sends a text message with `Allow once`, `Always allow`, and `Deny` buttons. Permission prompts are always text, including when `/voice on` or `/voice all` would make normal assistant replies voice-only.
 
 Telegram photo albums are handled as one OpenCode prompt when Telegram provides a shared `media_group_id`. The album caption becomes the prompt text. Separate text messages sent after an album are treated as separate prompts.
 

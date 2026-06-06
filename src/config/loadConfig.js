@@ -11,6 +11,7 @@ export const SETTINGS_FILE_NAME = "settings.json"
 const progressVerbositySchema = z.enum(["off", "new", "all", "verbose"])
 const voiceModeSchema = z.enum(["off", "on", "all"])
 const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+const DEFAULT_OPENCODE_PROMPT_TIMEOUT_MS = 1_800_000
 const positiveTelegramIdSchema = z.coerce
   .number()
   .int()
@@ -45,6 +46,7 @@ const configSchema = z.object({
       apiUrl: z.string().url().default("http://localhost:4096"),
       command: z.string().min(1).default("opencode"),
       autoStart: z.boolean().default(true),
+      promptTimeoutMs: z.number().int().positive().default(DEFAULT_OPENCODE_PROMPT_TIMEOUT_MS),
       workdir: z.string().min(1).nullable().optional(),
     })
     .default({}),
@@ -67,6 +69,7 @@ const defaultOpencodeConfig = {
   apiUrl: "http://localhost:4096",
   command: "opencode",
   autoStart: true,
+  promptTimeoutMs: DEFAULT_OPENCODE_PROMPT_TIMEOUT_MS,
 }
 
 export class GatewayConfigError extends Error {
@@ -143,6 +146,8 @@ export function loadConfigFromObject(rawConfig, { configPath, cwd = process.cwd(
       apiUrl: parsed.data.opencode.apiUrl ?? defaultOpencodeConfig.apiUrl,
       command: parsed.data.opencode.command ?? defaultOpencodeConfig.command,
       autoStart: parsed.data.opencode.autoStart ?? defaultOpencodeConfig.autoStart,
+      promptTimeoutMs:
+        parsed.data.opencode.promptTimeoutMs ?? defaultOpencodeConfig.promptTimeoutMs,
       workdir: parsed.data.opencode.workdir || cwd,
     },
     progressVerbosity: parsed.data.progressVerbosity,

@@ -93,7 +93,10 @@ export async function runGateway({
     { opencodeServerStarted: server.started === true },
     "OpenCode server ready",
   )
-  const opencode = createOpenCodeClient({ apiUrl: resolvedConfig.opencode.apiUrl })
+  const opencode = createOpenCodeClient({
+    apiUrl: resolvedConfig.opencode.apiUrl,
+    promptTimeoutMs: resolvedConfig.opencode.promptTimeoutMs,
+  })
   const project = await resolveProjectIdentity({ directory: resolvedConfig.opencode.workdir })
   resolvedLogger.debug?.(
     { projectScoped: project.id !== "global", vcs: project.vcs ?? null },

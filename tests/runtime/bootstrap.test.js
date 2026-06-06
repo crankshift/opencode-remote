@@ -137,6 +137,43 @@ describe("runGateway", () => {
     expect(processLike.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function))
   })
 
+  test("passes configured OpenCode prompt timeout to the client", async () => {
+    const server = { stop: vi.fn(async () => undefined) }
+    const bot = {
+      api: { setMyCommands: vi.fn(async () => undefined) },
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    }
+    const createOpenCodeClient = vi.fn(() => ({}))
+    const config = {
+      ...testConfig(),
+      opencode: { ...testConfig().opencode, promptTimeoutMs: 900_000 },
+    }
+
+    await runGateway({
+      config,
+      logger: testLogger(),
+      dependencies: {
+        ensureOpenCodeServer: vi.fn(async () => server),
+        createOpenCodeClient,
+        resolveProjectIdentity: vi.fn(async () => ({
+          id: "project-1",
+          worktree: "/project",
+          vcs: "git",
+        })),
+        createProjectStateStore: vi.fn(() => ({})),
+        createGatewayController: vi.fn(() => ({})),
+        createTelegramBot: vi.fn(() => bot),
+      },
+      processLike: { once: vi.fn() },
+    })
+
+    expect(createOpenCodeClient).toHaveBeenCalledWith({
+      apiUrl: "http://localhost:4096",
+      promptTimeoutMs: 900_000,
+    })
+  })
+
   test("installs bundled meme runtime before ensuring the OpenCode server", async () => {
     const events = []
     const server = { stop: vi.fn(async () => undefined) }

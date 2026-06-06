@@ -21,6 +21,25 @@ describe("progress text formatting", () => {
     })
   })
 
+  test("formats child session task progress without exposing session IDs", () => {
+    const state = createProgressTextState({ verbosity: "all" })
+
+    const result = recordProgressEvent(state, {
+      type: "tool.updated",
+      sessionId: "ses_child",
+      parentSessionId: "ses_parent",
+      childSession: true,
+      partId: "part_1",
+      tool: "task",
+      title: "Explore codebase",
+    })
+
+    expect(result).toEqual({
+      changed: true,
+      text: "Activity\n🤖 task: Explore codebase",
+    })
+  })
+
   test("all verbosity records repeated invocations of the same tool", () => {
     const state = createProgressTextState({ verbosity: "all" })
 

@@ -33,7 +33,7 @@
 - [x] Install bundled skills under a project-local configured `skills.paths` directory when available, otherwise under `.opencode/skills/opencode-remote-bundled/<skill-name>/SKILL.md`.
 - [x] Remove legacy `.opencode/agent/opencode-remote-meme.md` during install if present.
 - [x] Keep bundled runtime assets project-local and avoid global OpenCode config writes.
-- [x] Make the bundled meme skill direct and bounded, with no task/subagent delegation.
+- [x] Make the bundled meme skill bounded by the generated-media contract.
 - [x] Add local meme renderer and hidden `opencode-remote meme render --spec` CLI.
 - [x] Restrict renderer remote templates to HTTPS Imgflip template URLs and forbid public meme creation endpoints.
 - [x] Add safe generated-media marker parsing and Telegram delivery.
