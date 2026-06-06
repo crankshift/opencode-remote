@@ -1280,6 +1280,20 @@ export function createTelegramBot({
   async function handleSystemEvent(ctx, event) {
     if (event?.type === "permission.requested") {
       await sendPermissionRequest(ctx, event)
+      return
+    }
+    if (event?.type === "session.error") {
+      logger.warn?.(safeSessionErrorLogContext(event), "OpenCode session error reported")
+    }
+  }
+
+  function safeSessionErrorLogContext(event) {
+    return {
+      childSession: event.childSession === true,
+      errorKind: event.errorKind ?? "unknown",
+      errorName: event.errorName ?? "UnknownError",
+      hasParentSessionId: Boolean(event.parentSessionId),
+      hasSessionId: Boolean(event.sessionId),
     }
   }
 
@@ -2044,7 +2058,6 @@ function createGeneratedMediaInstruction(directory, { memeRenderCommand } = {}) 
   return [
     "Generated media delivery capability:",
     `If you create a local image to send back, write it under this exact directory: ${directory}`,
-    "Do the image work directly in this OpenCode session. Do not call the task tool, delegate to subagents, or load brainstorming/planning skills for generated media.",
     "For meme requests, use the meme-generation skill and Imgflip template discovery as the primary path. Do not hand-write custom poster art or raw image scripts instead of using a meme template.",
     "For meme files, call opencode-remote meme render --spec with an Imgflip template.url or allowed local template.imagePath. Use fallback design or image-generation skills only after template discovery fails.",
     ...(renderCommand

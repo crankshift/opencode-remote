@@ -8,6 +8,7 @@ export function createGatewayController({
   logger = null,
 }) {
   const configuredProgressVerbosity = normalizeProgressVerbosity(defaultProgressVerbosity)
+  let promptQueue = Promise.resolve()
 
   async function getActiveSessionId() {
     const settings = await store.read()
@@ -52,6 +53,16 @@ export function createGatewayController({
     return normalizeProgressVerbosity(settings.progressVerbosity, configuredProgressVerbosity)
   }
 
+  function enqueuePrompt(action) {
+    const run = promptQueue.then(action, action)
+    promptQueue = run.catch(() => undefined)
+    return run
+  }
+
+  function promptRunOptions(options) {
+    return { ...(options ?? {}), includeChildSessionEvents: true }
+  }
+
   return {
     async status() {
       const settings = await store.read()
@@ -91,19 +102,18 @@ export function createGatewayController({
     },
 
     async sendPrompt(prompt, options) {
-      const sessionId = await getActiveSessionId()
-      logger?.debug?.(
-        {
-          hasOptions: options !== undefined,
-          hasProgressHandler: typeof options?.onProgress === "function",
-          promptKind: typeof prompt,
-        },
-        "Sending prompt to OpenCode",
-      )
-      if (options === undefined) {
-        return opencode.sendPrompt(sessionId, prompt)
-      }
-      return opencode.sendPrompt(sessionId, prompt, options)
+      return enqueuePrompt(async () => {
+        const sessionId = await getActiveSessionId()
+        logger?.debug?.(
+          {
+            hasOptions: options !== undefined,
+            hasProgressHandler: typeof options?.onProgress === "function",
+            promptKind: typeof prompt,
+          },
+          "Sending prompt to OpenCode",
+        )
+        return opencode.sendPrompt(sessionId, prompt, promptRunOptions(options))
+      })
     },
 
     async respondToPermission(sessionId, permissionId, decision) {

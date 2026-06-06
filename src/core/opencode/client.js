@@ -10,15 +10,20 @@ export class GatewayOpenCodeError extends Error {
 
 export function createOpenCodeClient({
   apiUrl,
+  promptTimeoutMs,
   sdkClient = null,
+  sdkFactory = createOpencodeClient,
   fetchImpl = globalThis.fetch,
 } = {}) {
   const client =
     sdkClient ??
-    createOpencodeClient({
+    sdkFactory({
       baseUrl: apiUrl,
       responseStyle: "data",
       throwOnError: true,
+      ...(Number.isInteger(promptTimeoutMs) && promptTimeoutMs > 0
+        ? { timeout: promptTimeoutMs }
+        : {}),
     })
 
   return {
@@ -140,10 +145,11 @@ export function createOpenCodeClient({
 }
 
 async function startPromptEventStream(client, sessionId, options = {}) {
-  const { onProgress, onSystemEvent } = options
+  const { onProgress, onSystemEvent, includeChildSessionEvents = false } = options
   if (typeof onProgress !== "function" && typeof onSystemEvent !== "function") {
     return noopProgressStream()
   }
+  const eventOptions = { includeChildSessionEvents }
 
   let eventStream
   try {
@@ -163,13 +169,13 @@ async function startPromptEventStream(client, sessionId, options = {}) {
         if (stopped) {
           break
         }
-        const progress = normalizeOpenCodeProgressEvent(event, sessionId)
+        const progress = normalizeOpenCodeProgressEvent(event, sessionId, eventOptions)
         if (progress && typeof onProgress === "function") {
           activeCallback = runEventCallback(onProgress, progress)
           await activeCallback
         }
 
-        const systemEvent = normalizeOpenCodeSystemEvent(event, sessionId)
+        const systemEvent = normalizeOpenCodeSystemEvent(event, sessionId, eventOptions)
         if (systemEvent && typeof onSystemEvent === "function") {
           activeCallback = runEventCallback(onSystemEvent, systemEvent)
           await activeCallback
@@ -234,18 +240,24 @@ function toPromptBody(prompt) {
   return { parts: toPromptParts(prompt) }
 }
 
-function normalizeOpenCodeProgressEvent(event, expectedSessionId) {
+function normalizeOpenCodeProgressEvent(event, expectedSessionId, options = {}) {
   if (event?.type !== "message.part.updated") {
     return null
   }
 
-  const part = event.properties?.part
+  const properties = eventProperties(event)
+  const part = properties.part
   if (part?.type !== "tool") {
     return null
   }
 
-  const sessionId = firstString(part.sessionID, part.sessionId, event.properties?.sessionID)
-  if (!sessionId || sessionId !== expectedSessionId) {
+  const sessionId = firstString(
+    part.sessionID,
+    part.sessionId,
+    properties.sessionID,
+    properties.sessionId,
+  )
+  if (!sessionId || !isAcceptedSessionEvent(sessionId, expectedSessionId, options)) {
     return null
   }
 
@@ -257,32 +269,71 @@ function normalizeOpenCodeProgressEvent(event, expectedSessionId) {
   const input = part.input ?? part.state?.input ?? part.state?.args ?? part.args
   const metadata = part.metadata ?? part.state?.metadata
 
-  const progress = {
-    type: "tool.updated",
-    sessionId,
-    messageId: firstString(part.messageID, part.messageId, event.properties?.messageID),
-    partId: firstString(part.id, part.partID, part.partId),
-    tool,
-    title: extractToolTitle(part, input, metadata, tool),
-    status: firstString(part.state?.status, part.status),
-    input,
-  }
+  const progress = withSessionRelationship(
+    {
+      type: "tool.updated",
+      sessionId,
+      messageId: firstString(
+        part.messageID,
+        part.messageId,
+        properties.messageID,
+        properties.messageId,
+      ),
+      partId: firstString(part.id, part.partID, part.partId),
+      tool,
+      title: extractToolTitle(part, input, metadata, tool),
+      status: firstString(part.state?.status, part.status),
+      input,
+    },
+    expectedSessionId,
+  )
   if (metadata !== undefined) {
     progress.metadata = metadata
   }
   return progress
 }
 
-function normalizeOpenCodeSystemEvent(event, expectedSessionId) {
-  return normalizeOpenCodePermissionEvent(event, expectedSessionId)
+function normalizeOpenCodeSystemEvent(event, expectedSessionId, options = {}) {
+  return (
+    normalizeOpenCodePermissionEvent(event, expectedSessionId, options) ??
+    normalizeOpenCodeSessionErrorEvent(event, expectedSessionId, options)
+  )
 }
 
-function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
+function normalizeOpenCodeSessionErrorEvent(event, expectedSessionId, options = {}) {
+  if (event?.type !== "session.error") {
+    return null
+  }
+
+  const properties = eventProperties(event)
+  const sessionId = firstString(
+    properties.sessionID,
+    properties.sessionId,
+    properties.session?.id,
+    properties.info?.id,
+  )
+  if (sessionId && !isAcceptedSessionEvent(sessionId, expectedSessionId, options)) {
+    return null
+  }
+
+  const error = properties.error ?? properties
+  return withSessionRelationship(
+    {
+      type: "session.error",
+      sessionId: sessionId ?? expectedSessionId,
+      errorName: safeErrorName(error),
+      errorKind: classifySessionError(error),
+    },
+    expectedSessionId,
+  )
+}
+
+function normalizeOpenCodePermissionEvent(event, expectedSessionId, options = {}) {
   if (event?.type !== "permission.updated" && event?.type !== "permission.asked") {
     return null
   }
 
-  const properties = event.properties ?? {}
+  const properties = eventProperties(event)
   const permission = properties.permission ?? properties.info ?? properties.request ?? properties
   const sessionId = firstString(
     permission.sessionID,
@@ -292,7 +343,7 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
     permission.session?.id,
     properties.session?.id,
   )
-  if (sessionId && sessionId !== expectedSessionId) {
+  if (sessionId && !isAcceptedSessionEvent(sessionId, expectedSessionId, options)) {
     return null
   }
 
@@ -311,12 +362,15 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
   }
 
   const metadata = permission.metadata ?? properties.metadata
-  const systemEvent = {
-    type: "permission.requested",
-    sessionId: sessionId ?? expectedSessionId,
-    permissionId,
-    title: firstString(permission.title, properties.title) ?? "OpenCode permission request",
-  }
+  const systemEvent = withSessionRelationship(
+    {
+      type: "permission.requested",
+      sessionId: sessionId ?? expectedSessionId,
+      permissionId,
+      title: firstString(permission.title, properties.title) ?? "OpenCode permission request",
+    },
+    expectedSessionId,
+  )
 
   const description = firstString(
     permission.description,
@@ -344,6 +398,43 @@ function normalizeOpenCodePermissionEvent(event, expectedSessionId) {
     systemEvent.metadata = metadata
   }
   return systemEvent
+}
+
+function eventProperties(event) {
+  return event?.properties ?? event?.payload ?? {}
+}
+
+function isAcceptedSessionEvent(sessionId, expectedSessionId, { includeChildSessionEvents } = {}) {
+  return sessionId === expectedSessionId || includeChildSessionEvents === true
+}
+
+function withSessionRelationship(event, expectedSessionId) {
+  if (event.sessionId && event.sessionId !== expectedSessionId) {
+    return { ...event, parentSessionId: expectedSessionId, childSession: true }
+  }
+  return event
+}
+
+function safeErrorName(error) {
+  return firstString(error?.name, error?.type, error?.code) ?? "UnknownError"
+}
+
+function classifySessionError(error) {
+  const text = [error?.name, error?.type, error?.code, error?.message]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLocaleLowerCase("en-US")
+
+  if (text.includes("auth") || text.includes("permission") || text.includes("credential")) {
+    return "provider_auth"
+  }
+  if (text.includes("abort") || text.includes("cancel")) {
+    return "aborted"
+  }
+  if (text.includes("timeout") || text.includes("timed out")) {
+    return "timeout"
+  }
+  return "unknown"
 }
 
 function formatPermissionPatterns(patterns) {

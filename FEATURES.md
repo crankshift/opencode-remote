@@ -11,6 +11,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Optional local OpenCode startup with `opencode.autoStart=true`.
 - OpenCode session creation, listing, switching, prompt sending, and stop requests.
 - OpenCode permission requests surfaced in Telegram with inline approve/deny buttons.
+- Long-running OpenCode prompts use a configurable `opencode.promptTimeoutMs` timeout, defaulting to 30 minutes.
 - Editable Telegram activity messages showing OpenCode tool and skill usage during prompts.
 - Telegram-safe response chunking for long assistant replies.
 - Published npm CLI package with the `opencode-remote` bin built to `dist/` with `tsdown`.
@@ -43,7 +44,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Telegram text, photo, album, voice, and sticker prompts include safe author context, including forwarded original authors and messages sent by anonymous admins or on behalf of chats/channels when Telegram provides usable names.
 - The bot shows Telegram typing activity while a prompt is running.
 - In private chats, the bot can show an editable `Activity` message with OpenCode tools and skills used during a prompt. Group chats always suppress this activity message.
-- OpenCode permission requests are sent as text with `Allow once`, `Always allow`, and `Deny` buttons, even when voice replies are enabled.
+- OpenCode permission requests, including child subagent session permission requests, are sent as text with `Allow once`, `Always allow`, and `Deny` buttons, even when voice replies are enabled.
 - Incoming text prompts get a temporary eye reaction while processing.
 - OpenCode can request one Telegram emoji reaction by returning a hidden `[telegram_reaction: ...]` marker, which is removed before the user sees the reply.
 - When saved sticker packs are available, eligible hidden reaction markers may be answered with a saved sticker reply instead of an emoji reaction.
@@ -57,6 +58,8 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 
 - If no active session is selected, the gateway creates one before sending a prompt.
 - New sessions receive hidden gateway context with no assistant reply so OpenCode understands messenger, voice, activity, and permission behavior without showing a setup response to the user.
+- Prompt sends are serialized through the active session so complex OpenCode runs are not overlapped accidentally.
+- Child subagent session tool and permission events are associated with the active gateway prompt while it is running.
 - Selected session state is stored in `opencode-remote.db` under the platform app-data directory and scoped by project identity.
 - Stopping a task uses OpenCode's session abort API for the active session.
 - Session state is messenger-neutral in the gateway core, so future adapters can reuse it.

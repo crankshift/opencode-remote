@@ -2,6 +2,24 @@ import { describe, expect, test, vi } from "vitest"
 import { createOpenCodeClient } from "../../src/core/opencode/client.js"
 
 describe("createOpenCodeClient", () => {
+  test("passes prompt timeout to the SDK client factory", () => {
+    const sdkClient = { session: { list: vi.fn(async () => []) } }
+    const sdkFactory = vi.fn(() => sdkClient)
+
+    createOpenCodeClient({
+      apiUrl: "http://localhost:4096",
+      promptTimeoutMs: 1_800_000,
+      sdkFactory,
+    })
+
+    expect(sdkFactory).toHaveBeenCalledWith({
+      baseUrl: "http://localhost:4096",
+      responseStyle: "data",
+      throwOnError: true,
+      timeout: 1_800_000,
+    })
+  })
+
   test("sends text prompts with the current SDK prompt shape", async () => {
     const sdkClient = {
       session: {
@@ -33,6 +51,7 @@ describe("createOpenCodeClient", () => {
       client.sendPrompt("ses_1", "hello", {
         onProgress,
         onSystemEvent,
+        includeChildSessionEvents: true,
         ignored: "must not reach OpenCode",
       }),
     ).resolves.toBe("answer")
@@ -342,6 +361,148 @@ describe("createOpenCodeClient", () => {
       tool: "bash",
       metadata: { command: "ls /tmp" },
     })
+  })
+
+  test("streams child session permission requests when child events are enabled", async () => {
+    const stream = createEventStream([
+      {
+        type: "permission.asked",
+        properties: {
+          id: "perm_child",
+          sessionID: "ses_child",
+          permission: "bash",
+          patterns: ["pnpm test"],
+          metadata: { command: "pnpm test" },
+        },
+      },
+    ])
+    const onSystemEvent = vi.fn()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        prompt: vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          return { parts: [{ type: "text", text: "answer" }] }
+        }),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_parent", "hello", {
+        onSystemEvent,
+        includeChildSessionEvents: true,
+      }),
+    ).resolves.toBe("answer")
+
+    expect(onSystemEvent).toHaveBeenCalledWith({
+      type: "permission.requested",
+      sessionId: "ses_child",
+      parentSessionId: "ses_parent",
+      childSession: true,
+      permissionId: "perm_child",
+      title: "OpenCode permission request",
+      description: "pnpm test",
+      tool: "bash",
+      metadata: { command: "pnpm test" },
+    })
+  })
+
+  test("streams child session tool progress when child events are enabled", async () => {
+    const stream = createEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part_child",
+            messageID: "msg_child",
+            sessionID: "ses_child",
+            type: "tool",
+            tool: "bash",
+            state: {
+              status: "running",
+              input: { command: "pnpm test" },
+            },
+          },
+        },
+      },
+    ])
+    const onProgress = vi.fn()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        prompt: vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          return { parts: [{ type: "text", text: "answer" }] }
+        }),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_parent", "hello", {
+        onProgress,
+        includeChildSessionEvents: true,
+      }),
+    ).resolves.toBe("answer")
+
+    expect(onProgress).toHaveBeenCalledWith({
+      type: "tool.updated",
+      sessionId: "ses_child",
+      parentSessionId: "ses_parent",
+      childSession: true,
+      messageId: "msg_child",
+      partId: "part_child",
+      tool: "bash",
+      title: undefined,
+      status: "running",
+      input: { command: "pnpm test" },
+    })
+  })
+
+  test("streams safe child session errors when child events are enabled", async () => {
+    const stream = createEventStream([
+      {
+        type: "session.error",
+        properties: {
+          sessionID: "ses_child",
+          error: {
+            name: "ProviderAuthError",
+            message: "secret provider payload must not be forwarded",
+            body: { token: "secret" },
+          },
+        },
+      },
+    ])
+    const onSystemEvent = vi.fn()
+    const sdkClient = {
+      event: { list: vi.fn(async () => stream) },
+      session: {
+        prompt: vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          return { parts: [{ type: "text", text: "answer" }] }
+        }),
+      },
+    }
+    const client = createOpenCodeClient({ sdkClient })
+
+    await expect(
+      client.sendPrompt("ses_parent", "hello", {
+        onSystemEvent,
+        includeChildSessionEvents: true,
+      }),
+    ).resolves.toBe("answer")
+
+    expect(onSystemEvent).toHaveBeenCalledWith({
+      type: "session.error",
+      sessionId: "ses_child",
+      parentSessionId: "ses_parent",
+      childSession: true,
+      errorName: "ProviderAuthError",
+      errorKind: "provider_auth",
+    })
+    expect(JSON.stringify(onSystemEvent.mock.calls)).not.toContain("secret provider payload")
+    expect(JSON.stringify(onSystemEvent.mock.calls)).not.toContain("token")
   })
 
   test("responds to permission requests with the current OpenCode SDK payload", async () => {

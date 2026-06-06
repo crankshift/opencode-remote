@@ -44,6 +44,7 @@ describe("loadConfig", () => {
         apiUrl: "http://localhost:4096",
         command: "opencode",
         autoStart: true,
+        promptTimeoutMs: 1_800_000,
         workdir: cwd,
       },
       progressVerbosity: "verbose",
@@ -159,6 +160,27 @@ describe("loadConfig", () => {
       groqApiKey: "gsk_test",
       sttModel: "whisper-large-v3",
     })
+  })
+
+  test("normalizes custom OpenCode prompt timeout", () => {
+    const config = loadConfigFromObject(
+      {
+        schemaVersion: 2,
+        telegram: {
+          botToken: "token",
+          allowedUserIds: [12345],
+        },
+        opencode: {
+          apiUrl: "http://localhost:4096",
+          command: "opencode",
+          autoStart: true,
+          promptTimeoutMs: 900_000,
+        },
+      },
+      { configPath: "/project/.opencode-remote/config.json", cwd: "/project" },
+    )
+
+    expect(config.opencode.promptTimeoutMs).toBe(900_000)
   })
 
   test("loads project-local config before global config", async () => {
