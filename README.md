@@ -122,7 +122,7 @@ The config file is JSON:
   "opencode": {
     "apiUrl": "http://localhost:4096",
     "autoStart": true,
-    "promptTimeoutMs": 1800000
+    "promptTimeoutMs": 2100000
   },
   "voice": {
     "enabled": false,
@@ -145,7 +145,20 @@ The config file is JSON:
 
 `opencode.apiUrl` controls the OpenCode server URL. It defaults to `http://localhost:4096`. When `opencode.autoStart=true` and this URL points to `localhost` or `127.0.0.1` with a port, the gateway starts `opencode serve --port <port>` so it waits on the same URL it configured.
 
-`opencode.promptTimeoutMs` controls how long the gateway waits for OpenCode to complete a prompt. It defaults to `1800000` milliseconds, or 30 minutes, so slower provider runs and complex subagent workflows have time to finish.
+`opencode.promptTimeoutMs` controls how long the gateway waits for OpenCode to complete a prompt. It defaults to `2100000` milliseconds, or 35 minutes, so slower provider runs and complex subagent workflows have time to finish. This is separate from OpenCode's provider timeout. If deep research or slow model calls fail after about 5 minutes, increase the provider timeout in your OpenCode config to 30 minutes and keep the gateway wait above it, for example:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 1800000
+      }
+    }
+  }
+}
+```
 
 `progressVerbosity` controls the startup default for the prompt activity message in private chats. Supported values are `off`, `new`, `all`, and `verbose`. The default is `verbose`. The Telegram `/progress` command can change this at runtime in private chats. Group chats always suppress the `Activity` message.
 
@@ -162,7 +175,7 @@ opencode-remote config set voice.enabled true
 opencode-remote config set voice.groqApiKey gsk_...
 opencode-remote config set voice.mode all -g
 opencode-remote config set voice.captions true
-opencode-remote config set opencode.promptTimeoutMs 1800000
+opencode-remote config set opencode.promptTimeoutMs 2100000
 ```
 
 Clear generated voice files from the app-data cache:

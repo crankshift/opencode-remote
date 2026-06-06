@@ -11,7 +11,7 @@ OpenCode Remote is currently a Telegram gateway for OpenCode with text, image, s
 - Optional local OpenCode startup with `opencode.autoStart=true`.
 - OpenCode session creation, listing, switching, prompt sending, and stop requests.
 - OpenCode permission requests surfaced in Telegram with inline approve/deny buttons.
-- Long-running OpenCode prompts use a configurable `opencode.promptTimeoutMs` timeout, defaulting to 30 minutes.
+- Long-running OpenCode prompts use a configurable `opencode.promptTimeoutMs` timeout, defaulting to 35 minutes.
 - Editable Telegram activity messages showing OpenCode tool and skill usage during prompts.
 - Telegram-safe response chunking for long assistant replies.
 - Published npm CLI package with the `opencode-remote` bin built to `dist/` with `tsdown`.

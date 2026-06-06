@@ -39,7 +39,7 @@ export function createGatewayProgram({
   const program = new Command()
   const afterCreate = createStartupAfterConfigHook({ enableGatewayStartup, output })
 
-  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.11.2")
+  program.name("opencode-remote").description("OpenCode messaging gateway").version("0.11.3")
 
   program
     .command("setup")

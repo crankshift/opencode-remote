@@ -44,7 +44,7 @@ describe("loadConfig", () => {
         apiUrl: "http://localhost:4096",
         command: "opencode",
         autoStart: true,
-        promptTimeoutMs: 1_800_000,
+        promptTimeoutMs: 2_100_000,
         workdir: cwd,
       },
       progressVerbosity: "verbose",

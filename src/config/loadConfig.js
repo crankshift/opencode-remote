@@ -11,7 +11,7 @@ export const SETTINGS_FILE_NAME = "settings.json"
 const progressVerbositySchema = z.enum(["off", "new", "all", "verbose"])
 const voiceModeSchema = z.enum(["off", "on", "all"])
 const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-const DEFAULT_OPENCODE_PROMPT_TIMEOUT_MS = 1_800_000
+const DEFAULT_OPENCODE_PROMPT_TIMEOUT_MS = 2_100_000
 const positiveTelegramIdSchema = z.coerce
   .number()
   .int()
